@@ -1,0 +1,114 @@
+id: joomla-version-disclosure
+
+info:
+  name: Joomla Version Disclosure
+  author: elite-nuclei-templates
+  severity: low
+  description: Detects Joomla version information disclosure through various methods including XML files, generator meta tags, and API endpoints
+  reference:
+    - https://owasp.org/www-project-web-security-testing-guide/v42/4-Web_Application_Security_Testing/01-Information_Gathering/02-Fingerprint_Web_Server
+    - https://docs.joomla.org/Security_Checklist/Joomla!_Setup
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N
+    cvss-score: 5.3
+    cwe-id: CWE-200
+  metadata:
+    verified: true
+    max-request: 15
+  tags: info-disclosure,joomla,version,cms
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+      - "{{BaseURL}}/administrator/manifests/files/joomla.xml"
+      - "{{BaseURL}}/language/en-GB/en-GB.xml"
+      - "{{BaseURL}}/joomla.xml"
+      - "{{BaseURL}}/administrator/"
+      - "{{BaseURL}}/README.txt"
+      - "{{BaseURL}}/htaccess.txt"
+      - "{{BaseURL}}/web.config.txt"
+      - "{{BaseURL}}/administrator/components/com_admin/admin.xml"
+      - "{{BaseURL}}/libraries/joomla/version.php"
+      - "{{BaseURL}}/includes/version.php"
+      - "{{BaseURL}}/administrator/help/en-GB/joomla.whatsnew.html"
+      - "{{BaseURL}}/media/system/js/core.js"
+      - "{{BaseURL}}/plugins/system/debug/debug.xml"
+      - "{{BaseURL}}/api/index.php/v1/config/application"
+
+    matchers-condition: or
+    matchers:
+      - type: regex
+        part: body
+        name: "Joomla Generator Meta Tag"
+        regex:
+          - "<meta name=\"generator\" content=\"Joomla! - Open Source Content Management - Version ([0-9.]+)"
+          - "<meta name=\"generator\" content=\"Joomla! ([0-9.]+)"
+
+      - type: regex
+        part: body
+        name: "Joomla XML Version"
+        regex:
+          - "<version>([0-9.]+)</version>"
+          - "Joomla! ([0-9.]+) \\["
+          - "RELEASE.*([0-9.]+)"
+
+      - type: regex
+        part: body
+        name: "Joomla Administrator Version"
+        regex:
+          - "Joomla! Administration - ([0-9.]+)"
+          - "administrator.*version ([0-9.]+)"
+          - "com_admin.*([0-9.]+)"
+
+      - type: regex
+        part: body
+        name: "Joomla JavaScript Version"
+        regex:
+          - "Joomla.JText"
+          - "media/system/js/core.js\\?([0-9.]+)"
+          - "var Joomla.*([0-9.]+)"
+
+      - type: regex
+        part: body
+        name: "Joomla README Version"
+        regex:
+          - "Joomla! ([0-9.]+) package"
+          - "This is a Joomla! installation/upgrade package to version ([0-9.]+)"
+          - "JOOMLA! ([0-9.]+)"
+
+      - type: regex
+        part: body
+        name: "Joomla Language Version"
+        regex:
+          - "en-GB.xml.*([0-9.]+)"
+          - "language.*version.*([0-9.]+)"
+
+      - type: word
+        part: body
+        words:
+          - "administrator/components/com_"
+          - "option=com_"
+          - "Joomla.submitbutton"
+        condition: and
+
+      - type: regex
+        part: body
+        name: "Joomla API Version"
+        regex:
+          - "\"joomla\":\"([0-9.]+)\""
+          - "\"version\":\"([0-9.]+)\""
+          - "api/index.php"
+
+    extractors:
+      - type: regex
+        part: body
+        group: 1
+        regex:
+          - "<meta name=\"generator\" content=\"Joomla! - Open Source Content Management - Version ([0-9.]+)"
+          - "<version>([0-9.]+)</version>"
+          - "Joomla! ([0-9.]+) \\["
+          - "Joomla! Administration - ([0-9.]+)"
+          - "media/system/js/core.js\\?([0-9.]+)"
+          - "Joomla! ([0-9.]+) package"
+          - "\"joomla\":\"([0-9.]+)\""

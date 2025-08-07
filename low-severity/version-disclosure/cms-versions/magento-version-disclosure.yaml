@@ -1,0 +1,126 @@
+id: magento-version-disclosure
+
+info:
+  name: Magento Version Disclosure
+  author: elite-nuclei-templates
+  severity: low
+  description: Detects Magento version information disclosure through various methods including release notes, API endpoints, and JavaScript files
+  reference:
+    - https://owasp.org/www-project-web-security-testing-guide/v42/4-Web_Application_Security_Testing/01-Information_Gathering/02-Fingerprint_Web_Server
+    - https://devdocs.magento.com/guides/v2.4/security/security.html
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N
+    cvss-score: 5.3
+    cwe-id: CWE-200
+  metadata:
+    verified: true
+    max-request: 18
+  tags: info-disclosure,magento,version,cms,ecommerce
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+      - "{{BaseURL}}/RELEASE_NOTES.txt"
+      - "{{BaseURL}}/release_notes.txt"
+      - "{{BaseURL}}/app/Mage.php"
+      - "{{BaseURL}}/js/mage/cookies.js"
+      - "{{BaseURL}}/skin/frontend/default/default/css/styles.css"
+      - "{{BaseURL}}/downloader/"
+      - "{{BaseURL}}/admin/"
+      - "{{BaseURL}}/index.php/admin/"
+      - "{{BaseURL}}/api/rest/"
+      - "{{BaseURL}}/api/v2_soap/"
+      - "{{BaseURL}}/rest/V1/store/storeConfigs"
+      - "{{BaseURL}}/pub/static/version.txt"
+      - "{{BaseURL}}/lib/web/mage/cookies.js"
+      - "{{BaseURL}}/static/version1234567890/frontend/"
+      - "{{BaseURL}}/magento_version"
+      - "{{BaseURL}}/app/etc/config.xml"
+      - "{{BaseURL}}/composer.json"
+
+    matchers-condition: or
+    matchers:
+      - type: regex
+        part: body
+        name: "Magento Generator Meta Tag"
+        regex:
+          - "<meta name=\"generator\" content=\"Magento ([0-9.]+)"
+          - "Powered by Magento ([0-9.]+)"
+
+      - type: regex
+        part: body
+        name: "Magento Release Notes"
+        regex:
+          - "RELEASE NOTES.*Magento ([0-9.]+)"
+          - "Magento Community Edition ([0-9.]+)"
+          - "Magento Enterprise Edition ([0-9.]+)"
+          - "==== ([0-9.]+) ===="
+
+      - type: regex
+        part: body
+        name: "Magento PHP Version"
+        regex:
+          - "Mage::getVersion\\(\\).*([0-9.]+)"
+          - "const VERSION = '([0-9.]+)'"
+          - "public static function getVersionInfo"
+
+      - type: regex
+        part: body
+        name: "Magento JavaScript Version"
+        regex:
+          - "mage/cookies.js\\?v=([0-9.]+)"
+          - "static/version([0-9]+)/"
+          - "requirejs-config.js\\?v=([0-9.]+)"
+
+      - type: regex
+        part: body
+        name: "Magento Admin Version"
+        regex:
+          - "Magento Admin.*([0-9.]+)"
+          - "adminhtml.*version ([0-9.]+)"
+          - "backend.*Magento ([0-9.]+)"
+
+      - type: regex
+        part: body
+        name: "Magento API Version"
+        regex:
+          - "\"magento_version\":\"([0-9.]+)\""
+          - "\"version\":\"([0-9.]+)\""
+          - "rest/V1.*([0-9.]+)"
+
+      - type: word
+        part: body
+        words:
+          - "var SKIN_URL"
+          - "var BASE_URL"
+          - "Mage.Cookies"
+        condition: and
+
+      - type: regex
+        part: body
+        name: "Magento Composer Version"
+        regex:
+          - "\"magento/product-community-edition\": \"([0-9.]+)\""
+          - "\"magento/product-enterprise-edition\": \"([0-9.]+)\""
+
+      - type: word
+        part: body
+        words:
+          - "skin/frontend/default"
+          - "js/prototype/prototype.js"
+          - "downloader/index.php"
+        condition: and
+
+    extractors:
+      - type: regex
+        part: body
+        group: 1
+        regex:
+          - "<meta name=\"generator\" content=\"Magento ([0-9.]+)"
+          - "RELEASE NOTES.*Magento ([0-9.]+)"
+          - "Magento Community Edition ([0-9.]+)"
+          - "const VERSION = '([0-9.]+)'"
+          - "mage/cookies.js\\?v=([0-9.]+)"
+          - "\"magento_version\":\"([0-9.]+)\""
+          - "static/version([0-9]+)/"

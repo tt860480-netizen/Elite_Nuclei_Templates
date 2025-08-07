@@ -1,0 +1,113 @@
+id: prestashop-version-disclosure
+
+info:
+  name: PrestaShop Version Disclosure
+  author: elite-nuclei-templates
+  severity: low
+  description: Detects PrestaShop version information disclosure through various methods including admin panel, API endpoints, and JavaScript files
+  reference:
+    - https://owasp.org/www-project-web-security-testing-guide/v42/4-Web_Application_Security_Testing/01-Information_Gathering/02-Fingerprint_Web_Server
+    - https://devdocs.prestashop.com/1.7/development/security/
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N
+    cvss-score: 5.3
+    cwe-id: CWE-200
+  metadata:
+    verified: true
+    max-request: 14
+  tags: info-disclosure,prestashop,version,cms,ecommerce
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+      - "{{BaseURL}}/admin/"
+      - "{{BaseURL}}/admin123/"
+      - "{{BaseURL}}/admin1234/"
+      - "{{BaseURL}}/adminps/"
+      - "{{BaseURL}}/js/jquery/jquery-1.11.0.min.js"
+      - "{{BaseURL}}/themes/default-bootstrap/js/global.js"
+      - "{{BaseURL}}/js/tools.js"
+      - "{{BaseURL}}/config/settings.inc.php"
+      - "{{BaseURL}}/install/"
+      - "{{BaseURL}}/docs/"
+      - "{{BaseURL}}/api/"
+      - "{{BaseURL}}/webservice/"
+      - "{{BaseURL}}/modules/"
+
+    matchers-condition: or
+    matchers:
+      - type: regex
+        part: body
+        name: "PrestaShop Generator Meta Tag"
+        regex:
+          - "<meta name=\"generator\" content=\"PrestaShop ([0-9.]+)"
+          - "Powered by PrestaShop ([0-9.]+)"
+
+      - type: regex
+        part: body
+        name: "PrestaShop Admin Version"
+        regex:
+          - "PrestaShop.*([0-9.]+)"
+          - "admin.*PrestaShop ([0-9.]+)"
+          - "Back Office.*([0-9.]+)"
+
+      - type: regex
+        part: body
+        name: "PrestaShop JavaScript Version"
+        regex:
+          - "prestashop.*version.*([0-9.]+)"
+          - "ps_version.*([0-9.]+)"
+          - "global.js\\?v=([0-9.]+)"
+
+      - type: regex
+        part: body
+        name: "PrestaShop Config Version"
+        regex:
+          - "_PS_VERSION_.*([0-9.]+)"
+          - "define\\('_PS_VERSION_', '([0-9.]+)'\\)"
+          - "const _PS_VERSION_ = '([0-9.]+)'"
+
+      - type: word
+        part: body
+        words:
+          - "themes/default-bootstrap"
+          - "modules/blockcart"
+          - "prestashop.com"
+        condition: and
+
+      - type: regex
+        part: body
+        name: "PrestaShop Install Version"
+        regex:
+          - "PrestaShop ([0-9.]+) installation"
+          - "install.*version ([0-9.]+)"
+          - "Welcome to PrestaShop ([0-9.]+)"
+
+      - type: regex
+        part: body
+        name: "PrestaShop API Version"
+        regex:
+          - "\"prestashop_version\":\"([0-9.]+)\""
+          - "webservice.*([0-9.]+)"
+          - "api.*prestashop.*([0-9.]+)"
+
+      - type: word
+        part: body
+        words:
+          - "var prestashop"
+          - "id_product"
+          - "add_to_cart"
+        condition: and
+
+    extractors:
+      - type: regex
+        part: body
+        group: 1
+        regex:
+          - "<meta name=\"generator\" content=\"PrestaShop ([0-9.]+)"
+          - "PrestaShop.*([0-9.]+)"
+          - "define\\('_PS_VERSION_', '([0-9.]+)'\\)"
+          - "global.js\\?v=([0-9.]+)"
+          - "PrestaShop ([0-9.]+) installation"
+          - "\"prestashop_version\":\"([0-9.]+)\""
