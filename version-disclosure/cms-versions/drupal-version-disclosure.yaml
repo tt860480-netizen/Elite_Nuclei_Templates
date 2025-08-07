@@ -1,0 +1,104 @@
+id: drupal-version-disclosure
+
+info:
+  name: Drupal Version Disclosure
+  author: elite-nuclei-templates
+  severity: low
+  description: Detects Drupal version information disclosure through various methods including changelog, generator meta tags, and API endpoints
+  reference:
+    - https://owasp.org/www-project-web-security-testing-guide/v42/4-Web_Application_Security_Testing/01-Information_Gathering/02-Fingerprint_Web_Server
+    - https://www.drupal.org/docs/security-in-drupal/information-disclosure
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N
+    cvss-score: 5.3
+    cwe-id: CWE-200
+  metadata:
+    verified: true
+    max-request: 12
+  tags: info-disclosure,drupal,version,cms
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+      - "{{BaseURL}}/CHANGELOG.txt"
+      - "{{BaseURL}}/changelog.txt"
+      - "{{BaseURL}}/core/CHANGELOG.txt"
+      - "{{BaseURL}}/INSTALL.txt"
+      - "{{BaseURL}}/README.txt"
+      - "{{BaseURL}}/core/README.txt"
+      - "{{BaseURL}}/core/lib/Drupal.php"
+      - "{{BaseURL}}/includes/bootstrap.inc"
+      - "{{BaseURL}}/misc/drupal.js"
+      - "{{BaseURL}}/core/misc/drupal.js"
+      - "{{BaseURL}}/admin/reports/status"
+
+    matchers-condition: or
+    matchers:
+      - type: regex
+        part: body
+        name: "Drupal Generator Meta Tag"
+        regex:
+          - "<meta name=\"generator\" content=\"Drupal ([0-9.]+)"
+          - "<meta name=\"Generator\" content=\"Drupal ([0-9.]+)"
+
+      - type: regex
+        part: body
+        name: "Drupal Changelog Version"
+        regex:
+          - "Drupal ([0-9.]+), [0-9]{4}-[0-9]{2}-[0-9]{2}"
+          - "VERSION = '([0-9.]+)'"
+          - "define\\('VERSION', '([0-9.]+)'\\)"
+
+      - type: regex
+        part: body
+        name: "Drupal Core Version"
+        regex:
+          - "Drupal.settings.ajaxPageState.theme = \"[^\"]+\";"
+          - "sites/all/modules"
+          - "sites/default/files"
+        condition: and
+
+      - type: regex
+        part: body
+        name: "Drupal JavaScript Version"
+        regex:
+          - "Drupal.settings"
+          - "misc/drupal.js\\?v=([0-9.]+)"
+          - "core/misc/drupal.js\\?v=([0-9.]+)"
+
+      - type: regex
+        part: body
+        name: "Drupal README Version"
+        regex:
+          - "DRUPAL ([0-9.]+)"
+          - "Drupal version ([0-9.]+)"
+          - "This is Drupal version ([0-9.]+)"
+
+      - type: regex
+        part: body
+        name: "Drupal Bootstrap Version"
+        regex:
+          - "define\\('DRUPAL_VERSION', '([0-9.]+)'\\)"
+          - "const VERSION = '([0-9.]+)'"
+
+      - type: word
+        part: body
+        words:
+          - "Drupal.behaviors"
+          - "sites/all/themes"
+          - "drupal_add_js"
+        condition: and
+
+    extractors:
+      - type: regex
+        part: body
+        group: 1
+        regex:
+          - "<meta name=\"generator\" content=\"Drupal ([0-9.]+)"
+          - "Drupal ([0-9.]+), [0-9]{4}-[0-9]{2}-[0-9]{2}"
+          - "VERSION = '([0-9.]+)'"
+          - "define\\('VERSION', '([0-9.]+)'\\)"
+          - "misc/drupal.js\\?v=([0-9.]+)"
+          - "DRUPAL ([0-9.]+)"
+          - "define\\('DRUPAL_VERSION', '([0-9.]+)'\\)"
