@@ -1,0 +1,92 @@
+id: config-directory-exposure
+
+info:
+  name: Configuration Directory Exposure
+  author: elite-nuclei-templates
+  severity: low
+  description: Detects exposed configuration directories that may contain sensitive settings
+  reference:
+    - https://owasp.org/www-project-web-security-testing-guide/v42/4-Web_Application_Security_Testing/01-Information_Gathering/03-Review_Webserver_Metafiles_for_Information_Leakage
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N
+    cvss-score: 5.3
+    cwe-id: CWE-548
+  metadata:
+    verified: true
+    max-request: 20
+  tags: info-disclosure,directory-listing,config,exposure
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/config/"
+      - "{{BaseURL}}/configuration/"
+      - "{{BaseURL}}/conf/"
+      - "{{BaseURL}}/settings/"
+      - "{{BaseURL}}/etc/"
+      - "{{BaseURL}}/cfg/"
+      - "{{BaseURL}}/configs/"
+      - "{{BaseURL}}/app/config/"
+      - "{{BaseURL}}/application/config/"
+      - "{{BaseURL}}/src/config/"
+      - "{{BaseURL}}/includes/"
+      - "{{BaseURL}}/inc/"
+      - "{{BaseURL}}/lib/"
+      - "{{BaseURL}}/libraries/"
+      - "{{BaseURL}}/vendor/"
+      - "{{BaseURL}}/node_modules/"
+      - "{{BaseURL}}/wp-config/"
+      - "{{BaseURL}}/sites/default/"
+      - "{{BaseURL}}/app/etc/"
+      - "{{BaseURL}}/system/"
+
+    matchers-condition: or
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "Index of /config"
+          - "Index of /configuration"
+          - "Index of /settings"
+          - "Index of /includes"
+          - "Index of /vendor"
+
+      - type: regex
+        part: body
+        name: "Config Files Listing"
+        regex:
+          - "config\\.php"
+          - "settings\\.php"
+          - "database\\.php"
+          - "constants\\.php"
+          - "wp-config\\.php"
+          - "\\.env"
+          - "\\.ini"
+          - "\\.conf"
+          - "\\.xml"
+          - "\\.json"
+
+      - type: regex
+        part: body
+        name: "Framework Config Directories"
+        regex:
+          - "\\[DIR\\].*app"
+          - "\\[DIR\\].*config"
+          - "\\[DIR\\].*vendor"
+          - "\\[DIR\\].*node_modules"
+
+      - type: word
+        part: body
+        words:
+          - "composer.json"
+          - "package.json"
+          - "web.config"
+          - ".htaccess"
+
+    extractors:
+      - type: regex
+        part: body
+        regex:
+          - "<a href=\"([^\"]+\\.(php|ini|conf|xml|json|env))\">"
+          - "<a href=\"([^\"]+config[^\"]*\\.php)\">"
+          - "<a href=\"([^\"]+settings[^\"]*\\.php)\">"

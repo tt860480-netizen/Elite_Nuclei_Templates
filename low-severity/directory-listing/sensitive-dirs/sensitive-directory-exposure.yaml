@@ -1,0 +1,99 @@
+id: sensitive-directory-exposure
+
+info:
+  name: Sensitive Directory Exposure
+  author: elite-nuclei-templates
+  severity: low
+  description: Detects exposed sensitive directories that may contain confidential information
+  reference:
+    - https://owasp.org/www-project-web-security-testing-guide/v42/4-Web_Application_Security_Testing/01-Information_Gathering/03-Review_Webserver_Metafiles_for_Information_Leakage
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N
+    cvss-score: 5.3
+    cwe-id: CWE-548
+  metadata:
+    verified: true
+    max-request: 25
+  tags: info-disclosure,directory-listing,sensitive,exposure
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/uploads/"
+      - "{{BaseURL}}/files/"
+      - "{{BaseURL}}/documents/"
+      - "{{BaseURL}}/images/"
+      - "{{BaseURL}}/media/"
+      - "{{BaseURL}}/assets/"
+      - "{{BaseURL}}/data/"
+      - "{{BaseURL}}/temp/"
+      - "{{BaseURL}}/tmp/"
+      - "{{BaseURL}}/cache/"
+      - "{{BaseURL}}/logs/"
+      - "{{BaseURL}}/log/"
+      - "{{BaseURL}}/private/"
+      - "{{BaseURL}}/confidential/"
+      - "{{BaseURL}}/internal/"
+      - "{{BaseURL}}/secure/"
+      - "{{BaseURL}}/restricted/"
+      - "{{BaseURL}}/protected/"
+      - "{{BaseURL}}/backup/"
+      - "{{BaseURL}}/backups/"
+      - "{{BaseURL}}/old/"
+      - "{{BaseURL}}/archive/"
+      - "{{BaseURL}}/storage/"
+      - "{{BaseURL}}/downloads/"
+      - "{{BaseURL}}/public/"
+
+    matchers-condition: or
+    matchers:
+      - type: regex
+        part: body
+        name: "Directory Listing Title"
+        regex:
+          - "<title>Index of /uploads</title>"
+          - "<title>Index of /files</title>"
+          - "<title>Index of /documents</title>"
+          - "<title>Index of /backup</title>"
+          - "<title>Index of /logs</title>"
+
+      - type: word
+        part: body
+        words:
+          - "Index of /uploads"
+          - "Index of /files"
+          - "Index of /documents"
+          - "Index of /backup"
+          - "Index of /logs"
+
+      - type: regex
+        part: body
+        name: "Sensitive File Extensions"
+        regex:
+          - "\\.pdf"
+          - "\\.doc"
+          - "\\.docx"
+          - "\\.xls"
+          - "\\.xlsx"
+          - "\\.sql"
+          - "\\.bak"
+          - "\\.zip"
+          - "\\.tar"
+          - "\\.gz"
+
+      - type: regex
+        part: body
+        name: "Apache Directory Listing"
+        regex:
+          - "\\[DIR\\]"
+          - "\\[   \\]"
+          - "Parent Directory"
+          - "Last modified"
+
+    extractors:
+      - type: regex
+        part: body
+        regex:
+          - "<a href=\"([^\"]+\\.(pdf|doc|docx|xls|xlsx|sql|bak|zip|tar|gz))\">"
+          - "<a href=\"([^\"]+\\.log)\">"
+          - "<a href=\"([^\"]+\\.txt)\">"

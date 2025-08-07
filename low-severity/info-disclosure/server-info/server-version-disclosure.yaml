@@ -1,0 +1,61 @@
+id: server-version-disclosure
+
+info:
+  name: Server Version Disclosure
+  author: elite-nuclei-templates
+  severity: low
+  description: Detects server version information disclosure through HTTP headers
+  reference:
+    - https://owasp.org/www-project-web-security-testing-guide/v42/4-Web_Application_Security_Testing/01-Information_Gathering/02-Fingerprint_Web_Server
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N
+    cvss-score: 5.3
+    cwe-id: CWE-200
+  metadata:
+    verified: true
+    max-request: 1
+  tags: info-disclosure,server,headers,fingerprint
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+
+    matchers-condition: or
+    matchers:
+      - type: regex
+        part: header
+        name: "Apache Version Disclosure"
+        regex:
+          - "Server: Apache/([0-9.]+)"
+
+      - type: regex
+        part: header
+        name: "Nginx Version Disclosure"
+        regex:
+          - "Server: nginx/([0-9.]+)"
+
+      - type: regex
+        part: header
+        name: "IIS Version Disclosure"
+        regex:
+          - "Server: Microsoft-IIS/([0-9.]+)"
+
+      - type: regex
+        part: header
+        name: "Tomcat Version Disclosure"
+        regex:
+          - "Server: Apache-Coyote/([0-9.]+)"
+
+      - type: regex
+        part: header
+        name: "Jetty Version Disclosure"
+        regex:
+          - "Server: Jetty\\(([0-9.]+)\\)"
+
+    extractors:
+      - type: regex
+        part: header
+        group: 1
+        regex:
+          - "Server: ([^\r\n]+)"

@@ -1,0 +1,66 @@
+id: git-directory-exposure
+
+info:
+  name: Git Directory Exposure
+  author: elite-nuclei-templates
+  severity: low
+  description: Detects exposed .git directory that may contain sensitive source code and configuration
+  reference:
+    - https://owasp.org/www-project-web-security-testing-guide/v42/4-Web_Application_Security_Testing/01-Information_Gathering/05-Review_Webpage_Comments_and_Metadata_for_Information_Leakage
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N
+    cvss-score: 5.3
+    cwe-id: CWE-200
+  metadata:
+    verified: true
+    max-request: 8
+  tags: info-disclosure,git,source-code,exposure
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/.git/"
+      - "{{BaseURL}}/.git/config"
+      - "{{BaseURL}}/.git/HEAD"
+      - "{{BaseURL}}/.git/logs/HEAD"
+      - "{{BaseURL}}/.git/refs/heads/master"
+      - "{{BaseURL}}/.git/refs/heads/main"
+      - "{{BaseURL}}/.git/index"
+      - "{{BaseURL}}/.git/objects/"
+
+    matchers-condition: or
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "[core]"
+          - "repositoryformatversion"
+        condition: and
+
+      - type: word
+        part: body
+        words:
+          - "ref: refs/heads/"
+
+      - type: regex
+        part: body
+        regex:
+          - "^[a-f0-9]{40}\\s+refs/"
+
+      - type: word
+        part: body
+        words:
+          - "Index of /.git"
+
+      - type: status
+        status:
+          - 200
+        condition: and
+
+    extractors:
+      - type: regex
+        part: body
+        regex:
+          - "ref: refs/heads/([a-zA-Z0-9_-]+)"
+          - "\\[remote \"([^\"]+)\"\\]"
+          - "url = ([^\\r\\n]+)"

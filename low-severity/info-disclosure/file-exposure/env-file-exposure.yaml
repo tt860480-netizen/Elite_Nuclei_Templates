@@ -1,0 +1,76 @@
+id: env-file-exposure
+
+info:
+  name: Environment File Exposure
+  author: elite-nuclei-templates
+  severity: low
+  description: Detects exposed environment configuration files containing sensitive information
+  reference:
+    - https://owasp.org/www-project-web-security-testing-guide/v42/4-Web_Application_Security_Testing/01-Information_Gathering/05-Review_Webpage_Comments_and_Metadata_for_Information_Leakage
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N
+    cvss-score: 5.3
+    cwe-id: CWE-200
+  metadata:
+    verified: true
+    max-request: 10
+  tags: info-disclosure,env,config,credentials
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/.env"
+      - "{{BaseURL}}/.env.local"
+      - "{{BaseURL}}/.env.production"
+      - "{{BaseURL}}/.env.development"
+      - "{{BaseURL}}/.env.staging"
+      - "{{BaseURL}}/.env.example"
+      - "{{BaseURL}}/.env.backup"
+      - "{{BaseURL}}/.env.old"
+      - "{{BaseURL}}/config/.env"
+      - "{{BaseURL}}/app/.env"
+
+    matchers-condition: or
+    matchers:
+      - type: regex
+        part: body
+        name: "Database Credentials"
+        regex:
+          - "DB_PASSWORD\\s*=\\s*['\"]?[^\\s'\"\\r\\n]+"
+          - "DATABASE_URL\\s*=\\s*['\"]?[^\\s'\"\\r\\n]+"
+          - "DB_HOST\\s*=\\s*['\"]?[^\\s'\"\\r\\n]+"
+
+      - type: regex
+        part: body
+        name: "API Keys"
+        regex:
+          - "API_KEY\\s*=\\s*['\"]?[^\\s'\"\\r\\n]+"
+          - "SECRET_KEY\\s*=\\s*['\"]?[^\\s'\"\\r\\n]+"
+          - "AWS_ACCESS_KEY\\s*=\\s*['\"]?[^\\s'\"\\r\\n]+"
+
+      - type: regex
+        part: body
+        name: "JWT Secrets"
+        regex:
+          - "JWT_SECRET\\s*=\\s*['\"]?[^\\s'\"\\r\\n]+"
+          - "JWT_KEY\\s*=\\s*['\"]?[^\\s'\"\\r\\n]+"
+
+      - type: regex
+        part: body
+        name: "Mail Configuration"
+        regex:
+          - "MAIL_PASSWORD\\s*=\\s*['\"]?[^\\s'\"\\r\\n]+"
+          - "SMTP_PASSWORD\\s*=\\s*['\"]?[^\\s'\"\\r\\n]+"
+
+      - type: regex
+        part: body
+        name: "General Environment Variables"
+        regex:
+          - "APP_ENV\\s*=\\s*['\"]?[^\\s'\"\\r\\n]+"
+          - "DEBUG\\s*=\\s*['\"]?[^\\s'\"\\r\\n]+"
+
+    extractors:
+      - type: regex
+        part: body
+        regex:
+          - "([A-Z_]+)\\s*=\\s*['\"]?([^\\s'\"\\r\\n]+)"

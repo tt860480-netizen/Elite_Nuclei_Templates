@@ -1,0 +1,85 @@
+id: backup-files-exposure
+
+info:
+  name: Backup Files Exposure
+  author: elite-nuclei-templates
+  severity: low
+  description: Detects exposed backup files that may contain sensitive source code or data
+  reference:
+    - https://owasp.org/www-project-web-security-testing-guide/v42/4-Web_Application_Security_Testing/01-Information_Gathering/03-Review_Webserver_Metafiles_for_Information_Leakage
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N
+    cvss-score: 5.3
+    cwe-id: CWE-200
+  metadata:
+    verified: true
+    max-request: 20
+  tags: info-disclosure,backup,files,source-code
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/index.php.bak"
+      - "{{BaseURL}}/index.php.backup"
+      - "{{BaseURL}}/index.php.old"
+      - "{{BaseURL}}/index.php~"
+      - "{{BaseURL}}/config.php.bak"
+      - "{{BaseURL}}/config.php.backup"
+      - "{{BaseURL}}/config.php.old"
+      - "{{BaseURL}}/config.php~"
+      - "{{BaseURL}}/database.sql"
+      - "{{BaseURL}}/backup.sql"
+      - "{{BaseURL}}/dump.sql"
+      - "{{BaseURL}}/db.sql"
+      - "{{BaseURL}}/backup.zip"
+      - "{{BaseURL}}/backup.tar.gz"
+      - "{{BaseURL}}/site.zip"
+      - "{{BaseURL}}/www.zip"
+      - "{{BaseURL}}/web.zip"
+      - "{{BaseURL}}/source.zip"
+      - "{{BaseURL}}/backup/"
+      - "{{BaseURL}}/backups/"
+
+    matchers-condition: or
+    matchers:
+      - type: regex
+        part: body
+        name: "PHP Source Code"
+        regex:
+          - "<\\?php"
+          - "\\$[a-zA-Z_][a-zA-Z0-9_]*\\s*="
+
+      - type: regex
+        part: body
+        name: "SQL Dump"
+        regex:
+          - "-- MySQL dump"
+          - "-- PostgreSQL database dump"
+          - "CREATE TABLE"
+          - "INSERT INTO"
+
+      - type: regex
+        part: body
+        name: "Configuration Files"
+        regex:
+          - "define\\s*\\("
+          - "\\$config\\s*\\["
+          - "password\\s*=\\s*['\"][^'\"]+['\"]"
+
+      - type: word
+        part: header
+        words:
+          - "application/zip"
+          - "application/x-gzip"
+          - "application/octet-stream"
+
+      - type: status
+        status:
+          - 200
+
+    extractors:
+      - type: regex
+        part: body
+        regex:
+          - "password\\s*=\\s*['\"]([^'\"]+)['\"]"
+          - "define\\s*\\(\\s*['\"]([^'\"]+)['\"]\\s*,\\s*['\"]([^'\"]+)['\"]"

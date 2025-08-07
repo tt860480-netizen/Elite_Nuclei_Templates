@@ -1,0 +1,104 @@
+id: development-directory-exposure
+
+info:
+  name: Development Directory Exposure
+  author: elite-nuclei-templates
+  severity: low
+  description: Detects exposed development directories that may contain source code and sensitive information
+  reference:
+    - https://owasp.org/www-project-web-security-testing-guide/v42/4-Web_Application_Security_Testing/01-Information_Gathering/03-Review_Webserver_Metafiles_for_Information_Leakage
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N
+    cvss-score: 5.3
+    cwe-id: CWE-548
+  metadata:
+    verified: true
+    max-request: 18
+  tags: info-disclosure,directory-listing,development,source-code
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/dev/"
+      - "{{BaseURL}}/development/"
+      - "{{BaseURL}}/test/"
+      - "{{BaseURL}}/testing/"
+      - "{{BaseURL}}/debug/"
+      - "{{BaseURL}}/src/"
+      - "{{BaseURL}}/source/"
+      - "{{BaseURL}}/app/"
+      - "{{BaseURL}}/application/"
+      - "{{BaseURL}}/www/"
+      - "{{BaseURL}}/public_html/"
+      - "{{BaseURL}}/htdocs/"
+      - "{{BaseURL}}/web/"
+      - "{{BaseURL}}/webroot/"
+      - "{{BaseURL}}/site/"
+      - "{{BaseURL}}/build/"
+      - "{{BaseURL}}/dist/"
+      - "{{BaseURL}}/assets/src/"
+
+    matchers-condition: or
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "Index of /dev"
+          - "Index of /development"
+          - "Index of /test"
+          - "Index of /src"
+          - "Index of /build"
+
+      - type: regex
+        part: body
+        name: "Source Code Files"
+        regex:
+          - "\\.js"
+          - "\\.css"
+          - "\\.php"
+          - "\\.py"
+          - "\\.java"
+          - "\\.cpp"
+          - "\\.c"
+          - "\\.rb"
+          - "\\.go"
+          - "\\.ts"
+
+      - type: regex
+        part: body
+        name: "Development Files"
+        regex:
+          - "package\\.json"
+          - "composer\\.json"
+          - "requirements\\.txt"
+          - "Gemfile"
+          - "pom\\.xml"
+          - "build\\.gradle"
+          - "Makefile"
+          - "Dockerfile"
+
+      - type: regex
+        part: body
+        name: "Framework Directories"
+        regex:
+          - "\\[DIR\\].*controllers"
+          - "\\[DIR\\].*models"
+          - "\\[DIR\\].*views"
+          - "\\[DIR\\].*components"
+          - "\\[DIR\\].*modules"
+
+      - type: word
+        part: body
+        words:
+          - ".gitignore"
+          - "README.md"
+          - "LICENSE"
+          - "CHANGELOG"
+
+    extractors:
+      - type: regex
+        part: body
+        regex:
+          - "<a href=\"([^\"]+\\.(js|css|php|py|java|rb|go|ts))\">"
+          - "<a href=\"([^\"]+\\.(json|txt|xml|yml|yaml))\">"
+          - "<a href=\"([^\"]+README[^\"]*\\.(md|txt))\">"

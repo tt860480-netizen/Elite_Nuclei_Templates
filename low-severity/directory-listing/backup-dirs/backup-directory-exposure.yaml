@@ -1,0 +1,100 @@
+id: backup-directory-exposure
+
+info:
+  name: Backup Directory Exposure
+  author: elite-nuclei-templates
+  severity: low
+  description: Detects exposed backup directories that may contain sensitive data and source code
+  reference:
+    - https://owasp.org/www-project-web-security-testing-guide/v42/4-Web_Application_Security_Testing/01-Information_Gathering/03-Review_Webserver_Metafiles_for_Information_Leakage
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N
+    cvss-score: 5.3
+    cwe-id: CWE-548
+  metadata:
+    verified: true
+    max-request: 15
+  tags: info-disclosure,directory-listing,backup,exposure
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/backup/"
+      - "{{BaseURL}}/backups/"
+      - "{{BaseURL}}/bak/"
+      - "{{BaseURL}}/old/"
+      - "{{BaseURL}}/archive/"
+      - "{{BaseURL}}/archives/"
+      - "{{BaseURL}}/dump/"
+      - "{{BaseURL}}/dumps/"
+      - "{{BaseURL}}/backup_files/"
+      - "{{BaseURL}}/old_files/"
+      - "{{BaseURL}}/backup_db/"
+      - "{{BaseURL}}/db_backup/"
+      - "{{BaseURL}}/site_backup/"
+      - "{{BaseURL}}/web_backup/"
+      - "{{BaseURL}}/backup_site/"
+
+    matchers-condition: or
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "Index of /backup"
+          - "Index of /backups"
+          - "Index of /old"
+          - "Index of /archive"
+          - "Index of /dump"
+
+      - type: regex
+        part: body
+        name: "Backup File Extensions"
+        regex:
+          - "\\.bak"
+          - "\\.backup"
+          - "\\.old"
+          - "\\.orig"
+          - "\\.zip"
+          - "\\.tar"
+          - "\\.tar\\.gz"
+          - "\\.tgz"
+          - "\\.rar"
+          - "\\.7z"
+          - "\\.sql"
+          - "\\.dump"
+
+      - type: regex
+        part: body
+        name: "Database Backup Files"
+        regex:
+          - "database.*\\.sql"
+          - "db.*\\.sql"
+          - "backup.*\\.sql"
+          - "dump.*\\.sql"
+          - "mysql.*\\.sql"
+
+      - type: regex
+        part: body
+        name: "Site Backup Files"
+        regex:
+          - "site.*\\.zip"
+          - "web.*\\.zip"
+          - "backup.*\\.zip"
+          - "www.*\\.zip"
+          - "[0-9]{4}-[0-9]{2}-[0-9]{2}.*\\.(zip|tar|gz)"
+
+      - type: word
+        part: body
+        words:
+          - "Parent Directory"
+          - "[DIR]"
+          - "Last modified"
+        condition: and
+
+    extractors:
+      - type: regex
+        part: body
+        regex:
+          - "<a href=\"([^\"]+\\.(bak|backup|old|zip|tar|gz|sql|dump))\">"
+          - "<a href=\"([^\"]+backup[^\"]*\\.(zip|tar|gz|sql))\">"
+          - "<a href=\"([^\"]+[0-9]{4}-[0-9]{2}-[0-9]{2}[^\"]*\\.(zip|tar|gz))\">"

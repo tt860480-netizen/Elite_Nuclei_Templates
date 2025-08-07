@@ -1,0 +1,67 @@
+id: php-version-disclosure
+
+info:
+  name: PHP Version Disclosure
+  author: elite-nuclei-templates
+  severity: low
+  description: Detects PHP version information disclosure through HTTP headers and responses
+  reference:
+    - https://owasp.org/www-project-web-security-testing-guide/v42/4-Web_Application_Security_Testing/01-Information_Gathering/02-Fingerprint_Web_Server
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N
+    cvss-score: 5.3
+    cwe-id: CWE-200
+  metadata:
+    verified: true
+    max-request: 3
+  tags: info-disclosure,php,headers,fingerprint
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+      - "{{BaseURL}}/index.php"
+      - "{{BaseURL}}/phpinfo.php"
+
+    matchers-condition: or
+    matchers:
+      - type: regex
+        part: header
+        name: "X-Powered-By PHP"
+        regex:
+          - "X-Powered-By: PHP/([0-9.]+)"
+
+      - type: regex
+        part: header
+        name: "Server PHP"
+        regex:
+          - "Server: .*PHP/([0-9.]+)"
+
+      - type: regex
+        part: body
+        name: "PHP Version in Body"
+        regex:
+          - "PHP Version ([0-9.]+)"
+          - "PHP/([0-9.]+)"
+
+      - type: regex
+        part: body
+        name: "PHPInfo Detection"
+        regex:
+          - "phpinfo\\(\\)"
+          - "PHP Version"
+
+    extractors:
+      - type: regex
+        part: header
+        group: 1
+        regex:
+          - "X-Powered-By: PHP/([0-9.]+)"
+          - "Server: .*PHP/([0-9.]+)"
+
+      - type: regex
+        part: body
+        group: 1
+        regex:
+          - "PHP Version ([0-9.]+)"
+          - "PHP/([0-9.]+)"

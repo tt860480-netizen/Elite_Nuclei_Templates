@@ -1,0 +1,112 @@
+id: cms-detection
+
+info:
+  name: CMS Detection and Fingerprinting
+  author: elite-nuclei-templates
+  severity: low
+  description: Detects and fingerprints various Content Management Systems
+  reference:
+    - https://owasp.org/www-project-web-security-testing-guide/v42/4-Web_Application_Security_Testing/01-Information_Gathering/02-Fingerprint_Web_Server
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N
+    cvss-score: 5.3
+    cwe-id: CWE-200
+  metadata:
+    verified: true
+    max-request: 10
+  tags: info-disclosure,cms,fingerprint,technology
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+      - "{{BaseURL}}/wp-admin/"
+      - "{{BaseURL}}/wp-content/"
+      - "{{BaseURL}}/administrator/"
+      - "{{BaseURL}}/admin/"
+      - "{{BaseURL}}/drupal/"
+      - "{{BaseURL}}/sites/default/"
+      - "{{BaseURL}}/typo3/"
+      - "{{BaseURL}}/umbraco/"
+      - "{{BaseURL}}/ghost/"
+
+    matchers-condition: or
+    matchers:
+      - type: regex
+        part: body
+        name: "WordPress Detection"
+        regex:
+          - "wp-content"
+          - "wp-includes"
+          - "WordPress"
+          - "/wp-json/"
+
+      - type: regex
+        part: body
+        name: "Joomla Detection"
+        regex:
+          - "Joomla!"
+          - "/administrator/"
+          - "option=com_"
+          - "JFactory"
+
+      - type: regex
+        part: body
+        name: "Drupal Detection"
+        regex:
+          - "Drupal"
+          - "/sites/default/"
+          - "drupal.js"
+          - "Drupal.settings"
+
+      - type: regex
+        part: body
+        name: "Magento Detection"
+        regex:
+          - "Magento"
+          - "/skin/frontend/"
+          - "Mage.Cookies"
+          - "var/cache/"
+
+      - type: regex
+        part: body
+        name: "TYPO3 Detection"
+        regex:
+          - "TYPO3"
+          - "/typo3/"
+          - "typo3conf"
+          - "T3_THIS_LOCATION"
+
+      - type: regex
+        part: body
+        name: "Shopify Detection"
+        regex:
+          - "Shopify"
+          - "shopify.com"
+          - "cdn.shopify.com"
+          - "Shopify.theme"
+
+      - type: regex
+        part: body
+        name: "Ghost Detection"
+        regex:
+          - "Ghost"
+          - "/ghost/"
+          - "ghost.min.js"
+          - "powered by Ghost"
+
+    extractors:
+      - type: regex
+        part: body
+        regex:
+          - "WordPress ([0-9.]+)"
+          - "Joomla! ([0-9.]+)"
+          - "Drupal ([0-9.]+)"
+          - "Magento/([0-9.]+)"
+          - "TYPO3 ([0-9.]+)"
+
+      - type: regex
+        part: header
+        regex:
+          - "X-Powered-By: ([^\\r\\n]+)"
+          - "X-Generator: ([^\\r\\n]+)"

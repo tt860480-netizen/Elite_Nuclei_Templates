@@ -1,0 +1,107 @@
+id: framework-detection
+
+info:
+  name: Web Framework Detection
+  author: elite-nuclei-templates
+  severity: low
+  description: Detects various web frameworks and their versions
+  reference:
+    - https://owasp.org/www-project-web-security-testing-guide/v42/4-Web_Application_Security_Testing/01-Information_Gathering/02-Fingerprint_Web_Server
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N
+    cvss-score: 5.3
+    cwe-id: CWE-200
+  metadata:
+    verified: true
+    max-request: 5
+  tags: info-disclosure,framework,fingerprint,technology
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+      - "{{BaseURL}}/favicon.ico"
+      - "{{BaseURL}}/robots.txt"
+      - "{{BaseURL}}/sitemap.xml"
+      - "{{BaseURL}}/package.json"
+
+    matchers-condition: or
+    matchers:
+      - type: regex
+        part: body
+        name: "React Framework"
+        regex:
+          - "React"
+          - "__REACT_DEVTOOLS_GLOBAL_HOOK__"
+          - "react-dom"
+          - "data-reactroot"
+
+      - type: regex
+        part: body
+        name: "Angular Framework"
+        regex:
+          - "Angular"
+          - "ng-version"
+          - "angular.min.js"
+          - "_angular_core"
+
+      - type: regex
+        part: body
+        name: "Vue.js Framework"
+        regex:
+          - "Vue.js"
+          - "__VUE__"
+          - "vue.min.js"
+          - "v-if"
+
+      - type: regex
+        part: body
+        name: "Laravel Framework"
+        regex:
+          - "Laravel"
+          - "laravel_session"
+          - "XSRF-TOKEN"
+          - "csrf-token"
+
+      - type: regex
+        part: body
+        name: "Django Framework"
+        regex:
+          - "Django"
+          - "csrfmiddlewaretoken"
+          - "django.contrib"
+          - "__admin_media_prefix__"
+
+      - type: regex
+        part: body
+        name: "Spring Framework"
+        regex:
+          - "Spring"
+          - "JSESSIONID"
+          - "springframework"
+          - "spring-boot"
+
+      - type: regex
+        part: body
+        name: "Express.js Framework"
+        regex:
+          - "Express"
+          - "X-Powered-By: Express"
+          - "connect.sid"
+          - "express-session"
+
+    extractors:
+      - type: regex
+        part: body
+        regex:
+          - "React ([0-9.]+)"
+          - "Angular ([0-9.]+)"
+          - "Vue.js ([0-9.]+)"
+          - "Laravel ([0-9.]+)"
+          - "Django ([0-9.]+)"
+
+      - type: regex
+        part: header
+        regex:
+          - "X-Powered-By: Express"
+          - "Server: ([^\\r\\n]+)"

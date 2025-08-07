@@ -1,0 +1,78 @@
+id: error-message-disclosure
+
+info:
+  name: Error Message Information Disclosure
+  author: elite-nuclei-templates
+  severity: low
+  description: Detects sensitive information disclosure through error messages
+  reference:
+    - https://owasp.org/www-project-web-security-testing-guide/v42/4-Web_Application_Security_Testing/07-Input_Validation_Testing/01-Testing_for_Reflected_Cross_Site_Scripting
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N
+    cvss-score: 5.3
+    cwe-id: CWE-209
+  metadata:
+    verified: true
+    max-request: 5
+  tags: info-disclosure,error,debug,path-disclosure
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/nonexistent"
+      - "{{BaseURL}}/admin"
+      - "{{BaseURL}}/test.php"
+      - "{{BaseURL}}/index.php?id='"
+      - "{{BaseURL}}/search?q=<script>"
+
+    matchers-condition: or
+    matchers:
+      - type: regex
+        part: body
+        name: "PHP Error Path Disclosure"
+        regex:
+          - "Fatal error.*in ([A-Za-z]:\\\\[^\\s]+|/[^\\s]+) on line"
+          - "Warning.*in ([A-Za-z]:\\\\[^\\s]+|/[^\\s]+) on line"
+          - "Parse error.*in ([A-Za-z]:\\\\[^\\s]+|/[^\\s]+) on line"
+
+      - type: regex
+        part: body
+        name: "ASP.NET Error Path Disclosure"
+        regex:
+          - "Server Error in '/' Application"
+          - "Description: An unhandled exception occurred"
+          - "Source File: ([A-Za-z]:\\\\[^\\s]+)"
+
+      - type: regex
+        part: body
+        name: "Java Stack Trace"
+        regex:
+          - "java\\.[a-zA-Z0-9.]+Exception"
+          - "at [a-zA-Z0-9.]+\\([^)]+\\)"
+          - "Caused by: [a-zA-Z0-9.]+Exception"
+
+      - type: regex
+        part: body
+        name: "Python Error Disclosure"
+        regex:
+          - "Traceback \\(most recent call last\\):"
+          - "File \"[^\"]+\", line [0-9]+"
+          - "[a-zA-Z]+Error: "
+
+      - type: regex
+        part: body
+        name: "Database Error Disclosure"
+        regex:
+          - "MySQL server version for the right syntax"
+          - "ORA-[0-9]{5}"
+          - "Microsoft OLE DB Provider"
+          - "PostgreSQL query failed"
+
+    extractors:
+      - type: regex
+        part: body
+        group: 1
+        regex:
+          - "Fatal error.*in ([A-Za-z]:\\\\[^\\s]+|/[^\\s]+) on line"
+          - "Warning.*in ([A-Za-z]:\\\\[^\\s]+|/[^\\s]+) on line"
+          - "Source File: ([A-Za-z]:\\\\[^\\s]+)"

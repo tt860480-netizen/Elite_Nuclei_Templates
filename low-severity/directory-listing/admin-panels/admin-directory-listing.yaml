@@ -1,0 +1,87 @@
+id: admin-directory-listing
+
+info:
+  name: Admin Directory Listing Detection
+  author: elite-nuclei-templates
+  severity: low
+  description: Detects exposed admin directories and panels that may reveal sensitive information
+  reference:
+    - https://owasp.org/www-project-web-security-testing-guide/v42/4-Web_Application_Security_Testing/01-Information_Gathering/03-Review_Webserver_Metafiles_for_Information_Leakage
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N
+    cvss-score: 5.3
+    cwe-id: CWE-548
+  metadata:
+    verified: true
+    max-request: 20
+  tags: info-disclosure,directory-listing,admin,exposure
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/admin/"
+      - "{{BaseURL}}/administrator/"
+      - "{{BaseURL}}/wp-admin/"
+      - "{{BaseURL}}/admin-panel/"
+      - "{{BaseURL}}/control-panel/"
+      - "{{BaseURL}}/cpanel/"
+      - "{{BaseURL}}/panel/"
+      - "{{BaseURL}}/dashboard/"
+      - "{{BaseURL}}/manage/"
+      - "{{BaseURL}}/management/"
+      - "{{BaseURL}}/admin_area/"
+      - "{{BaseURL}}/adminarea/"
+      - "{{BaseURL}}/admin1/"
+      - "{{BaseURL}}/admin2/"
+      - "{{BaseURL}}/moderator/"
+      - "{{BaseURL}}/webadmin/"
+      - "{{BaseURL}}/adminpanel/"
+      - "{{BaseURL}}/admin_login/"
+      - "{{BaseURL}}/admin_cp/"
+      - "{{BaseURL}}/admin-console/"
+
+    matchers-condition: or
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "Index of /admin"
+          - "Index of /administrator"
+          - "Index of /wp-admin"
+          - "Index of /admin-panel"
+          - "Index of /control-panel"
+
+      - type: regex
+        part: body
+        name: "Directory Listing Pattern"
+        regex:
+          - "<title>Index of /[^<]*admin[^<]*</title>"
+          - "Parent Directory.*admin"
+          - "\\[DIR\\].*admin"
+
+      - type: word
+        part: body
+        words:
+          - "Directory Listing"
+          - "Apache/2"
+          - "nginx/"
+        condition: and
+
+      - type: regex
+        part: body
+        name: "Admin Files Listing"
+        regex:
+          - "login\\.php"
+          - "config\\.php"
+          - "settings\\.php"
+          - "database\\.php"
+          - "admin\\.php"
+
+    extractors:
+      - type: regex
+        part: body
+        regex:
+          - "<a href=\"([^\"]+\\.php)\">"
+          - "<a href=\"([^\"]+\\.txt)\">"
+          - "<a href=\"([^\"]+\\.log)\">"
+          - "<a href=\"([^\"]+\\.sql)\">"

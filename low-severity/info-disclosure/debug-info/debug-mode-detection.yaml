@@ -1,0 +1,88 @@
+id: debug-mode-detection
+
+info:
+  name: Debug Mode Detection
+  author: elite-nuclei-templates
+  severity: low
+  description: Detects applications running in debug mode that may expose sensitive information
+  reference:
+    - https://owasp.org/www-project-web-security-testing-guide/v42/4-Web_Application_Security_Testing/01-Information_Gathering/05-Review_Webpage_Comments_and_Metadata_for_Information_Leakage
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N
+    cvss-score: 5.3
+    cwe-id: CWE-489
+  metadata:
+    verified: true
+    max-request: 5
+  tags: info-disclosure,debug,development,misconfiguration
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+      - "{{BaseURL}}/debug"
+      - "{{BaseURL}}/test"
+      - "{{BaseURL}}/dev"
+      - "{{BaseURL}}/index.php?debug=1"
+
+    matchers-condition: or
+    matchers:
+      - type: regex
+        part: body
+        name: "Laravel Debug Mode"
+        regex:
+          - "APP_DEBUG.*true"
+          - "Whoops\\\\Exception\\\\ErrorException"
+          - "Laravel\\\\Framework"
+
+      - type: regex
+        part: body
+        name: "Django Debug Mode"
+        regex:
+          - "DEBUG = True"
+          - "Django version [0-9.]+"
+          - "Request Method:"
+          - "Request URL:"
+
+      - type: regex
+        part: body
+        name: "ASP.NET Debug Mode"
+        regex:
+          - "compilation debug=\"true\""
+          - "customErrors mode=\"Off\""
+          - "System\\.Web\\.HttpException"
+
+      - type: regex
+        part: body
+        name: "PHP Debug Information"
+        regex:
+          - "display_errors.*On"
+          - "error_reporting.*E_ALL"
+          - "\\$_GET\\s*="
+          - "\\$_POST\\s*="
+
+      - type: regex
+        part: body
+        name: "Node.js Debug Mode"
+        regex:
+          - "NODE_ENV.*development"
+          - "Error: Cannot find module"
+          - "at Function\\.Module\\._resolveFilename"
+
+      - type: regex
+        part: body
+        name: "Ruby Debug Information"
+        regex:
+          - "RAILS_ENV.*development"
+          - "ActionController::RoutingError"
+          - "ActiveRecord::"
+
+    extractors:
+      - type: regex
+        part: body
+        regex:
+          - "(APP_DEBUG.*true)"
+          - "(DEBUG = True)"
+          - "(compilation debug=\"true\")"
+          - "(display_errors.*On)"
+          - "(NODE_ENV.*development)"
