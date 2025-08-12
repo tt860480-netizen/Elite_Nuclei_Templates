@@ -1,4 +1,96 @@
 id: medium-webapp-template-injection-velocity-bypass
 
 info:
-  name: Velocity Template Injection - Security Bypass
+  name: Velocity Template Injection Bypass
+  author: elite-red-team
+  severity: high
+  description: |
+    Detects Server-Side Template Injection (SSTI) vulnerabilities in Apache Velocity templates.
+    Velocity template injection can lead to remote code execution when user input is embedded
+    into templates without proper sanitization, allowing attackers to execute arbitrary Java code.
+  reference:
+    - https://portswigger.net/web-security/server-side-template-injection
+    - https://velocity.apache.org/engine/1.7/user-guide.html
+    - https://github.com/swisskyrepo/PayloadsAllTheThings/tree/master/Server%20Side%20Template%20Injection
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H
+    cvss-score: 9.8
+    cwe-id: CWE-94
+  tags: ssti,velocity,template-injection,rce,java,medium
+
+http:
+  - raw:
+      - |
+        POST {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/x-www-form-urlencoded
+        
+        {{param}}=${{7*7}}
+
+      - |
+        POST {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/x-www-form-urlencoded
+        
+        {{param}}=${7*7}
+
+      - |
+        GET {{path}}?{{param}}=${{7*7}} HTTP/1.1
+        Host: {{Hostname}}
+
+    payloads:
+      path:
+        - "/template"
+        - "/render"
+        - "/view"
+        - "/page"
+        - "/content"
+        - "/email"
+        - "/report"
+        - "/generate"
+        - "/api/template"
+        - "/api/render"
+        - "/search"
+        - "/contact"
+
+      param:
+        - "template"
+        - "content"
+        - "message"
+        - "text"
+        - "body"
+        - "data"
+        - "input"
+        - "value"
+        - "name"
+        - "title"
+
+    attack: clusterbomb
+    threads: 10
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 500
+
+      - type: word
+        words:
+          - "49"
+          - "VelocityException"
+          - "ParseException"
+          - "MethodInvocationException"
+        condition: or
+        case-insensitive: true
+
+    extractors:
+      - type: regex
+        name: velocity_response
+        regex:
+          - '(?i)(49|VelocityException|ParseException)'
+
+      - type: regex
+        name: calculation_result
+        regex:
+          - '\b49\b'

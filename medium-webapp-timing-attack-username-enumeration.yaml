@@ -1,0 +1,355 @@
+id: medium-webapp-timing-attack-username-enumeration
+
+info:
+  name: Timing Attack for Username Enumeration
+  author: elite-red-team
+  severity: medium
+  description: |
+    Detects timing-based username enumeration vulnerabilities where applications
+    take different amounts of time to process valid vs invalid usernames.
+    This allows attackers to enumerate valid usernames by measuring response times.
+  reference:
+    - https://owasp.org/www-community/attacks/Timing_Attacks
+    - https://portswigger.net/web-security/authentication/other-mechanisms/lab-username-enumeration-via-response-timing
+    - https://cwe.mitre.org/data/definitions/208.html
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:L/I:N/A:N
+    cvss-score: 3.7
+    cwe-id: CWE-208
+  tags: timing-attack,username-enumeration,authentication,information-disclosure,medium
+
+http:
+  - raw:
+      - |
+        POST {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/x-www-form-urlencoded
+        
+        username={{username}}&password=invalid_password_that_is_very_long_to_trigger_timing_differences_in_processing
+
+      - |
+        POST {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        
+        {"username": "{{username}}", "password": "invalid_password_that_is_very_long_to_trigger_timing_differences"}
+
+      - |
+        POST {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/x-www-form-urlencoded
+        
+        email={{username}}&password=invalid_password_that_is_very_long_to_trigger_timing_differences_in_processing
+
+    payloads:
+      path:
+        - "/login"
+        - "/auth"
+        - "/signin"
+        - "/api/login"
+        - "/api/auth"
+        - "/api/signin"
+        - "/admin/login"
+        - "/user/login"
+        - "/authenticate"
+        - "/session"
+
+      username:
+        # Common valid usernames
+        - "admin"
+        - "administrator"
+        - "root"
+        - "user"
+        - "test"
+        - "guest"
+        - "demo"
+        - "support"
+        # Invalid usernames for comparison
+        - "nonexistent_user_12345"
+        - "invalid_username_xyz"
+        - "fake_user_timing_test"
+        - "does_not_exist_user"
+
+    attack: clusterbomb
+    threads: 5
+    req-condition: true
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 401
+          - 403
+          - 422
+
+      - type: word
+        words:
+          - "login"
+          - "auth"
+          - "password"
+          - "username"
+          - "invalid"
+          - "incorrect"
+          - "failed"
+        condition: or
+        case-insensitive: true
+
+    extractors:
+      - type: regex
+        name: response_time
+        internal: true
+        regex:
+          - ".*"
+
+      - type: regex
+        name: error_messages
+        regex:
+          - '(?i)(invalid|incorrect|wrong|failed|error)'
+          - '(?i)(username|user|email).*not.*found'
+          - '(?i)(password|credentials).*incorrect'
+
+# Test for password reset timing
+  - raw:
+      - |
+        POST {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/x-www-form-urlencoded
+        
+        email={{username}}
+
+      - |
+        POST {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        
+        {"email": "{{username}}"}
+
+    payloads:
+      path:
+        - "/password/reset"
+        - "/forgot-password"
+        - "/reset"
+        - "/api/password/reset"
+        - "/auth/forgot"
+        - "/forgot"
+
+      username:
+        - "admin@test.com"
+        - "user@test.com"
+        - "test@example.com"
+        - "nonexistent@invalid.com"
+        - "fake@timing.test"
+
+    attack: clusterbomb
+    threads: 3
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 201
+          - 302
+
+      - type: word
+        words:
+          - "reset"
+          - "sent"
+          - "email"
+          - "password"
+        condition: or
+        case-insensitive: true
+
+    extractors:
+      - type: regex
+        name: reset_response
+        regex:
+          - '(?i)(sent|email|reset|link)'
+
+      - type: regex
+        name: timing_indicators
+        regex:
+          - '(?i)(processing|sending|checking)'
+
+# Test for registration timing
+  - raw:
+      - |
+        POST {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/x-www-form-urlencoded
+        
+        username={{username}}&email={{username}}&password=TestPassword123
+
+      - |
+        POST {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        
+        {"username": "{{username}}", "email": "{{username}}", "password": "TestPassword123"}
+
+    payloads:
+      path:
+        - "/register"
+        - "/signup"
+        - "/api/register"
+        - "/api/signup"
+        - "/create-account"
+
+      username:
+        - "admin"
+        - "test"
+        - "user"
+        - "existing_user_test"
+        - "new_user_12345"
+
+    attack: clusterbomb
+    threads: 3
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 201
+          - 400
+          - 409
+          - 422
+
+      - type: word
+        words:
+          - "register"
+          - "signup"
+          - "create"
+          - "exists"
+          - "taken"
+          - "available"
+        condition: or
+        case-insensitive: true
+
+    extractors:
+      - type: regex
+        name: registration_response
+        regex:
+          - '(?i)(exists|taken|available|created|registered)'
+
+      - type: regex
+        name: username_status
+        regex:
+          - '(?i)username.*(?:exists|taken|available)'
+
+# Test for API authentication timing
+  - raw:
+      - |
+        GET {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Authorization: Basic {{base64_creds}}
+
+      - |
+        POST {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        Authorization: Bearer {{token}}
+        
+        {"action": "verify"}
+
+    payloads:
+      path:
+        - "/api/user"
+        - "/api/profile"
+        - "/api/verify"
+        - "/api/auth/verify"
+
+      base64_creds:
+        - "YWRtaW46aW52YWxpZF9wYXNzd29yZF90aGF0X2lzX3ZlcnlfbG9uZw==" # admin:invalid_password_that_is_very_long
+        - "dXNlcjppbnZhbGlkX3Bhc3N3b3JkX3RoYXRfaXNfdmVyeV9sb25n" # user:invalid_password_that_is_very_long
+        - "dGVzdDppbnZhbGlkX3Bhc3N3b3JkX3RoYXRfaXNfdmVyeV9sb25n" # test:invalid_password_that_is_very_long
+
+      token:
+        - "invalid_token_that_is_long_enough_to_trigger_processing_delays"
+        - "fake_jwt_token_for_timing_analysis"
+
+    attack: clusterbomb
+    threads: 3
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 401
+          - 403
+
+      - type: word
+        words:
+          - "unauthorized"
+          - "invalid"
+          - "token"
+          - "auth"
+        condition: or
+        case-insensitive: true
+
+    extractors:
+      - type: regex
+        name: auth_response
+        regex:
+          - '(?i)(unauthorized|invalid|expired|token)'
+
+# Test for account lockout timing
+  - raw:
+      - |
+        POST {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/x-www-form-urlencoded
+        
+        username={{username}}&password=wrong1
+
+      - |
+        POST {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/x-www-form-urlencoded
+        
+        username={{username}}&password=wrong2
+
+      - |
+        POST {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/x-www-form-urlencoded
+        
+        username={{username}}&password=wrong3
+
+    payloads:
+      path:
+        - "/login"
+        - "/auth"
+
+      username:
+        - "admin"
+        - "test_lockout_user"
+
+    attack: clusterbomb
+    threads: 1
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 401
+          - 429
+
+      - type: word
+        words:
+          - "locked"
+          - "blocked"
+          - "attempts"
+          - "rate"
+          - "limit"
+        condition: or
+        case-insensitive: true
+
+    extractors:
+      - type: regex
+        name: lockout_response
+        regex:
+          - '(?i)(locked|blocked|attempts|rate.*limit)'

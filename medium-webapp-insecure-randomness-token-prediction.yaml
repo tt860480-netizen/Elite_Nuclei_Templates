@@ -1,0 +1,308 @@
+id: medium-webapp-insecure-randomness-token-prediction
+
+info:
+  name: Token Prediction via Weak Randomness
+  author: elite-red-team
+  severity: high
+  description: |
+    Detects weak random token generation that can be predicted or brute-forced.
+    Applications using predictable patterns, timestamps, or weak PRNGs for token
+    generation are vulnerable to token prediction attacks leading to unauthorized access.
+  reference:
+    - https://owasp.org/www-community/vulnerabilities/Insecure_Randomness
+    - https://cwe.mitre.org/data/definitions/338.html
+    - https://portswigger.net/web-security/logic-flaws/examples
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N
+    cvss-score: 9.1
+    cwe-id: CWE-338
+  tags: weak-randomness,token-prediction,authentication,session,medium
+
+http:
+  - raw:
+      - |
+        GET {{path}} HTTP/1.1
+        Host: {{Hostname}}
+
+      - |
+        POST {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/x-www-form-urlencoded
+        
+        action=generate&type=token
+
+      - |
+        POST {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        
+        {"action": "generate_token"}
+
+    payloads:
+      path:
+        - "/api/token"
+        - "/token"
+        - "/generate"
+        - "/auth/token"
+        - "/session"
+        - "/api/session"
+        - "/reset"
+        - "/password/reset"
+        - "/forgot"
+        - "/api/reset"
+        - "/verify"
+        - "/activation"
+
+    attack: pitchfork
+    threads: 10
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 201
+
+      - type: word
+        words:
+          - "token"
+          - "session"
+          - "key"
+          - "id"
+          - "code"
+        condition: or
+        case-insensitive: true
+
+    extractors:
+      - type: regex
+        name: sequential_tokens
+        regex:
+          - '(?i)token["\']?\s*[:=]\s*["\']?([0-9]{6,})'
+          - '(?i)session["\']?\s*[:=]\s*["\']?([0-9]{6,})'
+          - '(?i)id["\']?\s*[:=]\s*["\']?([0-9]{6,})'
+
+      - type: regex
+        name: timestamp_tokens
+        regex:
+          - '(?i)token["\']?\s*[:=]\s*["\']?(1[0-9]{9,10})'
+          - '(?i)session["\']?\s*[:=]\s*["\']?(1[0-9]{9,10})'
+
+      - type: regex
+        name: short_tokens
+        regex:
+          - '(?i)token["\']?\s*[:=]\s*["\']?([a-zA-Z0-9]{1,8})'
+          - '(?i)code["\']?\s*[:=]\s*["\']?([0-9]{4,6})'
+
+# Test for predictable reset tokens
+  - raw:
+      - |
+        POST {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/x-www-form-urlencoded
+        
+        email={{email}}&action=reset
+
+      - |
+        POST {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        
+        {"email": "{{email}}"}
+
+    payloads:
+      path:
+        - "/password/reset"
+        - "/forgot-password"
+        - "/reset-password"
+        - "/api/password/reset"
+        - "/auth/forgot"
+
+      email:
+        - "test@example.com"
+        - "admin@test.com"
+        - "user@domain.com"
+
+    attack: clusterbomb
+    threads: 8
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 201
+          - 302
+
+      - type: word
+        words:
+          - "reset"
+          - "sent"
+          - "email"
+          - "link"
+          - "token"
+        condition: or
+        case-insensitive: true
+
+    extractors:
+      - type: regex
+        name: reset_tokens
+        regex:
+          - '(?i)token[=:]([a-zA-Z0-9]{1,20})'
+          - '(?i)reset[=:]([a-zA-Z0-9]{1,20})'
+          - '(?i)code[=:]([0-9]{4,8})'
+
+      - type: regex
+        name: reset_links
+        regex:
+          - '(?i)(reset|forgot)[^"\']*[?&]token=([a-zA-Z0-9]+)'
+
+# Test for session token patterns
+  - raw:
+      - |
+        POST {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/x-www-form-urlencoded
+        
+        username={{user}}&password={{pass}}
+
+    payloads:
+      path:
+        - "/login"
+        - "/auth"
+        - "/signin"
+        - "/api/login"
+        - "/api/auth"
+
+      user:
+        - "admin"
+        - "test"
+        - "user"
+
+      pass:
+        - "admin"
+        - "test"
+        - "password"
+
+    attack: clusterbomb
+    threads: 5
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 302
+
+      - type: word
+        words:
+          - "success"
+          - "welcome"
+          - "dashboard"
+          - "token"
+          - "session"
+        condition: or
+        case-insensitive: true
+
+    extractors:
+      - type: regex
+        name: session_patterns
+        regex:
+          - '(?i)session["\']?\s*[:=]\s*["\']?([a-zA-Z0-9]{8,32})'
+          - '(?i)token["\']?\s*[:=]\s*["\']?([a-zA-Z0-9]{8,32})'
+
+      - type: kval
+        kval:
+          - set_cookie
+
+# Test for API key generation
+  - raw:
+      - |
+        POST {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        Authorization: Bearer test-token
+        
+        {"action": "generate_api_key"}
+
+      - |
+        GET {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Authorization: Bearer test-token
+
+    payloads:
+      path:
+        - "/api/keys"
+        - "/api/generate"
+        - "/keys"
+        - "/generate-key"
+        - "/api-key"
+
+    attack: pitchfork
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 201
+
+      - type: word
+        words:
+          - "api"
+          - "key"
+          - "generated"
+          - "created"
+        condition: or
+        case-insensitive: true
+
+    extractors:
+      - type: regex
+        name: api_keys
+        regex:
+          - '(?i)api[_-]?key["\']?\s*[:=]\s*["\']?([a-zA-Z0-9]{10,50})'
+          - '(?i)key["\']?\s*[:=]\s*["\']?([a-zA-Z0-9]{10,50})'
+
+# Test for verification codes
+  - raw:
+      - |
+        POST {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/x-www-form-urlencoded
+        
+        phone={{phone}}&action=send_code
+
+    payloads:
+      path:
+        - "/verify"
+        - "/sms"
+        - "/otp"
+        - "/2fa"
+        - "/verification"
+
+      phone:
+        - "+1234567890"
+        - "1234567890"
+
+    attack: clusterbomb
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        words:
+          - "sent"
+          - "code"
+          - "verification"
+          - "otp"
+        condition: or
+        case-insensitive: true
+
+    extractors:
+      - type: regex
+        name: verification_codes
+        regex:
+          - '(?i)code["\']?\s*[:=]\s*["\']?([0-9]{4,8})'
+          - '(?i)otp["\']?\s*[:=]\s*["\']?([0-9]{4,8})'

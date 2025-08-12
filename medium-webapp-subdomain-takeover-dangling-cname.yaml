@@ -1,0 +1,345 @@
+id: medium-webapp-subdomain-takeover-dangling-cname
+
+info:
+  name: Subdomain Takeover via Dangling CNAME
+  author: elite-red-team
+  severity: high
+  description: |
+    Detects subdomain takeover vulnerabilities where DNS CNAME records point to
+    external services that are no longer claimed or configured. This allows
+    attackers to claim the service and serve malicious content on the subdomain.
+  reference:
+    - https://0xpatrik.com/subdomain-takeover-basics/
+    - https://github.com/EdOverflow/can-i-take-over-xyz
+    - https://owasp.org/www-project-web-security-testing-guide/v42/4-Web_Application_Security_Testing/02-Configuration_and_Deployment_Management_Testing/10-Test_for_Subdomain_Takeover
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N
+    cvss-score: 9.1
+    cwe-id: CWE-350
+  tags: subdomain-takeover,dns,cname,dangling,medium
+
+dns:
+  - name: "{{subdomain}}"
+    type: CNAME
+    class: IN
+    recursion: true
+    retries: 3
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        words:
+          - "github.io"
+          - "herokuapp.com"
+          - "netlify.com"
+          - "surge.sh"
+          - "s3.amazonaws.com"
+          - "s3-website"
+          - "cloudfront.net"
+          - "azurewebsites.net"
+          - "azure.com"
+          - "bitbucket.io"
+          - "gitlab.io"
+          - "fastly.com"
+          - "helpjuice.com"
+          - "helpscoutdocs.com"
+          - "ghost.io"
+          - "pantheonsite.io"
+          - "zendesk.com"
+          - "tumblr.com"
+          - "wordpress.com"
+          - "statuspage.io"
+          - "uservoice.com"
+          - "campaignmonitor.com"
+          - "mailgun.org"
+          - "pingdom.com"
+          - "tictail.com"
+          - "shopify.com"
+          - "unbounce.com"
+          - "aha.io"
+          - "tave.com"
+          - "wishpond.com"
+          - "aftership.com"
+          - "aha.io"
+          - "airee.ru"
+          - "anima-app.com"
+          - "aws.amazon.com"
+          - "bigcartel.com"
+          - "bitly.com"
+          - "brightcove.com"
+          - "canny.io"
+          - "cargo.site"
+          - "cargocollective.com"
+          - "desk.com"
+          - "fastly.com"
+          - "feedpress.me"
+          - "freshdesk.com"
+          - "getresponse.com"
+          - "hatenablog.com"
+          - "helprace.com"
+          - "intercom.io"
+          - "kajabi.com"
+          - "kayako.com"
+          - "launchrock.com"
+          - "mashery.com"
+          - "myshopify.com"
+          - "ngrok.io"
+          - "pagewiz.com"
+          - "readme.io"
+          - "short.io"
+          - "simplebooklet.com"
+          - "smartjobboard.com"
+          - "strikingly.com"
+          - "surveygizmo.com"
+          - "teamwork.com"
+          - "thinkific.com"
+          - "tictail.com"
+          - "uberflip.com"
+          - "uptime.com"
+          - "webflow.io"
+          - "worksites.net"
+        condition: or
+
+    extractors:
+      - type: regex
+        name: cname_target
+        regex:
+          - "(.+)"
+
+http:
+  - raw:
+      - |
+        GET / HTTP/1.1
+        Host: {{subdomain}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+    payloads:
+      subdomain:
+        - "www.{{Hostname}}"
+        - "blog.{{Hostname}}"
+        - "api.{{Hostname}}"
+        - "dev.{{Hostname}}"
+        - "test.{{Hostname}}"
+        - "staging.{{Hostname}}"
+        - "admin.{{Hostname}}"
+        - "mail.{{Hostname}}"
+        - "ftp.{{Hostname}}"
+        - "cdn.{{Hostname}}"
+        - "assets.{{Hostname}}"
+        - "static.{{Hostname}}"
+        - "img.{{Hostname}}"
+        - "images.{{Hostname}}"
+        - "media.{{Hostname}}"
+        - "docs.{{Hostname}}"
+        - "help.{{Hostname}}"
+        - "support.{{Hostname}}"
+        - "status.{{Hostname}}"
+        - "monitor.{{Hostname}}"
+        - "app.{{Hostname}}"
+        - "mobile.{{Hostname}}"
+        - "m.{{Hostname}}"
+        - "shop.{{Hostname}}"
+        - "store.{{Hostname}}"
+        - "portal.{{Hostname}}"
+        - "dashboard.{{Hostname}}"
+        - "panel.{{Hostname}}"
+        - "cpanel.{{Hostname}}"
+        - "webmail.{{Hostname}}"
+        - "secure.{{Hostname}}"
+        - "vpn.{{Hostname}}"
+        - "remote.{{Hostname}}"
+        - "git.{{Hostname}}"
+        - "svn.{{Hostname}}"
+        - "jenkins.{{Hostname}}"
+        - "ci.{{Hostname}}"
+        - "build.{{Hostname}}"
+
+    attack: pitchfork
+    threads: 20
+
+    matchers-condition: or
+    matchers:
+      # GitHub Pages
+      - type: word
+        words:
+          - "There isn't a GitHub Pages site here"
+          - "For root URLs (like http://example.com/) you must provide an index.html file"
+        condition: or
+
+      # Heroku
+      - type: word
+        words:
+          - "No such app"
+          - "herokucdn.com/error-pages/no-such-app.html"
+        condition: or
+
+      # Netlify
+      - type: word
+        words:
+          - "Not Found - Request ID"
+          - "netlify"
+        condition: and
+
+      # Surge.sh
+      - type: word
+        words:
+          - "project not found"
+          - "surge.sh"
+        condition: and
+
+      # AWS S3
+      - type: word
+        words:
+          - "NoSuchBucket"
+          - "The specified bucket does not exist"
+        condition: or
+
+      # CloudFront
+      - type: word
+        words:
+          - "Bad Request"
+          - "ERROR: The request could not be satisfied"
+          - "cloudfront"
+        condition: and
+
+      # Azure
+      - type: word
+        words:
+          - "Web App - Unavailable"
+          - "azurewebsites.net"
+        condition: and
+
+      # Bitbucket
+      - type: word
+        words:
+          - "Repository not found"
+          - "bitbucket.io"
+        condition: and
+
+      # GitLab Pages
+      - type: word
+        words:
+          - "The page you're looking for could not be found"
+          - "gitlab.io"
+        condition: and
+
+      # Fastly
+      - type: word
+        words:
+          - "Fastly error: unknown domain"
+          - "Please check that this domain has been added to a service"
+        condition: or
+
+      # HelpJuice
+      - type: word
+        words:
+          - "We could not find what you're looking for"
+          - "helpjuice"
+        condition: and
+
+      # HelpScout
+      - type: word
+        words:
+          - "No settings were found for this company"
+          - "helpscoutdocs.com"
+        condition: and
+
+      # Ghost.io
+      - type: word
+        words:
+          - "The thing you were looking for is no longer here"
+          - "ghost.io"
+        condition: and
+
+      # Pantheon
+      - type: word
+        words:
+          - "The gods are wise"
+          - "pantheonsite.io"
+        condition: and
+
+      # Zendesk
+      - type: word
+        words:
+          - "Help Center Closed"
+          - "zendesk.com"
+        condition: and
+
+      # Tumblr
+      - type: word
+        words:
+          - "Whatever you were looking for doesn't currently exist at this address"
+          - "tumblr.com"
+        condition: and
+
+      # WordPress.com
+      - type: word
+        words:
+          - "Do you want to register"
+          - "wordpress.com"
+        condition: and
+
+      # StatusPage
+      - type: word
+        words:
+          - "You are being redirected"
+          - "statuspage.io"
+        condition: and
+
+      # UserVoice
+      - type: word
+        words:
+          - "This UserVoice subdomain is currently available"
+          - "uservoice.com"
+        condition: and
+
+      # Campaign Monitor
+      - type: word
+        words:
+          - "Double check the URL"
+          - "createsend.com"
+        condition: and
+
+      # Mailgun
+      - type: word
+        words:
+          - "Unacceptable"
+          - "mailgun"
+        condition: and
+
+      # Pingdom
+      - type: word
+        words:
+          - "Sorry, couldn't find the status page"
+          - "pingdom"
+        condition: and
+
+      # Shopify
+      - type: word
+        words:
+          - "Sorry, this shop is currently unavailable"
+          - "myshopify.com"
+        condition: and
+
+      # Unbounce
+      - type: word
+        words:
+          - "The requested URL was not found on this server"
+          - "unbounce.com"
+        condition: and
+
+    extractors:
+      - type: regex
+        name: takeover_service
+        regex:
+          - '(?i)(github|heroku|netlify|surge|aws|azure|bitbucket|gitlab|fastly|helpjuice|helpscout|ghost|pantheon|zendesk|tumblr|wordpress|statuspage|uservoice|campaign|mailgun|pingdom|shopify|unbounce)'
+
+      - type: regex
+        name: error_message
+        regex:
+          - '(?i)(not found|unavailable|does not exist|no such|project not found|repository not found)'
+
+      - type: kval
+        kval:
+          - location
+          - server

