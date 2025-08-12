@@ -1,0 +1,431 @@
+id: spring-boot-actuator-exposure-elite
+
+info:
+  name: Spring Boot Actuator Exposure - Elite Detection
+  author: redteam-elite
+  severity: medium
+  description: |
+    Detects exposed Spring Boot Actuator endpoints that reveal sensitive application information
+    including health status, configuration properties, environment variables, metrics, beans,
+    mappings, and potentially sensitive data. This elite template uses advanced red team
+    techniques to identify various actuator endpoints and bypass common restrictions.
+  reference:
+    - https://docs.spring.io/spring-boot/docs/current/reference/html/actuator.html
+    - https://docs.spring.io/spring-boot/docs/current/actuator-api/htmlsingle/
+    - https://github.com/spring-projects/spring-boot/tree/main/spring-boot-project/spring-boot-actuator
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N
+    cvss-score: 5.3
+    cwe-id: CWE-200
+  metadata:
+    verified: true
+    max-request: 35
+    shodan-query: "spring boot actuator"
+  tags: spring-boot,actuator,exposure,info-disclosure,java,misconfig
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/actuator"
+      - "{{BaseURL}}/actuator/"
+      - "{{BaseURL}}/actuator/health"
+      - "{{BaseURL}}/actuator/info"
+      - "{{BaseURL}}/actuator/env"
+      - "{{BaseURL}}/actuator/configprops"
+      - "{{BaseURL}}/actuator/beans"
+      - "{{BaseURL}}/actuator/mappings"
+      - "{{BaseURL}}/actuator/metrics"
+      - "{{BaseURL}}/actuator/trace"
+      - "{{BaseURL}}/actuator/httptrace"
+      - "{{BaseURL}}/actuator/dump"
+      - "{{BaseURL}}/actuator/threaddump"
+      - "{{BaseURL}}/actuator/heapdump"
+      - "{{BaseURL}}/actuator/loggers"
+      - "{{BaseURL}}/actuator/auditevents"
+      - "{{BaseURL}}/actuator/scheduledtasks"
+      - "{{BaseURL}}/actuator/sessions"
+      - "{{BaseURL}}/actuator/shutdown"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      Accept: "application/json,text/html,application/xhtml+xml,*/*"
+      X-Forwarded-For: "127.0.0.1"
+      X-Real-IP: "127.0.0.1"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - '"_links":'
+          - '"self":'
+          - '"href":'
+          - '"templated":'
+          - '"status":'
+          - '"UP"'
+          - '"DOWN"'
+          - '"diskSpace":'
+          - '"db":'
+          - '"components":'
+          - '"details":'
+          - '"configurationProperties":'
+          - '"contexts":'
+          - '"beans":'
+          - '"dispatcherServlets":'
+          - '"servletFilters":'
+        condition: or
+
+      - type: word
+        part: body
+        words:
+          - 'Spring Boot'
+          - 'spring-boot'
+          - 'actuator'
+          - 'management'
+          - 'endpoint'
+          - 'health-indicator'
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: header
+        words:
+          - "application/json"
+          - "application/vnd.spring-boot.actuator"
+        condition: or
+
+    extractors:
+      - type: regex
+        name: spring_boot_version
+        part: body
+        group: 1
+        regex:
+          - '"spring-boot":"([0-9.]+)"'
+          - '"Spring Boot":"([0-9.]+)"'
+
+      - type: regex
+        name: java_version
+        part: body
+        group: 1
+        regex:
+          - '"java.version":"([^"]+)"'
+          - '"java.runtime.version":"([^"]+)"'
+
+      - type: regex
+        name: app_info
+        part: body
+        group: 1
+        regex:
+          - '"name":"([^"]+)"'
+          - '"description":"([^"]+)"'
+          - '"version":"([^"]+)"'
+
+# Advanced detection with IP bypass techniques
+  - method: GET
+    path:
+      - "{{BaseURL}}/actuator"
+      - "{{BaseURL}}/actuator/health"
+      - "{{BaseURL}}/actuator/env"
+      - "{{BaseURL}}/actuator/info"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      X-Forwarded-For: "localhost"
+      X-Real-IP: "localhost"
+      X-Originating-IP: "localhost"
+      X-Remote-IP: "localhost"
+      X-Remote-Addr: "localhost"
+      X-ProxyUser-Ip: "localhost"
+      X-Original-URL: "/actuator"
+      X-Rewrite-URL: "/actuator"
+      Forwarded: "for=localhost"
+      CF-Connecting-IP: "127.0.0.1"
+      True-Client-IP: "127.0.0.1"
+      X-Cluster-Client-IP: "127.0.0.1"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - '"_links":'
+          - '"status":'
+          - '"UP"'
+          - '"DOWN"'
+          - 'actuator'
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+# Check for Spring Boot 1.x endpoints (legacy)
+  - method: GET
+    path:
+      - "{{BaseURL}}/health"
+      - "{{BaseURL}}/info"
+      - "{{BaseURL}}/env"
+      - "{{BaseURL}}/configprops"
+      - "{{BaseURL}}/beans"
+      - "{{BaseURL}}/mappings"
+      - "{{BaseURL}}/metrics"
+      - "{{BaseURL}}/trace"
+      - "{{BaseURL}}/dump"
+      - "{{BaseURL}}/autoconfig"
+      - "{{BaseURL}}/shutdown"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      Accept: "application/json,*/*"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - '"status":'
+          - '"UP"'
+          - '"DOWN"'
+          - '"diskSpace":'
+          - '"db":'
+          - '"configurationProperties":'
+          - '"contexts":'
+          - '"beans":'
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: header
+        words:
+          - "application/json"
+
+# Check for management endpoints with different base paths
+  - method: GET
+    path:
+      - "{{BaseURL}}/management/health"
+      - "{{BaseURL}}/management/info"
+      - "{{BaseURL}}/management/env"
+      - "{{BaseURL}}/management/actuator"
+      - "{{BaseURL}}/admin/health"
+      - "{{BaseURL}}/admin/info"
+      - "{{BaseURL}}/admin/actuator"
+      - "{{BaseURL}}/monitor/health"
+      - "{{BaseURL}}/monitor/actuator"
+      - "{{BaseURL}}/status/health"
+      - "{{BaseURL}}/status/actuator"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - '"status":'
+          - '"UP"'
+          - '"DOWN"'
+          - '"_links":'
+          - 'actuator'
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "403 Forbidden"
+          - "Access denied"
+          - "Not authorized"
+        negative: true
+
+# Check for sensitive actuator endpoints
+  - method: GET
+    path:
+      - "{{BaseURL}}/actuator/env/spring.datasource.password"
+      - "{{BaseURL}}/actuator/env/spring.datasource.username"
+      - "{{BaseURL}}/actuator/env/spring.datasource.url"
+      - "{{BaseURL}}/actuator/env/server.port"
+      - "{{BaseURL}}/actuator/env/management.endpoints"
+      - "{{BaseURL}}/actuator/configprops/dataSource"
+      - "{{BaseURL}}/actuator/configprops/security"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      Accept: "application/json"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - '"property":'
+          - '"value":'
+          - '"origin":'
+          - '"configurationProperties":'
+          - '"prefix":'
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+# Check for metrics endpoints
+  - method: GET
+    path:
+      - "{{BaseURL}}/actuator/metrics/jvm.memory.used"
+      - "{{BaseURL}}/actuator/metrics/jvm.memory.max"
+      - "{{BaseURL}}/actuator/metrics/system.cpu.usage"
+      - "{{BaseURL}}/actuator/metrics/http.server.requests"
+      - "{{BaseURL}}/actuator/metrics/process.uptime"
+      - "{{BaseURL}}/actuator/prometheus"
+      - "{{BaseURL}}/prometheus"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      Accept: "application/json,text/plain"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - '"name":'
+          - '"measurements":'
+          - '"availableTags":'
+          - '"statistic":'
+          - '"value":'
+          - '# HELP'
+          - '# TYPE'
+          - 'jvm_'
+          - 'system_'
+          - 'http_'
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+# Check for custom actuator endpoints
+  - method: GET
+    path:
+      - "{{BaseURL}}/actuator/custom"
+      - "{{BaseURL}}/actuator/application"
+      - "{{BaseURL}}/actuator/features"
+      - "{{BaseURL}}/actuator/flyway"
+      - "{{BaseURL}}/actuator/liquibase"
+      - "{{BaseURL}}/actuator/caches"
+      - "{{BaseURL}}/actuator/conditions"
+      - "{{BaseURL}}/actuator/integrationgraph"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - '"contexts":'
+          - '"positiveMatches":'
+          - '"negativeMatches":'
+          - '"unconditionalClasses":'
+          - '"cacheManagers":'
+          - '"migrations":'
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+# Check for actuator with authentication bypass
+  - method: GET
+    path:
+      - "{{BaseURL}}/actuator/health"
+      - "{{BaseURL}}/actuator/info"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      Authorization: "Basic YWRtaW46YWRtaW4="
+      X-Forwarded-User: "admin"
+      X-Remote-User: "admin"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - '"status":'
+          - '"UP"'
+          - '"DOWN"'
+          - '"_links":'
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+# Check for Spring Cloud actuator endpoints
+  - method: GET
+    path:
+      - "{{BaseURL}}/actuator/refresh"
+      - "{{BaseURL}}/actuator/restart"
+      - "{{BaseURL}}/actuator/pause"
+      - "{{BaseURL}}/actuator/resume"
+      - "{{BaseURL}}/actuator/gateway"
+      - "{{BaseURL}}/actuator/gateway/routes"
+      - "{{BaseURL}}/actuator/gateway/filters"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      Accept: "application/json"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - '"message":'
+          - '"timestamp":'
+          - '"routes":'
+          - '"filters":'
+          - '"predicates":'
+          - '"uri":'
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+# Check for dangerous endpoints (POST methods)
+  - method: POST
+    path:
+      - "{{BaseURL}}/actuator/shutdown"
+      - "{{BaseURL}}/actuator/restart"
+      - "{{BaseURL}}/actuator/refresh"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      Content-Type: "application/json"
+
+    body: "{}"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - '"message":'
+          - '"timestamp":'
+          - "Shutting down"
+          - "shutdown"
+          - "restart"
+          - "refresh"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+          - 202

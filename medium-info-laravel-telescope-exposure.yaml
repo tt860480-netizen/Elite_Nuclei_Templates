@@ -1,0 +1,364 @@
+id: laravel-telescope-exposure-elite
+
+info:
+  name: Laravel Telescope Exposure - Elite Detection
+  author: redteam-elite
+  severity: medium
+  description: |
+    Detects exposed Laravel Telescope dashboard that reveals sensitive application debugging information
+    including requests, queries, jobs, exceptions, logs, and application performance metrics.
+    This elite template uses advanced red team techniques to identify Telescope endpoints
+    and bypass common access restrictions.
+  reference:
+    - https://laravel.com/docs/telescope
+    - https://github.com/laravel/telescope
+    - https://laravel.com/docs/telescope#dashboard-authorization
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N
+    cvss-score: 5.3
+    cwe-id: CWE-200
+  metadata:
+    verified: true
+    max-request: 25
+    shodan-query: "laravel telescope"
+  tags: laravel,telescope,debug,exposure,info-disclosure,php
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/telescope"
+      - "{{BaseURL}}/telescope/"
+      - "{{BaseURL}}/telescope/requests"
+      - "{{BaseURL}}/telescope/commands"
+      - "{{BaseURL}}/telescope/schedule"
+      - "{{BaseURL}}/telescope/jobs"
+      - "{{BaseURL}}/telescope/exceptions"
+      - "{{BaseURL}}/telescope/logs"
+      - "{{BaseURL}}/telescope/dumps"
+      - "{{BaseURL}}/telescope/queries"
+      - "{{BaseURL}}/telescope/models"
+      - "{{BaseURL}}/telescope/events"
+      - "{{BaseURL}}/telescope/mail"
+      - "{{BaseURL}}/telescope/notifications"
+      - "{{BaseURL}}/telescope/cache"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+      X-Forwarded-For: "127.0.0.1"
+      X-Real-IP: "127.0.0.1"
+      X-Requested-With: "XMLHttpRequest"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "Laravel Telescope"
+          - "telescope-app"
+          - "telescope-dashboard"
+          - "Telescope.start"
+          - "telescope/app.js"
+          - "telescope/app.css"
+          - "Requests"
+          - "Commands"
+          - "Schedule"
+          - "Jobs"
+          - "Exceptions"
+          - "Logs"
+          - "Queries"
+        condition: or
+
+      - type: word
+        part: body
+        words:
+          - "telescope-content"
+          - "telescope-sidebar"
+          - "telescope-header"
+          - "telescope-main"
+          - "Laravel Telescope Dashboard"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: header
+        words:
+          - "text/html"
+          - "application/json"
+        condition: or
+
+    extractors:
+      - type: regex
+        name: laravel_version
+        part: body
+        group: 1
+        regex:
+          - 'Laravel Framework ([0-9.]+)'
+          - 'laravel_version":"([0-9.]+)"'
+
+      - type: regex
+        name: telescope_version
+        part: body
+        group: 1
+        regex:
+          - 'telescope":"([0-9.]+)"'
+          - 'Telescope ([0-9.]+)'
+
+      - type: regex
+        name: app_info
+        part: body
+        group: 1
+        regex:
+          - 'app_name":"([^"]+)"'
+          - 'app_env":"([^"]+)"'
+
+# Advanced detection with IP bypass techniques
+  - method: GET
+    path:
+      - "{{BaseURL}}/telescope"
+      - "{{BaseURL}}/telescope/requests"
+      - "{{BaseURL}}/telescope/queries"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      X-Forwarded-For: "localhost"
+      X-Real-IP: "localhost"
+      X-Originating-IP: "localhost"
+      X-Remote-IP: "localhost"
+      X-Remote-Addr: "localhost"
+      X-ProxyUser-Ip: "localhost"
+      X-Original-URL: "/telescope"
+      X-Rewrite-URL: "/telescope"
+      Forwarded: "for=localhost"
+      CF-Connecting-IP: "127.0.0.1"
+      True-Client-IP: "127.0.0.1"
+      X-Cluster-Client-IP: "127.0.0.1"
+      X-Requested-With: "XMLHttpRequest"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "Laravel Telescope"
+          - "telescope-app"
+          - "telescope-dashboard"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+# Check for Telescope API endpoints
+  - method: GET
+    path:
+      - "{{BaseURL}}/telescope/telescope-api/requests"
+      - "{{BaseURL}}/telescope/telescope-api/commands"
+      - "{{BaseURL}}/telescope/telescope-api/jobs"
+      - "{{BaseURL}}/telescope/telescope-api/exceptions"
+      - "{{BaseURL}}/telescope/telescope-api/logs"
+      - "{{BaseURL}}/telescope/telescope-api/queries"
+      - "{{BaseURL}}/telescope/telescope-api/models"
+      - "{{BaseURL}}/telescope/telescope-api/events"
+      - "{{BaseURL}}/telescope/telescope-api/mail"
+      - "{{BaseURL}}/telescope/telescope-api/cache"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      Accept: "application/json, text/javascript, */*; q=0.01"
+      X-Requested-With: "XMLHttpRequest"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - '"entries":'
+          - '"batch_id":'
+          - '"uuid":'
+          - '"sequence":'
+          - '"type":'
+          - '"family_hash":'
+          - '"content":'
+          - '"created_at":'
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: header
+        words:
+          - "application/json"
+
+# Check for Telescope assets and resources
+  - method: GET
+    path:
+      - "{{BaseURL}}/vendor/telescope/app.js"
+      - "{{BaseURL}}/vendor/telescope/app.css"
+      - "{{BaseURL}}/vendor/telescope/favicon.ico"
+      - "{{BaseURL}}/telescope/app.js"
+      - "{{BaseURL}}/telescope/app.css"
+      - "{{BaseURL}}/telescope/favicon.ico"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "telescope"
+          - "Laravel Telescope"
+          - "telescope-app"
+          - "telescope-dashboard"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: header
+        words:
+          - "application/javascript"
+          - "text/css"
+          - "image/"
+        condition: or
+
+# Check for alternative telescope paths
+  - method: GET
+    path:
+      - "{{BaseURL}}/admin/telescope"
+      - "{{BaseURL}}/admin/telescope/"
+      - "{{BaseURL}}/debug/telescope"
+      - "{{BaseURL}}/debug/telescope/"
+      - "{{BaseURL}}/dev/telescope"
+      - "{{BaseURL}}/dev/telescope/"
+      - "{{BaseURL}}/_telescope"
+      - "{{BaseURL}}/_telescope/"
+      - "{{BaseURL}}/laravel/telescope"
+      - "{{BaseURL}}/laravel/telescope/"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "Laravel Telescope"
+          - "telescope-app"
+          - "telescope-dashboard"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "403 Forbidden"
+          - "Access denied"
+          - "Not authorized"
+        negative: true
+
+# Check for specific Telescope entry details
+  - method: GET
+    path:
+      - "{{BaseURL}}/telescope/requests/1"
+      - "{{BaseURL}}/telescope/queries/1"
+      - "{{BaseURL}}/telescope/jobs/1"
+      - "{{BaseURL}}/telescope/exceptions/1"
+      - "{{BaseURL}}/telescope/logs/1"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      Accept: "application/json, text/html, */*"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "Laravel Telescope"
+          - "telescope-app"
+          - '"entry":'
+          - '"content":'
+          - '"tags":'
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+# Check for Telescope configuration exposure
+  - method: GET
+    path:
+      - "{{BaseURL}}/telescope/telescope-api/stats"
+      - "{{BaseURL}}/telescope/telescope-api/monitoring"
+      - "{{BaseURL}}/telescope/telescope-api/toggle-monitoring"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      Accept: "application/json"
+      X-Requested-With: "XMLHttpRequest"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - '"monitoring":'
+          - '"is_enabled":'
+          - '"stats":'
+          - '"telescope":'
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: header
+        words:
+          - "application/json"
+
+# Check for Telescope in main application pages
+  - method: GET
+    path:
+      - "{{BaseURL}}/"
+      - "{{BaseURL}}/admin"
+      - "{{BaseURL}}/login"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "telescope/app.js"
+          - "telescope/app.css"
+          - "Laravel Telescope"
+          - "/telescope"
+        condition: or
+
+      - type: word
+        part: body
+        words:
+          - "telescope-app"
+          - "telescope-dashboard"
+          - "Telescope.start"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: header
+        words:
+          - "text/html"

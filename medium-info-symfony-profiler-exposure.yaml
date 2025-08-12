@@ -1,0 +1,398 @@
+id: symfony-profiler-exposure-elite
+
+info:
+  name: Symfony Profiler Exposure - Elite Detection
+  author: redteam-elite
+  severity: medium
+  description: |
+    Detects exposed Symfony Web Profiler that reveals sensitive application debugging information
+    including request/response data, database queries, performance metrics, security tokens,
+    and application configuration. This elite template uses advanced red team techniques
+    to identify profiler endpoints and bypass common access restrictions.
+  reference:
+    - https://symfony.com/doc/current/profiler.html
+    - https://github.com/symfony/web-profiler-bundle
+    - https://symfony.com/doc/current/profiler/data_collector.html
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N
+    cvss-score: 5.3
+    cwe-id: CWE-200
+  metadata:
+    verified: true
+    max-request: 30
+    shodan-query: "symfony profiler"
+  tags: symfony,profiler,debug,exposure,info-disclosure,php
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/_profiler/"
+      - "{{BaseURL}}/_profiler"
+      - "{{BaseURL}}/_profiler/latest"
+      - "{{BaseURL}}/_profiler/latest?panel=request"
+      - "{{BaseURL}}/_profiler/latest?panel=time"
+      - "{{BaseURL}}/_profiler/latest?panel=memory"
+      - "{{BaseURL}}/_profiler/latest?panel=exception"
+      - "{{BaseURL}}/_profiler/latest?panel=logger"
+      - "{{BaseURL}}/_profiler/latest?panel=events"
+      - "{{BaseURL}}/_profiler/latest?panel=router"
+      - "{{BaseURL}}/_profiler/latest?panel=security"
+      - "{{BaseURL}}/_profiler/latest?panel=twig"
+      - "{{BaseURL}}/_profiler/latest?panel=doctrine"
+      - "{{BaseURL}}/_profiler/latest?panel=swiftmailer"
+      - "{{BaseURL}}/_profiler/latest?panel=dump"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+      X-Forwarded-For: "127.0.0.1"
+      X-Real-IP: "127.0.0.1"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "Symfony Profiler"
+          - "Web Debug Toolbar"
+          - "sf-profiler"
+          - "sf-toolbar"
+          - "Request / Response"
+          - "Performance"
+          - "Exception"
+          - "Logs"
+          - "Events"
+          - "Router"
+          - "Security"
+          - "Twig"
+          - "Doctrine"
+        condition: or
+
+      - type: word
+        part: body
+        words:
+          - "profiler-menu"
+          - "profiler-panel"
+          - "sf-profiler-toolbar"
+          - "sf-profiler-info"
+          - "profiler-token"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: header
+        words:
+          - "text/html"
+          - "application/json"
+        condition: or
+
+    extractors:
+      - type: regex
+        name: symfony_version
+        part: body
+        group: 1
+        regex:
+          - 'Symfony ([0-9.]+)'
+          - 'symfony/symfony ([0-9.]+)'
+
+      - type: regex
+        name: profiler_token
+        part: body
+        group: 1
+        regex:
+          - 'profiler/([a-f0-9]{6})'
+          - 'token=([a-f0-9]{6})'
+
+      - type: regex
+        name: app_info
+        part: body
+        group: 1
+        regex:
+          - 'Environment: ([^<\n]+)'
+          - 'Debug: (true|false)'
+
+# Advanced detection with IP bypass techniques
+  - method: GET
+    path:
+      - "{{BaseURL}}/_profiler/"
+      - "{{BaseURL}}/_profiler/latest"
+      - "{{BaseURL}}/_profiler/latest?panel=request"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      X-Forwarded-For: "localhost"
+      X-Real-IP: "localhost"
+      X-Originating-IP: "localhost"
+      X-Remote-IP: "localhost"
+      X-Remote-Addr: "localhost"
+      X-ProxyUser-Ip: "localhost"
+      X-Original-URL: "/_profiler/"
+      X-Rewrite-URL: "/_profiler/"
+      Forwarded: "for=localhost"
+      CF-Connecting-IP: "127.0.0.1"
+      True-Client-IP: "127.0.0.1"
+      X-Cluster-Client-IP: "127.0.0.1"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "Symfony Profiler"
+          - "sf-profiler"
+          - "Web Debug Toolbar"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+# Check for profiler search and listing endpoints
+  - method: GET
+    path:
+      - "{{BaseURL}}/_profiler/search"
+      - "{{BaseURL}}/_profiler/search/results"
+      - "{{BaseURL}}/_profiler/search/results?limit=10"
+      - "{{BaseURL}}/_profiler/phpinfo"
+      - "{{BaseURL}}/_profiler/open"
+      - "{{BaseURL}}/_profiler/info"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      Accept: "application/json, text/html, */*"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "Symfony Profiler"
+          - "sf-profiler"
+          - "profiler-search"
+          - "profiler-results"
+          - "token"
+          - "method"
+          - "url"
+          - "time"
+          - "status_code"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+# Check for Web Debug Toolbar
+  - method: GET
+    path:
+      - "{{BaseURL}}/_wdt/"
+      - "{{BaseURL}}/_wdt"
+      - "{{BaseURL}}/_wdt/latest"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      Accept: "text/html,application/json,*/*"
+      X-Requested-With: "XMLHttpRequest"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "sf-toolbar"
+          - "sf-toolbar-block"
+          - "Web Debug Toolbar"
+          - "symfony-toolbar"
+          - "sf-toolbar-info"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+# Check for profiler assets and resources
+  - method: GET
+    path:
+      - "{{BaseURL}}/bundles/webprofiler/css/profiler.css"
+      - "{{BaseURL}}/bundles/webprofiler/js/profiler.js"
+      - "{{BaseURL}}/bundles/webprofiler/css/toolbar.css"
+      - "{{BaseURL}}/bundles/webprofiler/js/toolbar.js"
+      - "{{BaseURL}}/_profiler/css/profiler.css"
+      - "{{BaseURL}}/_profiler/js/profiler.js"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "sf-profiler"
+          - "sf-toolbar"
+          - "symfony"
+          - "profiler"
+          - "toolbar"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: header
+        words:
+          - "text/css"
+          - "application/javascript"
+        condition: or
+
+# Check for alternative profiler paths
+  - method: GET
+    path:
+      - "{{BaseURL}}/profiler/"
+      - "{{BaseURL}}/profiler"
+      - "{{BaseURL}}/debug/"
+      - "{{BaseURL}}/debug"
+      - "{{BaseURL}}/symfony/profiler/"
+      - "{{BaseURL}}/symfony/profiler"
+      - "{{BaseURL}}/admin/_profiler/"
+      - "{{BaseURL}}/admin/_profiler"
+      - "{{BaseURL}}/dev/_profiler/"
+      - "{{BaseURL}}/dev/_profiler"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "Symfony Profiler"
+          - "sf-profiler"
+          - "Web Debug Toolbar"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "403 Forbidden"
+          - "Access denied"
+          - "Not authorized"
+        negative: true
+
+# Check for specific profiler tokens and panels
+  - method: GET
+    path:
+      - "{{BaseURL}}/_profiler/000000"
+      - "{{BaseURL}}/_profiler/111111"
+      - "{{BaseURL}}/_profiler/aaaaaa"
+      - "{{BaseURL}}/_profiler/ffffff"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "Symfony Profiler"
+          - "sf-profiler"
+          - "Request / Response"
+          - "Performance"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+# Check for AJAX profiler requests
+  - method: GET
+    path:
+      - "{{BaseURL}}/_profiler/search_bar"
+      - "{{BaseURL}}/_profiler/purge"
+      - "{{BaseURL}}/_profiler/import"
+      - "{{BaseURL}}/_profiler/export"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      X-Requested-With: "XMLHttpRequest"
+      Accept: "application/json, text/javascript, */*; q=0.01"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "profiler"
+          - "symfony"
+          - "token"
+          - "search"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+# Check for profiler in main application pages
+  - method: GET
+    path:
+      - "{{BaseURL}}/"
+      - "{{BaseURL}}/admin"
+      - "{{BaseURL}}/login"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "sf-toolbar"
+          - "_profiler"
+          - "_wdt"
+          - "symfony-toolbar"
+        condition: or
+
+      - type: word
+        part: body
+        words:
+          - "profiler.css"
+          - "toolbar.css"
+          - "profiler.js"
+          - "toolbar.js"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: header
+        words:
+          - "text/html"
+
+# Check for profiler configuration exposure
+  - method: GET
+    path:
+      - "{{BaseURL}}/_profiler/config"
+      - "{{BaseURL}}/_profiler/router"
+      - "{{BaseURL}}/_profiler/router/routes"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "Symfony Profiler"
+          - "Configuration"
+          - "Routes"
+          - "Parameters"
+          - "Services"
+        condition: or
+
+      - type: status
+        status:
+          - 200

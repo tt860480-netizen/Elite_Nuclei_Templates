@@ -1,0 +1,321 @@
+id: django-debug-toolbar-exposure-elite
+
+info:
+  name: Django Debug Toolbar Exposure - Elite Detection
+  author: redteam-elite
+  severity: medium
+  description: |
+    Detects exposed Django Debug Toolbar that reveals sensitive application information including
+    SQL queries, cache operations, template context, request/response data, and system settings.
+    This elite template uses advanced red team techniques to identify debug toolbar endpoints
+    and bypass common IP restrictions.
+  reference:
+    - https://django-debug-toolbar.readthedocs.io/
+    - https://github.com/jazzband/django-debug-toolbar
+    - https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/02-Configuration_and_Deployment_Management_Testing/05-Test_Application_Platform_Configuration
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N
+    cvss-score: 5.3
+    cwe-id: CWE-200
+  metadata:
+    verified: true
+    max-request: 20
+    shodan-query: "django debug toolbar"
+  tags: django,debug,toolbar,exposure,info-disclosure,python
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/__debug__/"
+      - "{{BaseURL}}/__debug__/sql_select/"
+      - "{{BaseURL}}/__debug__/sql_explain/"
+      - "{{BaseURL}}/__debug__/sql_profile/"
+      - "{{BaseURL}}/__debug__/template/"
+      - "{{BaseURL}}/__debug__/cache/"
+      - "{{BaseURL}}/__debug__/signals/"
+      - "{{BaseURL}}/__debug__/logging/"
+      - "{{BaseURL}}/__debug__/redirects/"
+      - "{{BaseURL}}/__debug__/profiling/"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+      X-Forwarded-For: "127.0.0.1"
+      X-Real-IP: "127.0.0.1"
+      X-Requested-With: "XMLHttpRequest"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "Django Debug Toolbar"
+          - "djDebug"
+          - "debug-toolbar"
+          - "SQL queries"
+          - "Template context"
+          - "Cache calls"
+          - "Signal receivers"
+          - "Request vars"
+          - "Settings from"
+          - "django.conf.settings"
+        condition: or
+
+      - type: word
+        part: body
+        words:
+          - "djdt"
+          - "debug_toolbar"
+          - "SQL SELECT"
+          - "SQL EXPLAIN"
+          - "Template rendered"
+          - "Cache operations"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: header
+        words:
+          - "text/html"
+          - "application/json"
+        condition: or
+
+    extractors:
+      - type: regex
+        name: django_version
+        part: body
+        group: 1
+        regex:
+          - 'Django ([0-9.]+)'
+          - 'django-([0-9.]+)'
+
+      - type: regex
+        name: debug_info
+        part: body
+        group: 1
+        regex:
+          - 'SQL queries: ([0-9]+)'
+          - 'Templates: ([0-9]+)'
+          - 'Cache calls: ([0-9]+)'
+
+      - type: regex
+        name: settings_info
+        part: body
+        group: 1
+        regex:
+          - 'DEBUG = (True|False)'
+          - 'SECRET_KEY = ([^<\n]+)'
+
+# Advanced detection with IP bypass techniques
+  - method: GET
+    path:
+      - "{{BaseURL}}/__debug__/"
+      - "{{BaseURL}}/__debug__/sql_select/"
+      - "{{BaseURL}}/__debug__/template/"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      X-Forwarded-For: "localhost"
+      X-Real-IP: "localhost"
+      X-Originating-IP: "localhost"
+      X-Remote-IP: "localhost"
+      X-Remote-Addr: "localhost"
+      X-ProxyUser-Ip: "localhost"
+      X-Original-URL: "/__debug__/"
+      X-Rewrite-URL: "/__debug__/"
+      Forwarded: "for=localhost"
+      CF-Connecting-IP: "127.0.0.1"
+      True-Client-IP: "127.0.0.1"
+      X-Cluster-Client-IP: "127.0.0.1"
+      X-Requested-With: "XMLHttpRequest"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "Django Debug Toolbar"
+          - "djDebug"
+          - "debug-toolbar"
+          - "SQL queries"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+# Check for debug toolbar assets and resources
+  - method: GET
+    path:
+      - "{{BaseURL}}/__debug__/static/debug_toolbar/css/toolbar.css"
+      - "{{BaseURL}}/__debug__/static/debug_toolbar/js/toolbar.js"
+      - "{{BaseURL}}/__debug__/static/debug_toolbar/img/djdt_vertical.png"
+      - "{{BaseURL}}/static/debug_toolbar/css/toolbar.css"
+      - "{{BaseURL}}/static/debug_toolbar/js/toolbar.js"
+      - "{{BaseURL}}/media/debug_toolbar/css/toolbar.css"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "debug-toolbar"
+          - "djDebug"
+          - "Django Debug Toolbar"
+          - "debug_toolbar"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: header
+        words:
+          - "text/css"
+          - "application/javascript"
+          - "image/png"
+        condition: or
+
+# Check for alternative debug endpoints
+  - method: GET
+    path:
+      - "{{BaseURL}}/debug/"
+      - "{{BaseURL}}/debug/toolbar/"
+      - "{{BaseURL}}/django-debug/"
+      - "{{BaseURL}}/django-debug-toolbar/"
+      - "{{BaseURL}}/djdt/"
+      - "{{BaseURL}}/_debug/"
+      - "{{BaseURL}}/_debug/toolbar/"
+      - "{{BaseURL}}/admin/debug/"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "Django Debug Toolbar"
+          - "djDebug"
+          - "debug-toolbar"
+          - "SQL queries"
+          - "Template context"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "403 Forbidden"
+          - "Access denied"
+          - "Not authorized"
+        negative: true
+
+# Check for AJAX debug requests
+  - method: GET
+    path:
+      - "{{BaseURL}}/__debug__/render_panel/"
+      - "{{BaseURL}}/__debug__/history_sidebar/"
+      - "{{BaseURL}}/__debug__/history_refresh/"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      X-Requested-With: "XMLHttpRequest"
+      Accept: "application/json, text/javascript, */*; q=0.01"
+      Referer: "{{BaseURL}}/"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "djDebug"
+          - "debug_toolbar"
+          - "panel_id"
+          - "store_id"
+          - "toolbar_stats"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: header
+        words:
+          - "application/json"
+          - "text/javascript"
+        condition: or
+
+# Check for debug toolbar with specific panels
+  - method: GET
+    path:
+      - "{{BaseURL}}/__debug__/timer/"
+      - "{{BaseURL}}/__debug__/settings/"
+      - "{{BaseURL}}/__debug__/headers/"
+      - "{{BaseURL}}/__debug__/request/"
+      - "{{BaseURL}}/__debug__/versions/"
+      - "{{BaseURL}}/__debug__/staticfiles/"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "Django Debug Toolbar"
+          - "Timer Panel"
+          - "Settings Panel"
+          - "Headers Panel"
+          - "Request Panel"
+          - "Versions Panel"
+          - "Static Files Panel"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+# Check for debug information in main pages
+  - method: GET
+    path:
+      - "{{BaseURL}}/"
+      - "{{BaseURL}}/admin/"
+      - "{{BaseURL}}/login/"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      X-Forwarded-For: "127.0.0.1"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "djDebug"
+          - "debug-toolbar"
+          - "__debug__"
+          - "django-debug-toolbar"
+        condition: or
+
+      - type: word
+        part: body
+        words:
+          - "SQL queries:"
+          - "Templates:"
+          - "Cache calls:"
+          - "Time:"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: header
+        words:
+          - "text/html"

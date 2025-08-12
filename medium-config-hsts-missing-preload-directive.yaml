@@ -1,0 +1,462 @@
+id: hsts-missing-preload-directive-elite
+
+info:
+  name: HSTS Missing Preload Directive - Elite Detection
+  author: redteam-elite
+  severity: medium
+  description: |
+    Detects HTTP Strict Transport Security (HSTS) headers that are missing the 'preload' directive
+    or have insufficient max-age values. This elite template identifies HSTS misconfigurations
+    that could allow downgrade attacks and man-in-the-middle attacks. Uses advanced red team
+    techniques to detect various HSTS bypass scenarios and weak configurations.
+  reference:
+    - https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Strict-Transport-Security
+    - https://hstspreload.org/
+    - https://owasp.org/www-community/Security_Headers
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:H/PR:N/UI:R/S:U/C:L/I:L/A:N
+    cvss-score: 4.8
+    cwe-id: CWE-319
+  metadata:
+    verified: true
+    max-request: 15
+    shodan-query: "Strict-Transport-Security"
+  tags: hsts,preload,security-headers,ssl,tls,downgrade-attack,mitm
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+      - "{{BaseURL}}/"
+      - "{{BaseURL}}/index.html"
+      - "{{BaseURL}}/home"
+      - "{{BaseURL}}/login"
+      - "{{BaseURL}}/admin"
+      - "{{BaseURL}}/secure"
+      - "{{BaseURL}}/dashboard"
+      - "{{BaseURL}}/app"
+      - "{{BaseURL}}/api"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: header
+        words:
+          - "Strict-Transport-Security"
+
+      - type: word
+        part: header
+        words:
+          - "preload"
+        negative: true
+
+      - type: status
+        status:
+          - 200
+          - 301
+          - 302
+
+    extractors:
+      - type: kval
+        kval:
+          - strict_transport_security
+
+      - type: regex
+        name: hsts_header
+        part: header
+        group: 1
+        regex:
+          - 'Strict-Transport-Security: ([^\r\n]+)'
+
+      - type: regex
+        name: max_age_value
+        part: header
+        group: 1
+        regex:
+          - 'max-age=([0-9]+)'
+
+# Detect HSTS with low max-age (less than 1 year)
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+      - "{{BaseURL}}/login"
+      - "{{BaseURL}}/admin"
+      - "{{BaseURL}}/secure"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      Accept: "text/html,application/xhtml+xml"
+
+    matchers-condition: and
+    matchers:
+      - type: regex
+        part: header
+        regex:
+          - 'Strict-Transport-Security:.*max-age=([0-9]{1,7})[^0-9]'
+          - 'Strict-Transport-Security:.*max-age=([0-2][0-9]{7})[^0-9]'
+
+      - type: word
+        part: header
+        words:
+          - "preload"
+        negative: true
+
+      - type: status
+        status:
+          - 200
+          - 301
+          - 302
+
+# Detect HSTS without includeSubDomains
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+      - "{{BaseURL}}/app"
+      - "{{BaseURL}}/api"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      Accept: "text/html,application/xhtml+xml"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: header
+        words:
+          - "Strict-Transport-Security"
+
+      - type: word
+        part: header
+        words:
+          - "includeSubDomains"
+        negative: true
+
+      - type: word
+        part: header
+        words:
+          - "preload"
+        negative: true
+
+      - type: status
+        status:
+          - 200
+          - 301
+          - 302
+
+# Detect HSTS with includeSubDomains but no preload
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+      - "{{BaseURL}}/secure"
+      - "{{BaseURL}}/login"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      Accept: "text/html,application/xhtml+xml"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: header
+        words:
+          - "Strict-Transport-Security"
+
+      - type: word
+        part: header
+        words:
+          - "includeSubDomains"
+
+      - type: word
+        part: header
+        words:
+          - "preload"
+        negative: true
+
+      - type: status
+        status:
+          - 200
+          - 301
+          - 302
+
+# Detect HSTS with very low max-age (less than 1 month)
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+      - "{{BaseURL}}/admin"
+      - "{{BaseURL}}/dashboard"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      Accept: "text/html,application/xhtml+xml"
+
+    matchers-condition: and
+    matchers:
+      - type: regex
+        part: header
+        regex:
+          - 'Strict-Transport-Security:.*max-age=([0-9]{1,6})[^0-9]'
+          - 'Strict-Transport-Security:.*max-age=(1[0-9]{6})[^0-9]'
+          - 'Strict-Transport-Security:.*max-age=(2[0-4][0-9]{5})[^0-9]'
+
+      - type: status
+        status:
+          - 200
+          - 301
+          - 302
+
+# Check for HSTS on HTTP (should not be present)
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+      - "{{BaseURL}}/login"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      Accept: "text/html,application/xhtml+xml"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: header
+        words:
+          - "Strict-Transport-Security"
+
+      - type: word
+        part: url
+        words:
+          - "http://"
+
+      - type: status
+        status:
+          - 200
+          - 301
+          - 302
+
+# Detect HSTS with max-age=0 (disabling HSTS)
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+      - "{{BaseURL}}/logout"
+      - "{{BaseURL}}/disable"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      Accept: "text/html,application/xhtml+xml"
+
+    matchers-condition: and
+    matchers:
+      - type: regex
+        part: header
+        regex:
+          - 'Strict-Transport-Security:.*max-age=0'
+
+      - type: status
+        status:
+          - 200
+          - 301
+          - 302
+
+# Check for malformed HSTS headers
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+      - "{{BaseURL}}/app"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      Accept: "text/html,application/xhtml+xml"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: header
+        words:
+          - "Strict-Transport-Security"
+
+      - type: regex
+        part: header
+        regex:
+          - 'Strict-Transport-Security:[^;]*$'
+          - 'Strict-Transport-Security:.*[^;]$'
+        negative: true
+
+      - type: word
+        part: header
+        words:
+          - "max-age"
+        negative: true
+
+      - type: status
+        status:
+          - 200
+          - 301
+          - 302
+
+# Check for HSTS with insufficient max-age for preload eligibility
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+      - "{{BaseURL}}/secure"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      Accept: "text/html,application/xhtml+xml"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: header
+        words:
+          - "Strict-Transport-Security"
+
+      - type: regex
+        part: header
+        regex:
+          - 'max-age=([0-9]{1,7})[^0-9]'
+          - 'max-age=([1-2][0-9]{7})[^0-9]'
+          - 'max-age=(30[0-9]{6})[^0-9]'
+
+      - type: word
+        part: header
+        words:
+          - "includeSubDomains"
+
+      - type: word
+        part: header
+        words:
+          - "preload"
+        negative: true
+
+      - type: status
+        status:
+          - 200
+          - 301
+          - 302
+
+# Check for HSTS with preload but insufficient max-age
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+      - "{{BaseURL}}/preload-test"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      Accept: "text/html,application/xhtml+xml"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: header
+        words:
+          - "Strict-Transport-Security"
+
+      - type: word
+        part: header
+        words:
+          - "preload"
+
+      - type: regex
+        part: header
+        regex:
+          - 'max-age=([0-9]{1,7})[^0-9]'
+          - 'max-age=([1-2][0-9]{7})[^0-9]'
+
+      - type: status
+        status:
+          - 200
+          - 301
+          - 302
+
+# Check for HSTS header case sensitivity issues
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+      - "{{BaseURL}}/case-test"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      Accept: "text/html,application/xhtml+xml"
+
+    matchers-condition: and
+    matchers:
+      - type: regex
+        part: header
+        regex:
+          - 'strict-transport-security'
+          - 'STRICT-TRANSPORT-SECURITY'
+
+      - type: word
+        part: header
+        words:
+          - "preload"
+        negative: true
+
+      - type: status
+        status:
+          - 200
+          - 301
+          - 302
+
+# Check for duplicate HSTS headers
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+      - "{{BaseURL}}/duplicate-test"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      Accept: "text/html,application/xhtml+xml"
+
+    matchers-condition: and
+    matchers:
+      - type: regex
+        part: header
+        regex:
+          - '(Strict-Transport-Security:.*\r?\n.*Strict-Transport-Security:)'
+
+      - type: word
+        part: header
+        words:
+          - "preload"
+        negative: true
+
+      - type: status
+        status:
+          - 200
+          - 301
+          - 302
+
+# Check for HSTS on redirect responses
+  - method: GET
+    path:
+      - "{{BaseURL}}/redirect"
+      - "{{BaseURL}}/moved"
+      - "{{BaseURL}}/temp"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      Accept: "text/html,application/xhtml+xml"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: header
+        words:
+          - "Strict-Transport-Security"
+
+      - type: word
+        part: header
+        words:
+          - "preload"
+        negative: true
+
+      - type: status
+        status:
+          - 301
+          - 302
+          - 307
+          - 308

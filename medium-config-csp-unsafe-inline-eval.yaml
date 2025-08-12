@@ -1,0 +1,392 @@
+id: csp-unsafe-inline-eval-elite
+
+info:
+  name: CSP Unsafe-Inline/Eval Detection - Elite
+  author: redteam-elite
+  severity: medium
+  description: |
+    Detects Content Security Policy (CSP) configurations that use dangerous 'unsafe-inline' or 'unsafe-eval'
+    directives. This elite template identifies CSP misconfigurations that allow inline scripts, styles,
+    and eval() functions, which can be exploited for XSS attacks. Uses advanced red team techniques
+    to detect various CSP bypass scenarios and weak configurations.
+  reference:
+    - https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP
+    - https://owasp.org/www-community/attacks/Content_Security_Policy
+    - https://portswigger.net/web-security/cross-site-scripting/content-security-policy
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:L/I:L/A:N
+    cvss-score: 6.1
+    cwe-id: CWE-79
+  metadata:
+    verified: true
+    max-request: 20
+    shodan-query: "Content-Security-Policy unsafe-inline"
+  tags: csp,unsafe-inline,unsafe-eval,xss,security-headers,misconfiguration
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+      - "{{BaseURL}}/"
+      - "{{BaseURL}}/index.html"
+      - "{{BaseURL}}/home"
+      - "{{BaseURL}}/login"
+      - "{{BaseURL}}/admin"
+      - "{{BaseURL}}/dashboard"
+      - "{{BaseURL}}/app"
+      - "{{BaseURL}}/main"
+      - "{{BaseURL}}/portal"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: header
+        words:
+          - "Content-Security-Policy"
+          - "Content-Security-Policy-Report-Only"
+        condition: or
+
+      - type: word
+        part: header
+        words:
+          - "'unsafe-inline'"
+          - "'unsafe-eval'"
+          - "unsafe-inline"
+          - "unsafe-eval"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+    extractors:
+      - type: kval
+        kval:
+          - content_security_policy
+          - content_security_policy_report_only
+
+      - type: regex
+        name: csp_directives
+        part: header
+        group: 1
+        regex:
+          - 'Content-Security-Policy[^:]*: ([^\r\n]+)'
+          - 'Content-Security-Policy-Report-Only[^:]*: ([^\r\n]+)'
+
+# Detect script-src with unsafe-inline
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+      - "{{BaseURL}}/login"
+      - "{{BaseURL}}/admin"
+      - "{{BaseURL}}/app"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      Accept: "text/html,application/xhtml+xml"
+
+    matchers-condition: and
+    matchers:
+      - type: regex
+        part: header
+        regex:
+          - "Content-Security-Policy[^:]*:.*script-src[^;]*'unsafe-inline'"
+          - "Content-Security-Policy-Report-Only[^:]*:.*script-src[^;]*'unsafe-inline'"
+
+      - type: status
+        status:
+          - 200
+
+# Detect script-src with unsafe-eval
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+      - "{{BaseURL}}/app"
+      - "{{BaseURL}}/dashboard"
+      - "{{BaseURL}}/admin"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      Accept: "text/html,application/xhtml+xml"
+
+    matchers-condition: and
+    matchers:
+      - type: regex
+        part: header
+        regex:
+          - "Content-Security-Policy[^:]*:.*script-src[^;]*'unsafe-eval'"
+          - "Content-Security-Policy-Report-Only[^:]*:.*script-src[^;]*'unsafe-eval'"
+
+      - type: status
+        status:
+          - 200
+
+# Detect style-src with unsafe-inline
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+      - "{{BaseURL}}/login"
+      - "{{BaseURL}}/admin"
+      - "{{BaseURL}}/portal"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      Accept: "text/html,application/xhtml+xml"
+
+    matchers-condition: and
+    matchers:
+      - type: regex
+        part: header
+        regex:
+          - "Content-Security-Policy[^:]*:.*style-src[^;]*'unsafe-inline'"
+          - "Content-Security-Policy-Report-Only[^:]*:.*style-src[^;]*'unsafe-inline'"
+
+      - type: status
+        status:
+          - 200
+
+# Detect default-src with unsafe directives
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+      - "{{BaseURL}}/home"
+      - "{{BaseURL}}/main"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      Accept: "text/html,application/xhtml+xml"
+
+    matchers-condition: and
+    matchers:
+      - type: regex
+        part: header
+        regex:
+          - "Content-Security-Policy[^:]*:.*default-src[^;]*'unsafe-inline'"
+          - "Content-Security-Policy[^:]*:.*default-src[^;]*'unsafe-eval'"
+          - "Content-Security-Policy-Report-Only[^:]*:.*default-src[^;]*'unsafe-inline'"
+          - "Content-Security-Policy-Report-Only[^:]*:.*default-src[^;]*'unsafe-eval'"
+
+      - type: status
+        status:
+          - 200
+
+# Check for multiple unsafe directives
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+      - "{{BaseURL}}/app"
+      - "{{BaseURL}}/dashboard"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      Accept: "text/html,application/xhtml+xml"
+
+    matchers-condition: and
+    matchers:
+      - type: regex
+        part: header
+        regex:
+          - "Content-Security-Policy[^:]*:.*'unsafe-inline'.*'unsafe-eval'"
+          - "Content-Security-Policy[^:]*:.*'unsafe-eval'.*'unsafe-inline'"
+          - "Content-Security-Policy-Report-Only[^:]*:.*'unsafe-inline'.*'unsafe-eval'"
+          - "Content-Security-Policy-Report-Only[^:]*:.*'unsafe-eval'.*'unsafe-inline'"
+
+      - type: status
+        status:
+          - 200
+
+# Check for object-src with unsafe directives
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+      - "{{BaseURL}}/admin"
+      - "{{BaseURL}}/upload"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      Accept: "text/html,application/xhtml+xml"
+
+    matchers-condition: and
+    matchers:
+      - type: regex
+        part: header
+        regex:
+          - "Content-Security-Policy[^:]*:.*object-src[^;]*'unsafe-inline'"
+          - "Content-Security-Policy[^:]*:.*object-src[^;]*'unsafe-eval'"
+
+      - type: status
+        status:
+          - 200
+
+# Check for worker-src with unsafe directives
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+      - "{{BaseURL}}/app"
+      - "{{BaseURL}}/worker"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      Accept: "text/html,application/xhtml+xml"
+
+    matchers-condition: and
+    matchers:
+      - type: regex
+        part: header
+        regex:
+          - "Content-Security-Policy[^:]*:.*worker-src[^;]*'unsafe-eval'"
+          - "Content-Security-Policy-Report-Only[^:]*:.*worker-src[^;]*'unsafe-eval'"
+
+      - type: status
+        status:
+          - 200
+
+# Check for CSP with data: URIs (potential bypass)
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+      - "{{BaseURL}}/admin"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      Accept: "text/html,application/xhtml+xml"
+
+    matchers-condition: and
+    matchers:
+      - type: regex
+        part: header
+        regex:
+          - "Content-Security-Policy[^:]*:.*script-src[^;]*data:"
+          - "Content-Security-Policy[^:]*:.*style-src[^;]*data:"
+
+      - type: word
+        part: header
+        words:
+          - "'unsafe-inline'"
+          - "'unsafe-eval'"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+# Check for weak CSP with * wildcard and unsafe directives
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+      - "{{BaseURL}}/app"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      Accept: "text/html,application/xhtml+xml"
+
+    matchers-condition: and
+    matchers:
+      - type: regex
+        part: header
+        regex:
+          - "Content-Security-Policy[^:]*:.*script-src[^;]*\\*[^;]*'unsafe-inline'"
+          - "Content-Security-Policy[^:]*:.*script-src[^;]*'unsafe-inline'[^;]*\\*"
+
+      - type: status
+        status:
+          - 200
+
+# Check for CSP bypass with nonce but unsafe-inline
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+      - "{{BaseURL}}/secure"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      Accept: "text/html,application/xhtml+xml"
+
+    matchers-condition: and
+    matchers:
+      - type: regex
+        part: header
+        regex:
+          - "Content-Security-Policy[^:]*:.*script-src[^;]*'nonce-[^']*'[^;]*'unsafe-inline'"
+          - "Content-Security-Policy[^:]*:.*script-src[^;]*'unsafe-inline'[^;]*'nonce-[^']*'"
+
+      - type: status
+        status:
+          - 200
+
+# Check for CSP with strict-dynamic but unsafe directives
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+      - "{{BaseURL}}/modern"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      Accept: "text/html,application/xhtml+xml"
+
+    matchers-condition: and
+    matchers:
+      - type: regex
+        part: header
+        regex:
+          - "Content-Security-Policy[^:]*:.*'strict-dynamic'[^;]*'unsafe-inline'"
+          - "Content-Security-Policy[^:]*:.*'strict-dynamic'[^;]*'unsafe-eval'"
+
+      - type: status
+        status:
+          - 200
+
+# Check for report-only CSP with unsafe directives (testing phase)
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+      - "{{BaseURL}}/test"
+      - "{{BaseURL}}/beta"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      Accept: "text/html,application/xhtml+xml"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: header
+        words:
+          - "Content-Security-Policy-Report-Only"
+
+      - type: word
+        part: header
+        words:
+          - "'unsafe-inline'"
+          - "'unsafe-eval'"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+# Check for CSP with unsafe-hashes (potential issue)
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+      - "{{BaseURL}}/advanced"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      Accept: "text/html,application/xhtml+xml"
+
+    matchers-condition: and
+    matchers:
+      - type: regex
+        part: header
+        regex:
+          - "Content-Security-Policy[^:]*:.*'unsafe-hashes'[^;]*'unsafe-inline'"
+          - "Content-Security-Policy[^:]*:.*'unsafe-inline'[^;]*'unsafe-hashes'"
+
+      - type: status
+        status:
+          - 200

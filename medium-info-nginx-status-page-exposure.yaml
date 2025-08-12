@@ -1,0 +1,245 @@
+id: nginx-status-page-exposure-elite
+
+info:
+  name: Nginx Status Page Exposure - Elite Detection
+  author: redteam-elite
+  severity: medium
+  description: |
+    Detects exposed Nginx status pages including stub_status, status, and various monitoring endpoints.
+    This elite template uses advanced red team techniques to identify Nginx status pages that reveal
+    server statistics, connection information, and performance metrics.
+  reference:
+    - https://nginx.org/en/docs/http/ngx_http_stub_status_module.html
+    - https://nginx.org/en/docs/http/ngx_http_status_module.html
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N
+    cvss-score: 5.3
+    cwe-id: CWE-200
+  metadata:
+    verified: true
+    max-request: 20
+    shodan-query: "nginx status"
+  tags: nginx,exposure,status,info-disclosure,misconfig
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/nginx_status"
+      - "{{BaseURL}}/nginx-status"
+      - "{{BaseURL}}/status"
+      - "{{BaseURL}}/server-status"
+      - "{{BaseURL}}/stub_status"
+      - "{{BaseURL}}/stub-status"
+      - "{{BaseURL}}/nginx/status"
+      - "{{BaseURL}}/nginx/stub_status"
+      - "{{BaseURL}}/basic_status"
+      - "{{BaseURL}}/basic-status"
+      - "{{BaseURL}}/stats"
+      - "{{BaseURL}}/statistics"
+      - "{{BaseURL}}/server_status"
+      - "{{BaseURL}}/server-info"
+      - "{{BaseURL}}/nginx_info"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      Accept: "text/plain, text/html, */*"
+      X-Forwarded-For: "127.0.0.1"
+      X-Real-IP: "127.0.0.1"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "Active connections:"
+          - "server accepts handled requests"
+          - "Reading:"
+          - "Writing:"
+          - "Waiting:"
+          - "nginx status"
+          - "stub_status"
+        condition: or
+
+      - type: regex
+        part: body
+        regex:
+          - "Active connections: [0-9]+"
+          - "[0-9]+ [0-9]+ [0-9]+"
+          - "Reading: [0-9]+ Writing: [0-9]+ Waiting: [0-9]+"
+
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: header
+        words:
+          - "text/plain"
+          - "text/html"
+        condition: or
+
+    extractors:
+      - type: regex
+        name: active_connections
+        part: body
+        group: 1
+        regex:
+          - "Active connections: ([0-9]+)"
+
+      - type: regex
+        name: server_stats
+        part: body
+        group: 1
+        regex:
+          - "server accepts handled requests\n ([0-9]+ [0-9]+ [0-9]+)"
+
+      - type: regex
+        name: connection_states
+        part: body
+        group: 1
+        regex:
+          - "Reading: ([0-9]+) Writing: ([0-9]+) Waiting: ([0-9]+)"
+
+# Advanced detection with IP bypass techniques
+  - method: GET
+    path:
+      - "{{BaseURL}}/nginx_status"
+      - "{{BaseURL}}/status"
+      - "{{BaseURL}}/stub_status"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      X-Forwarded-For: "localhost"
+      X-Real-IP: "localhost"
+      X-Originating-IP: "localhost"
+      X-Remote-IP: "localhost"
+      X-Remote-Addr: "localhost"
+      X-ProxyUser-Ip: "localhost"
+      X-Original-URL: "/nginx_status"
+      X-Rewrite-URL: "/nginx_status"
+      Forwarded: "for=localhost"
+      CF-Connecting-IP: "127.0.0.1"
+      True-Client-IP: "127.0.0.1"
+      X-Cluster-Client-IP: "127.0.0.1"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "Active connections:"
+          - "server accepts handled requests"
+          - "Reading:"
+          - "Writing:"
+          - "Waiting:"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+# Check for alternative paths and case variations
+  - method: GET
+    path:
+      - "{{BaseURL}}/Status"
+      - "{{BaseURL}}/STATUS"
+      - "{{BaseURL}}/Nginx_Status"
+      - "{{BaseURL}}/NGINX_STATUS"
+      - "{{BaseURL}}/Stub_Status"
+      - "{{BaseURL}}/STUB_STATUS"
+      - "{{BaseURL}}/admin/nginx_status"
+      - "{{BaseURL}}/admin/status"
+      - "{{BaseURL}}/management/nginx_status"
+      - "{{BaseURL}}/monitoring/nginx_status"
+      - "{{BaseURL}}/stats/nginx"
+      - "{{BaseURL}}/health/nginx"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "Active connections:"
+          - "server accepts handled requests"
+          - "nginx status"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "403 Forbidden"
+          - "Access denied"
+          - "Not authorized"
+        negative: true
+
+# Check for Nginx Plus status (commercial version)
+  - method: GET
+    path:
+      - "{{BaseURL}}/status/nginx"
+      - "{{BaseURL}}/api/status"
+      - "{{BaseURL}}/api/nginx/status"
+      - "{{BaseURL}}/plus/status"
+      - "{{BaseURL}}/nginx-plus/status"
+      - "{{BaseURL}}/status.html"
+      - "{{BaseURL}}/dashboard.html"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      Accept: "application/json, text/html, */*"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "nginx_version"
+          - "nginx_build"
+          - "load_timestamp"
+          - "generation"
+          - "version"
+          - "nginx plus"
+          - "dashboard"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+# Check for custom monitoring endpoints
+  - method: GET
+    path:
+      - "{{BaseURL}}/metrics"
+      - "{{BaseURL}}/prometheus"
+      - "{{BaseURL}}/nginx/metrics"
+      - "{{BaseURL}}/monitoring"
+      - "{{BaseURL}}/health"
+      - "{{BaseURL}}/healthz"
+      - "{{BaseURL}}/ready"
+      - "{{BaseURL}}/alive"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "nginx_"
+          - "# HELP nginx"
+          - "# TYPE nginx"
+          - "nginx_http_requests_total"
+          - "nginx_connections_active"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: header
+        words:
+          - "text/plain"
+          - "application/json"
+        condition: or

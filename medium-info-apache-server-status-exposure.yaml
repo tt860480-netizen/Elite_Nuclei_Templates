@@ -1,0 +1,182 @@
+id: apache-server-status-exposure-elite
+
+info:
+  name: Apache Server Status Page Exposure - Elite Detection
+  author: redteam-elite
+  severity: medium
+  description: |
+    Detects exposed Apache server-status and server-info pages that reveal sensitive server information.
+    This elite template uses advanced detection techniques to identify various Apache status endpoints
+    and bypass common restrictions using red team tactics.
+  reference:
+    - https://httpd.apache.org/docs/2.4/mod/mod_status.html
+    - https://httpd.apache.org/docs/2.4/mod/mod_info.html
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N
+    cvss-score: 5.3
+    cwe-id: CWE-200
+  metadata:
+    verified: true
+    max-request: 15
+    shodan-query: "Apache server-status"
+  tags: apache,exposure,status,info-disclosure,misconfig
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/server-status"
+      - "{{BaseURL}}/server-status/"
+      - "{{BaseURL}}/server-status?auto"
+      - "{{BaseURL}}/server-status?refresh=5"
+      - "{{BaseURL}}/server-info"
+      - "{{BaseURL}}/server-info/"
+      - "{{BaseURL}}/apache-status"
+      - "{{BaseURL}}/apache-info"
+      - "{{BaseURL}}/status"
+      - "{{BaseURL}}/info"
+      - "{{BaseURL}}/httpd-status"
+      - "{{BaseURL}}/httpd-info"
+      - "{{BaseURL}}/mod_status"
+      - "{{BaseURL}}/mod_info"
+      - "{{BaseURL}}/whm-server-status"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      X-Forwarded-For: "127.0.0.1"
+      X-Real-IP: "127.0.0.1"
+      X-Originating-IP: "127.0.0.1"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "Apache Server Status"
+          - "Server Version:"
+          - "Server Built:"
+          - "Current Time:"
+          - "Restart Time:"
+          - "Parent Server Config"
+          - "Server Settings"
+          - "Module Name"
+          - "requests currently being processed"
+          - "idle workers"
+        condition: or
+
+      - type: word
+        part: body
+        words:
+          - "Server Information"
+          - "Module Magic Number"
+          - "Time Module was Built"
+          - "Command Line"
+          - "Server Root"
+          - "Config File"
+          - "Server Architecture"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: header
+        words:
+          - "text/html"
+          - "text/plain"
+        condition: or
+
+    extractors:
+      - type: regex
+        name: apache_version
+        part: body
+        group: 1
+        regex:
+          - 'Server Version: Apache/([0-9.]+)'
+          - 'Apache/([0-9.]+)'
+
+      - type: regex
+        name: server_info
+        part: body
+        group: 1
+        regex:
+          - 'Server Built: ([^\n\r]+)'
+          - 'Current Time: ([^\n\r]+)'
+          - 'Server Root: ([^\n\r]+)'
+
+      - type: regex
+        name: active_requests
+        part: body
+        group: 1
+        regex:
+          - '([0-9]+) requests currently being processed'
+          - '([0-9]+) idle workers'
+
+# Enhanced detection for bypassing IP restrictions
+  - method: GET
+    path:
+      - "{{BaseURL}}/server-status"
+      - "{{BaseURL}}/server-info"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      X-Forwarded-For: "localhost"
+      X-Real-IP: "localhost"
+      X-Originating-IP: "localhost"
+      X-Remote-IP: "localhost"
+      X-Remote-Addr: "localhost"
+      X-ProxyUser-Ip: "localhost"
+      X-Original-URL: "/server-status"
+      X-Rewrite-URL: "/server-status"
+      Forwarded: "for=localhost"
+      CF-Connecting-IP: "127.0.0.1"
+      True-Client-IP: "127.0.0.1"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "Apache Server Status"
+          - "Server Information"
+          - "requests currently being processed"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+# Check for alternative paths and case variations
+  - method: GET
+    path:
+      - "{{BaseURL}}/Server-Status"
+      - "{{BaseURL}}/SERVER-STATUS"
+      - "{{BaseURL}}/Server-Info"
+      - "{{BaseURL}}/SERVER-INFO"
+      - "{{BaseURL}}/admin/server-status"
+      - "{{BaseURL}}/admin/server-info"
+      - "{{BaseURL}}/management/server-status"
+      - "{{BaseURL}}/stats/server-status"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "Apache Server Status"
+          - "Server Information"
+          - "Module Name"
+          - "requests currently being processed"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "403 Forbidden"
+          - "Access denied"
+          - "Not authorized"
+        negative: true

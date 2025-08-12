@@ -1,0 +1,437 @@
+id: jmx-console-exposure-elite
+
+info:
+  name: JMX Console Exposure - Elite Detection
+  author: redteam-elite
+  severity: medium
+  description: |
+    Detects exposed JMX (Java Management Extensions) consoles that reveal sensitive application
+    and server management information. This elite template identifies various JMX interfaces
+    including JBoss JMX Console, WebLogic JMX, Tomcat JMX, and generic JMX endpoints.
+    Uses advanced red team techniques to bypass restrictions and detect management interfaces.
+  reference:
+    - https://docs.oracle.com/javase/tutorial/jmx/
+    - https://docs.jboss.org/jbossas/docs/Server_Configuration_Guide/4/html/JMX_Console-The_JMX_Console_web_application.html
+    - https://tomcat.apache.org/tomcat-9.0-doc/monitoring.html
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:L/A:L
+    cvss-score: 7.3
+    cwe-id: CWE-200
+  metadata:
+    verified: true
+    max-request: 30
+    shodan-query: "jmx console"
+  tags: jmx,console,exposure,java,jboss,weblogic,management,misconfig
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/jmx-console"
+      - "{{BaseURL}}/jmx-console/"
+      - "{{BaseURL}}/jmx-console/HtmlAdaptor"
+      - "{{BaseURL}}/jmx-console/index.jsp"
+      - "{{BaseURL}}/jmx-console/checkJNDI.jsp"
+      - "{{BaseURL}}/jmx-console/displayMBeans.jsp"
+      - "{{BaseURL}}/web-console"
+      - "{{BaseURL}}/web-console/"
+      - "{{BaseURL}}/web-console/Invoker"
+      - "{{BaseURL}}/invoker/JMXInvokerServlet"
+      - "{{BaseURL}}/console"
+      - "{{BaseURL}}/console/"
+      - "{{BaseURL}}/admin-console"
+      - "{{BaseURL}}/admin-console/"
+      - "{{BaseURL}}/management"
+      - "{{BaseURL}}/management/"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+      X-Forwarded-For: "127.0.0.1"
+      X-Real-IP: "127.0.0.1"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "JMX Agent View"
+          - "JMX Console"
+          - "JBoss JMX Management Console"
+          - "MBean View"
+          - "MBean Server"
+          - "ObjectName"
+          - "MBeans"
+          - "Domain View"
+          - "Server Information"
+          - "JMX MBean View"
+          - "Management Console"
+          - "JMX Agent"
+          - "javax.management"
+          - "java.lang:type="
+          - "JMImplementation:type="
+        condition: or
+
+      - type: word
+        part: body
+        words:
+          - "jboss"
+          - "weblogic"
+          - "websphere"
+          - "glassfish"
+          - "wildfly"
+          - "tomcat"
+          - "jetty"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: header
+        words:
+          - "text/html"
+        condition: or
+
+    extractors:
+      - type: regex
+        name: server_info
+        part: body
+        group: 1
+        regex:
+          - 'JBoss ([0-9.]+)'
+          - 'WebLogic Server ([0-9.]+)'
+          - 'GlassFish ([0-9.]+)'
+          - 'WildFly ([0-9.]+)'
+
+      - type: regex
+        name: jvm_info
+        part: body
+        group: 1
+        regex:
+          - 'Java Version: ([^<\n]+)'
+          - 'JVM Version: ([^<\n]+)'
+          - 'java.version=([^<\n&]+)'
+
+      - type: regex
+        name: mbean_domains
+        part: body
+        group: 1
+        regex:
+          - 'Domain: ([^<\n]+)'
+          - 'ObjectName: ([^<\n]+)'
+
+# Advanced detection with IP bypass techniques
+  - method: GET
+    path:
+      - "{{BaseURL}}/jmx-console"
+      - "{{BaseURL}}/jmx-console/"
+      - "{{BaseURL}}/web-console"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      X-Forwarded-For: "localhost"
+      X-Real-IP: "localhost"
+      X-Originating-IP: "localhost"
+      X-Remote-IP: "localhost"
+      X-Remote-Addr: "localhost"
+      X-ProxyUser-Ip: "localhost"
+      X-Original-URL: "/jmx-console"
+      X-Rewrite-URL: "/jmx-console"
+      Forwarded: "for=localhost"
+      CF-Connecting-IP: "127.0.0.1"
+      True-Client-IP: "127.0.0.1"
+      X-Cluster-Client-IP: "127.0.0.1"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "JMX Agent View"
+          - "JMX Console"
+          - "MBean View"
+          - "Management Console"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+# Check for specific JMX MBean operations
+  - method: GET
+    path:
+      - "{{BaseURL}}/jmx-console/HtmlAdaptor?action=displayMBeans"
+      - "{{BaseURL}}/jmx-console/HtmlAdaptor?action=inspectMBean&name=java.lang:type=Memory"
+      - "{{BaseURL}}/jmx-console/HtmlAdaptor?action=inspectMBean&name=java.lang:type=Runtime"
+      - "{{BaseURL}}/jmx-console/HtmlAdaptor?action=inspectMBean&name=java.lang:type=OperatingSystem"
+      - "{{BaseURL}}/jmx-console/HtmlAdaptor?action=inspectMBean&name=jboss.system:type=ServerInfo"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "MBean View"
+          - "MBean Info"
+          - "Attribute Name"
+          - "Attribute Value"
+          - "Operation"
+          - "Parameters"
+          - "Return Type"
+          - "Description"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+# Check for WebLogic JMX Console
+  - method: GET
+    path:
+      - "{{BaseURL}}/console"
+      - "{{BaseURL}}/console/"
+      - "{{BaseURL}}/console/login/LoginForm.jsp"
+      - "{{BaseURL}}/console/framework/skins/wlsconsole/images/login_WebLogic_branding.png"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "WebLogic Server Administration Console"
+          - "Oracle WebLogic Server"
+          - "WebLogic Console"
+          - "BEA WebLogic Server"
+          - "console/framework"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+# Check for JBoss/WildFly Management Console
+  - method: GET
+    path:
+      - "{{BaseURL}}/console"
+      - "{{BaseURL}}/console/"
+      - "{{BaseURL}}/console/index.html"
+      - "{{BaseURL}}/management"
+      - "{{BaseURL}}/management/"
+      - "{{BaseURL}}/management/console"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "JBoss Management Console"
+          - "WildFly Administration Console"
+          - "JBoss EAP"
+          - "Red Hat JBoss"
+          - "management-console"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+# Check for alternative JMX paths and case variations
+  - method: GET
+    path:
+      - "{{BaseURL}}/JMX-CONSOLE"
+      - "{{BaseURL}}/Jmx-Console"
+      - "{{BaseURL}}/JMX-Console"
+      - "{{BaseURL}}/admin/jmx-console"
+      - "{{BaseURL}}/admin/jmx-console/"
+      - "{{BaseURL}}/management/jmx-console"
+      - "{{BaseURL}}/jboss/jmx-console"
+      - "{{BaseURL}}/wildfly/jmx-console"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "JMX Agent View"
+          - "JMX Console"
+          - "MBean View"
+          - "Management Console"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "403 Forbidden"
+          - "Access denied"
+          - "Not authorized"
+        negative: true
+
+# Check for JMX RMI endpoints
+  - method: GET
+    path:
+      - "{{BaseURL}}/jmx/rmi"
+      - "{{BaseURL}}/rmi"
+      - "{{BaseURL}}/rmi-jmx"
+      - "{{BaseURL}}/jmxrmi"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "RMI"
+          - "javax.management.remote"
+          - "JMX"
+          - "MBean"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+# Check for Tomcat JMX endpoints
+  - method: GET
+    path:
+      - "{{BaseURL}}/manager/jmxproxy"
+      - "{{BaseURL}}/manager/jmxproxy/"
+      - "{{BaseURL}}/manager/jmxproxy/?qry=*:*"
+      - "{{BaseURL}}/jmxproxy"
+      - "{{BaseURL}}/jmxproxy/"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "Name: "
+          - "modelerType"
+          - "className"
+          - "Catalina:type="
+          - "java.lang:type="
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: header
+        words:
+          - "text/plain"
+
+# Check for GlassFish Admin Console
+  - method: GET
+    path:
+      - "{{BaseURL}}/admin"
+      - "{{BaseURL}}/admin/"
+      - "{{BaseURL}}/admin/index.jsf"
+      - "{{BaseURL}}/common/index.jsf"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "GlassFish Server"
+          - "GlassFish Administration Console"
+          - "Oracle GlassFish Server"
+          - "Sun GlassFish"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+# Check for JMX with default credentials
+  - method: GET
+    path:
+      - "{{BaseURL}}/jmx-console"
+      - "{{BaseURL}}/console"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      Authorization: "Basic YWRtaW46YWRtaW4="  # admin:admin
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "JMX Agent View"
+          - "JMX Console"
+          - "Management Console"
+          - "MBean View"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "401 Unauthorized"
+          - "403 Forbidden"
+        negative: true
+
+# Check for JMX monitoring and metrics endpoints
+  - method: GET
+    path:
+      - "{{BaseURL}}/jolokia"
+      - "{{BaseURL}}/jolokia/"
+      - "{{BaseURL}}/jolokia/version"
+      - "{{BaseURL}}/hawtio"
+      - "{{BaseURL}}/hawtio/"
+      - "{{BaseURL}}/hawtio/index.html"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      Accept: "application/json,text/html,*/*"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "jolokia"
+          - "Jolokia"
+          - "hawtio"
+          - "HawtIO"
+          - '"agent":'
+          - '"protocol":'
+          - '"config":'
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: header
+        words:
+          - "application/json"
+          - "text/html"
+        condition: or

@@ -1,0 +1,463 @@
+id: rabbitmq-management-exposure-elite
+
+info:
+  name: RabbitMQ Management Interface Exposure - Elite Detection
+  author: redteam-elite
+  severity: medium
+  description: |
+    Detects exposed RabbitMQ Management Plugin interfaces that reveal sensitive message broker
+    information including queues, exchanges, bindings, connections, channels, users, and
+    system metrics. This elite template uses advanced red team techniques to identify
+    management interfaces, bypass restrictions, and detect default credentials.
+  reference:
+    - https://www.rabbitmq.com/management.html
+    - https://www.rabbitmq.com/management-cli.html
+    - https://github.com/rabbitmq/rabbitmq-management
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:L/A:L
+    cvss-score: 7.3
+    cwe-id: CWE-200
+  metadata:
+    verified: true
+    max-request: 30
+    shodan-query: "rabbitmq management"
+  tags: rabbitmq,management,exposure,message-broker,amqp,misconfig
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/rabbitmq"
+      - "{{BaseURL}}/rabbitmq/"
+      - "{{BaseURL}}/rabbitmq/management"
+      - "{{BaseURL}}/rabbitmq/management/"
+      - "{{BaseURL}}/management"
+      - "{{BaseURL}}/management/"
+      - "{{BaseURL}}/mgmt"
+      - "{{BaseURL}}/mgmt/"
+      - "{{BaseURL}}/admin"
+      - "{{BaseURL}}/admin/"
+      - "{{BaseURL}}:15672"
+      - "{{BaseURL}}:15672/"
+      - "{{BaseURL}}:15672/api/overview"
+      - "{{BaseURL}}:15672/api/nodes"
+      - "{{BaseURL}}:15672/api/queues"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      Accept: "application/json,text/html,application/xhtml+xml,*/*"
+      X-Forwarded-For: "127.0.0.1"
+      X-Real-IP: "127.0.0.1"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "RabbitMQ Management"
+          - "RabbitMQ"
+          - "rabbitmq_version"
+          - "erlang_version"
+          - "management_version"
+          - "Overview"
+          - "Connections"
+          - "Channels"
+          - "Exchanges"
+          - "Queues"
+          - "Admin"
+          - "cluster_name"
+          - "node"
+          - "statistics_level"
+        condition: or
+
+      - type: word
+        part: body
+        words:
+          - '"rabbit_version":'
+          - '"erlang_version":'
+          - '"management_version":'
+          - '"message_stats":'
+          - '"queue_totals":'
+          - '"object_totals":'
+          - '"node":'
+          - '"listeners":'
+          - '"contexts":'
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: header
+        words:
+          - "application/json"
+          - "text/html"
+        condition: or
+
+    extractors:
+      - type: regex
+        name: rabbitmq_version
+        part: body
+        group: 1
+        regex:
+          - '"rabbitmq_version":"([0-9.]+)"'
+          - '"rabbit_version":"([0-9.]+)"'
+          - 'RabbitMQ ([0-9.]+)'
+
+      - type: regex
+        name: erlang_version
+        part: body
+        group: 1
+        regex:
+          - '"erlang_version":"([^"]+)"'
+
+      - type: regex
+        name: node_info
+        part: body
+        group: 1
+        regex:
+          - '"name":"([^"]+)"'
+          - '"cluster_name":"([^"]+)"'
+
+# Advanced detection with IP bypass techniques
+  - method: GET
+    path:
+      - "{{BaseURL}}/rabbitmq"
+      - "{{BaseURL}}/management"
+      - "{{BaseURL}}:15672"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      X-Forwarded-For: "localhost"
+      X-Real-IP: "localhost"
+      X-Originating-IP: "localhost"
+      X-Remote-IP: "localhost"
+      X-Remote-Addr: "localhost"
+      X-ProxyUser-Ip: "localhost"
+      X-Original-URL: "/rabbitmq"
+      X-Rewrite-URL: "/rabbitmq"
+      Forwarded: "for=localhost"
+      CF-Connecting-IP: "127.0.0.1"
+      True-Client-IP: "127.0.0.1"
+      X-Cluster-Client-IP: "127.0.0.1"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "RabbitMQ Management"
+          - "RabbitMQ"
+          - "rabbitmq_version"
+          - "Overview"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+# Check for RabbitMQ API endpoints
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/overview"
+      - "{{BaseURL}}/api/nodes"
+      - "{{BaseURL}}/api/connections"
+      - "{{BaseURL}}/api/channels"
+      - "{{BaseURL}}/api/exchanges"
+      - "{{BaseURL}}/api/queues"
+      - "{{BaseURL}}/api/users"
+      - "{{BaseURL}}/api/vhosts"
+      - "{{BaseURL}}/api/permissions"
+      - "{{BaseURL}}/api/bindings"
+      - "{{BaseURL}}/api/cluster-name"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      Accept: "application/json"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - '"rabbitmq_version":'
+          - '"erlang_version":'
+          - '"management_version":'
+          - '"message_stats":'
+          - '"queue_totals":'
+          - '"object_totals":'
+          - '"node":'
+          - '"name":'
+          - '"vhost":'
+          - '"durable":'
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: header
+        words:
+          - "application/json"
+
+# Check for RabbitMQ with default credentials
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/overview"
+      - "{{BaseURL}}/api/whoami"
+      - "{{BaseURL}}/rabbitmq/api/overview"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      Authorization: "Basic Z3Vlc3Q6Z3Vlc3Q="  # guest:guest
+      Accept: "application/json"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - '"rabbitmq_version":'
+          - '"name":"guest"'
+          - '"tags":['
+          - '"administrator"'
+          - '"management"'
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "401 Unauthorized"
+          - "403 Forbidden"
+        negative: true
+
+# Check for RabbitMQ with admin credentials
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/overview"
+      - "{{BaseURL}}/api/whoami"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      Authorization: "Basic YWRtaW46YWRtaW4="  # admin:admin
+      Accept: "application/json"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - '"rabbitmq_version":'
+          - '"name":"admin"'
+          - '"tags":['
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+# Check for RabbitMQ with rabbitmq credentials
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/overview"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      Authorization: "Basic cmFiYml0bXE6cmFiYml0bXE="  # rabbitmq:rabbitmq
+      Accept: "application/json"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - '"rabbitmq_version":'
+          - '"erlang_version":'
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+# Check for alternative RabbitMQ paths
+  - method: GET
+    path:
+      - "{{BaseURL}}/rabbit"
+      - "{{BaseURL}}/rabbit/"
+      - "{{BaseURL}}/mq"
+      - "{{BaseURL}}/mq/"
+      - "{{BaseURL}}/amqp"
+      - "{{BaseURL}}/amqp/"
+      - "{{BaseURL}}/queue"
+      - "{{BaseURL}}/queue/"
+      - "{{BaseURL}}/broker"
+      - "{{BaseURL}}/broker/"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "RabbitMQ Management"
+          - "RabbitMQ"
+          - "rabbitmq_version"
+          - "Overview"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "403 Forbidden"
+          - "Access denied"
+          - "Not authorized"
+        negative: true
+
+# Check for RabbitMQ management on different ports
+  - method: GET
+    path:
+      - "{{BaseURL}}:15672/api/overview"
+      - "{{BaseURL}}:15671/api/overview"
+      - "{{BaseURL}}:55672/api/overview"
+      - "{{BaseURL}}:25672/api/overview"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      Accept: "application/json"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - '"rabbitmq_version":'
+          - '"erlang_version":'
+          - '"management_version":'
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+# Check for RabbitMQ health and status endpoints
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/healthchecks/node"
+      - "{{BaseURL}}/api/aliveness-test/%2F"
+      - "{{BaseURL}}/api/cluster-name"
+      - "{{BaseURL}}/health"
+      - "{{BaseURL}}/status"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      Accept: "application/json"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - '"status":"ok"'
+          - '"name":'
+          - '"rabbit_version":'
+          - '"erlang_version":'
+          - '"aliveness":'
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+# Check for RabbitMQ configuration and definitions
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/definitions"
+      - "{{BaseURL}}/api/definitions/export"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      Authorization: "Basic Z3Vlc3Q6Z3Vlc3Q="
+      Accept: "application/json"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - '"rabbit_version":'
+          - '"users":'
+          - '"vhosts":'
+          - '"permissions":'
+          - '"exchanges":'
+          - '"queues":'
+          - '"bindings":'
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+# Check for RabbitMQ metrics and statistics
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/nodes/rabbit@localhost"
+      - "{{BaseURL}}/api/nodes/rabbit@rabbitmq"
+      - "{{BaseURL}}/metrics"
+      - "{{BaseURL}}/metrics/per-object"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      Accept: "application/json,text/plain"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - '"name":"rabbit@'
+          - '"type":"disc"'
+          - '"running":true'
+          - '"mem_used":'
+          - '"fd_used":'
+          - '"proc_used":'
+          - '"sockets_used":'
+          - 'rabbitmq_'
+          - '# HELP rabbitmq'
+          - '# TYPE rabbitmq'
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+# Check for case variations and different contexts
+  - method: GET
+    path:
+      - "{{BaseURL}}/RABBITMQ"
+      - "{{BaseURL}}/RabbitMQ"
+      - "{{BaseURL}}/MANAGEMENT"
+      - "{{BaseURL}}/Management"
+      - "{{BaseURL}}/admin/rabbitmq"
+      - "{{BaseURL}}/admin/management"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "RabbitMQ Management"
+          - "RabbitMQ"
+          - "rabbitmq_version"
+        condition: or
+
+      - type: status
+        status:
+          - 200

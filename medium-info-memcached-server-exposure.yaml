@@ -1,0 +1,468 @@
+id: memcached-server-exposure-elite
+
+info:
+  name: Memcached Server Exposure - Elite Detection
+  author: redteam-elite
+  severity: medium
+  description: |
+    Detects exposed Memcached servers that reveal sensitive cached data, statistics,
+    and configuration information. This elite template uses advanced red team techniques
+    to identify Memcached instances through various protocols and endpoints, including
+    HTTP interfaces, stats commands, and direct protocol communication.
+  reference:
+    - https://memcached.org/
+    - https://github.com/memcached/memcached/wiki/Commands
+    - https://lzone.de/cheat-sheet/memcached
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N
+    cvss-score: 5.3
+    cwe-id: CWE-200
+  metadata:
+    verified: true
+    max-request: 25
+    shodan-query: "memcached"
+  tags: memcached,cache,exposure,nosql,memory,misconfig
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/memcached"
+      - "{{BaseURL}}/memcached/"
+      - "{{BaseURL}}/memcache"
+      - "{{BaseURL}}/memcache/"
+      - "{{BaseURL}}/cache"
+      - "{{BaseURL}}/cache/"
+      - "{{BaseURL}}/mc"
+      - "{{BaseURL}}/mc/"
+      - "{{BaseURL}}/stats"
+      - "{{BaseURL}}/stats/"
+      - "{{BaseURL}}/status"
+      - "{{BaseURL}}/status/"
+      - "{{BaseURL}}/admin"
+      - "{{BaseURL}}/admin/"
+      - "{{BaseURL}}/monitor"
+      - "{{BaseURL}}/monitor/"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      Accept: "text/html,application/json,text/plain,*/*"
+      X-Forwarded-For: "127.0.0.1"
+      X-Real-IP: "127.0.0.1"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "memcached"
+          - "Memcached"
+          - "STAT version"
+          - "STAT pid"
+          - "STAT uptime"
+          - "STAT time"
+          - "STAT pointer_size"
+          - "STAT rusage_user"
+          - "STAT rusage_system"
+          - "STAT curr_connections"
+          - "STAT total_connections"
+          - "STAT connection_structures"
+          - "STAT cmd_get"
+          - "STAT cmd_set"
+          - "STAT get_hits"
+          - "STAT get_misses"
+          - "STAT bytes_read"
+          - "STAT bytes_written"
+        condition: or
+
+      - type: word
+        part: body
+        words:
+          - "Cache Statistics"
+          - "Memcache Stats"
+          - "Memory Cache"
+          - "cache_get"
+          - "cache_set"
+          - "cache_hit"
+          - "cache_miss"
+          - "evictions"
+          - "curr_items"
+          - "total_items"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: header
+        words:
+          - "text/html"
+          - "text/plain"
+          - "application/json"
+        condition: or
+
+    extractors:
+      - type: regex
+        name: memcached_version
+        part: body
+        group: 1
+        regex:
+          - 'STAT version ([0-9.]+)'
+          - 'memcached ([0-9.]+)'
+          - 'Memcached ([0-9.]+)'
+
+      - type: regex
+        name: server_stats
+        part: body
+        group: 1
+        regex:
+          - 'STAT pid ([0-9]+)'
+          - 'STAT uptime ([0-9]+)'
+          - 'STAT curr_connections ([0-9]+)'
+          - 'STAT total_connections ([0-9]+)'
+
+      - type: regex
+        name: cache_stats
+        part: body
+        group: 1
+        regex:
+          - 'STAT cmd_get ([0-9]+)'
+          - 'STAT cmd_set ([0-9]+)'
+          - 'STAT get_hits ([0-9]+)'
+          - 'STAT get_misses ([0-9]+)'
+
+# Advanced detection with IP bypass techniques
+  - method: GET
+    path:
+      - "{{BaseURL}}/memcached"
+      - "{{BaseURL}}/stats"
+      - "{{BaseURL}}/cache"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      X-Forwarded-For: "localhost"
+      X-Real-IP: "localhost"
+      X-Originating-IP: "localhost"
+      X-Remote-IP: "localhost"
+      X-Remote-Addr: "localhost"
+      X-ProxyUser-Ip: "localhost"
+      X-Original-URL: "/memcached"
+      X-Rewrite-URL: "/memcached"
+      Forwarded: "for=localhost"
+      CF-Connecting-IP: "127.0.0.1"
+      True-Client-IP: "127.0.0.1"
+      X-Cluster-Client-IP: "127.0.0.1"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "memcached"
+          - "Memcached"
+          - "STAT version"
+          - "Cache Statistics"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+# Check for Memcached web interfaces and monitoring tools
+  - method: GET
+    path:
+      - "{{BaseURL}}/phpmemcacheadmin"
+      - "{{BaseURL}}/phpmemcacheadmin/"
+      - "{{BaseURL}}/memcache-admin"
+      - "{{BaseURL}}/memcache-admin/"
+      - "{{BaseURL}}/memcached-admin"
+      - "{{BaseURL}}/memcached-admin/"
+      - "{{BaseURL}}/memadmin"
+      - "{{BaseURL}}/memadmin/"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "phpMemcacheAdmin"
+          - "Memcache Administration"
+          - "Memcached Admin"
+          - "Cache Admin"
+          - "Server Status"
+          - "Cache Statistics"
+          - "Memcache Stats"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "403 Forbidden"
+          - "Access denied"
+          - "Not authorized"
+        negative: true
+
+# Check for Memcached REST APIs and JSON endpoints
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/memcached"
+      - "{{BaseURL}}/api/memcached/stats"
+      - "{{BaseURL}}/api/cache"
+      - "{{BaseURL}}/api/cache/stats"
+      - "{{BaseURL}}/rest/memcached"
+      - "{{BaseURL}}/rest/cache"
+      - "{{BaseURL}}/v1/memcached"
+      - "{{BaseURL}}/v1/cache"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      Accept: "application/json"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - '"version":'
+          - '"pid":'
+          - '"uptime":'
+          - '"curr_connections":'
+          - '"total_connections":'
+          - '"cmd_get":'
+          - '"cmd_set":'
+          - '"get_hits":'
+          - '"get_misses":'
+          - '"bytes_read":'
+          - '"bytes_written":'
+          - '"memcached":'
+          - '"cache":'
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: header
+        words:
+          - "application/json"
+
+# Check for Memcached monitoring endpoints
+  - method: GET
+    path:
+      - "{{BaseURL}}/memcached/stats"
+      - "{{BaseURL}}/memcached/status"
+      - "{{BaseURL}}/memcached/info"
+      - "{{BaseURL}}/cache/stats"
+      - "{{BaseURL}}/cache/status"
+      - "{{BaseURL}}/cache/info"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      Accept: "text/plain,application/json,*/*"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "STAT version"
+          - "STAT pid"
+          - "STAT uptime"
+          - "STAT curr_connections"
+          - "memcached"
+          - "cache_get"
+          - "cache_set"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+# Check for alternative Memcached paths and case variations
+  - method: GET
+    path:
+      - "{{BaseURL}}/MEMCACHED"
+      - "{{BaseURL}}/Memcached"
+      - "{{BaseURL}}/MEMCACHE"
+      - "{{BaseURL}}/Memcache"
+      - "{{BaseURL}}/CACHE"
+      - "{{BaseURL}}/Cache"
+      - "{{BaseURL}}/admin/memcached"
+      - "{{BaseURL}}/admin/cache"
+      - "{{BaseURL}}/management/memcached"
+      - "{{BaseURL}}/management/cache"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "memcached"
+          - "Memcached"
+          - "STAT version"
+          - "Cache Statistics"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+# Check for Memcached on different ports via HTTP proxy
+  - method: GET
+    path:
+      - "{{BaseURL}}:11211"
+      - "{{BaseURL}}:11211/"
+      - "{{BaseURL}}:11212"
+      - "{{BaseURL}}:11212/"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "STAT version"
+          - "memcached"
+          - "Memcached"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+# Check for Memcached health and diagnostic endpoints
+  - method: GET
+    path:
+      - "{{BaseURL}}/health/memcached"
+      - "{{BaseURL}}/health/cache"
+      - "{{BaseURL}}/diagnostic/memcached"
+      - "{{BaseURL}}/diagnostic/cache"
+      - "{{BaseURL}}/ping/memcached"
+      - "{{BaseURL}}/ping/cache"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      Accept: "application/json,text/plain"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - '"status":"ok"'
+          - '"healthy":true'
+          - '"memcached":'
+          - '"cache":'
+          - "STAT version"
+          - "alive"
+          - "running"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+# Check for Memcached configuration and settings
+  - method: GET
+    path:
+      - "{{BaseURL}}/memcached/config"
+      - "{{BaseURL}}/memcached/settings"
+      - "{{BaseURL}}/cache/config"
+      - "{{BaseURL}}/cache/settings"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      Accept: "application/json,text/plain"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "STAT maxbytes"
+          - "STAT maxconns"
+          - "STAT threads"
+          - "STAT verbosity"
+          - "STAT hash_power_level"
+          - "STAT hash_bytes"
+          - "STAT hash_is_expanding"
+          - '"maxbytes":'
+          - '"maxconns":'
+          - '"threads":'
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+# Check for Memcached metrics in Prometheus format
+  - method: GET
+    path:
+      - "{{BaseURL}}/metrics/memcached"
+      - "{{BaseURL}}/prometheus/memcached"
+      - "{{BaseURL}}/metrics"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      Accept: "text/plain"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "# HELP memcached"
+          - "# TYPE memcached"
+          - "memcached_version"
+          - "memcached_uptime"
+          - "memcached_connections"
+          - "memcached_commands_total"
+          - "memcached_items_total"
+          - "memcached_bytes"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: header
+        words:
+          - "text/plain"
+
+# Check for Memcached through application frameworks
+  - method: GET
+    path:
+      - "{{BaseURL}}/debug/cache"
+      - "{{BaseURL}}/debug/memcached"
+      - "{{BaseURL}}/dev/cache"
+      - "{{BaseURL}}/dev/memcached"
+      - "{{BaseURL}}/test/cache"
+      - "{{BaseURL}}/test/memcached"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "memcached"
+          - "Memcached"
+          - "Cache Statistics"
+          - "cache_get"
+          - "cache_set"
+          - "STAT version"
+        condition: or
+
+      - type: status
+        status:
+          - 200

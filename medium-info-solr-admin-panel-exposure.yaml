@@ -1,0 +1,475 @@
+id: solr-admin-panel-exposure-elite
+
+info:
+  name: Apache Solr Admin Panel Exposure - Elite Detection
+  author: redteam-elite
+  severity: medium
+  description: |
+    Detects exposed Apache Solr admin interfaces that reveal sensitive search engine information
+    including core details, schema configuration, system information, and potentially sensitive
+    indexed data. This elite template uses advanced red team techniques to identify various
+    Solr admin endpoints, bypass restrictions, and detect different Solr versions.
+  reference:
+    - https://solr.apache.org/guide/solr/latest/deployment-guide/solr-admin-ui.html
+    - https://cwiki.apache.org/confluence/display/solr/Overview+of+the+Solr+Admin+UI
+    - https://solr.apache.org/guide/solr/latest/configuration-guide/configuring-solr-xml.html
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N
+    cvss-score: 5.3
+    cwe-id: CWE-200
+  metadata:
+    verified: true
+    max-request: 35
+    shodan-query: "apache solr"
+  tags: solr,admin,panel,exposure,search,lucene,misconfig
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/solr"
+      - "{{BaseURL}}/solr/"
+      - "{{BaseURL}}/solr/admin"
+      - "{{BaseURL}}/solr/admin/"
+      - "{{BaseURL}}/solr/admin/cores"
+      - "{{BaseURL}}/solr/admin/cores?action=STATUS"
+      - "{{BaseURL}}/solr/admin/info/system"
+      - "{{BaseURL}}/solr/admin/info/properties"
+      - "{{BaseURL}}/solr/admin/info/threads"
+      - "{{BaseURL}}/solr/admin/info/logging"
+      - "{{BaseURL}}/solr/admin/collections"
+      - "{{BaseURL}}/solr/admin/collections?action=LIST"
+      - "{{BaseURL}}/solr/admin/zookeeper"
+      - "{{BaseURL}}/solr/admin/metrics"
+      - "{{BaseURL}}/solr/admin/luke"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      Accept: "application/json,text/html,application/xhtml+xml,*/*"
+      X-Forwarded-For: "127.0.0.1"
+      X-Real-IP: "127.0.0.1"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "Apache Solr"
+          - "Solr Admin"
+          - "Welcome to Solr"
+          - "Solr Dashboard"
+          - "Core Admin"
+          - "Collection Admin"
+          - "Cloud"
+          - "Logging"
+          - "Core Selector"
+          - "solr-admin"
+          - "SolrCore"
+          - "lucene"
+          - "Lucene"
+        condition: or
+
+      - type: word
+        part: body
+        words:
+          - '"responseHeader":'
+          - '"status":0'
+          - '"QTime":'
+          - '"core":'
+          - '"schema":'
+          - '"index":'
+          - '"solr-spec-version":'
+          - '"solr-impl-version":'
+          - '"lucene-spec-version":'
+          - '"lucene-impl-version":'
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: header
+        words:
+          - "application/json"
+          - "text/html"
+        condition: or
+
+    extractors:
+      - type: regex
+        name: solr_version
+        part: body
+        group: 1
+        regex:
+          - '"solr-spec-version":"([0-9.]+)"'
+          - '"solr-impl-version":"([0-9.]+)"'
+          - 'Apache Solr ([0-9.]+)'
+
+      - type: regex
+        name: lucene_version
+        part: body
+        group: 1
+        regex:
+          - '"lucene-spec-version":"([0-9.]+)"'
+          - '"lucene-impl-version":"([0-9.]+)"'
+
+      - type: regex
+        name: cores_info
+        part: body
+        group: 1
+        regex:
+          - '"name":"([^"]+)"'
+          - '"instanceDir":"([^"]+)"'
+          - '"dataDir":"([^"]+)"'
+
+# Advanced detection with IP bypass techniques
+  - method: GET
+    path:
+      - "{{BaseURL}}/solr"
+      - "{{BaseURL}}/solr/admin"
+      - "{{BaseURL}}/solr/admin/cores"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      X-Forwarded-For: "localhost"
+      X-Real-IP: "localhost"
+      X-Originating-IP: "localhost"
+      X-Remote-IP: "localhost"
+      X-Remote-Addr: "localhost"
+      X-ProxyUser-Ip: "localhost"
+      X-Original-URL: "/solr"
+      X-Rewrite-URL: "/solr"
+      Forwarded: "for=localhost"
+      CF-Connecting-IP: "127.0.0.1"
+      True-Client-IP: "127.0.0.1"
+      X-Cluster-Client-IP: "127.0.0.1"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "Apache Solr"
+          - "Solr Admin"
+          - "Welcome to Solr"
+          - "Core Admin"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+# Check for specific Solr core endpoints
+  - method: GET
+    path:
+      - "{{BaseURL}}/solr/collection1/admin/ping"
+      - "{{BaseURL}}/solr/core1/admin/ping"
+      - "{{BaseURL}}/solr/gettingstarted/admin/ping"
+      - "{{BaseURL}}/solr/techproducts/admin/ping"
+      - "{{BaseURL}}/solr/films/admin/ping"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      Accept: "application/json"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - '"responseHeader":'
+          - '"status":0'
+          - '"QTime":'
+          - '"params":'
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: header
+        words:
+          - "application/json"
+
+# Check for Solr schema and config endpoints
+  - method: GET
+    path:
+      - "{{BaseURL}}/solr/admin/cores?action=STATUS&wt=json"
+      - "{{BaseURL}}/solr/admin/info/system?wt=json"
+      - "{{BaseURL}}/solr/admin/info/properties?wt=json"
+      - "{{BaseURL}}/solr/admin/collections?action=LIST&wt=json"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      Accept: "application/json"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - '"responseHeader":'
+          - '"status":0'
+          - '"QTime":'
+          - '"solr-spec-version":'
+          - '"lucene-spec-version":'
+          - '"jvm":'
+          - '"system":'
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: header
+        words:
+          - "application/json"
+
+# Check for alternative Solr paths
+  - method: GET
+    path:
+      - "{{BaseURL}}/apache-solr"
+      - "{{BaseURL}}/apache-solr/"
+      - "{{BaseURL}}/apache-solr/admin"
+      - "{{BaseURL}}/search"
+      - "{{BaseURL}}/search/"
+      - "{{BaseURL}}/search/admin"
+      - "{{BaseURL}}/lucene"
+      - "{{BaseURL}}/lucene/"
+      - "{{BaseURL}}/index"
+      - "{{BaseURL}}/index/"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "Apache Solr"
+          - "Solr Admin"
+          - "Welcome to Solr"
+          - "solr-admin"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "403 Forbidden"
+          - "Access denied"
+          - "Not authorized"
+        negative: true
+
+# Check for Solr query endpoints
+  - method: GET
+    path:
+      - "{{BaseURL}}/solr/select"
+      - "{{BaseURL}}/solr/select?q=*:*"
+      - "{{BaseURL}}/solr/select?q=*:*&wt=json"
+      - "{{BaseURL}}/solr/collection1/select?q=*:*"
+      - "{{BaseURL}}/solr/core1/select?q=*:*"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      Accept: "application/json"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - '"responseHeader":'
+          - '"status":0'
+          - '"QTime":'
+          - '"response":'
+          - '"numFound":'
+          - '"start":'
+          - '"docs":'
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+# Check for Solr configuration files exposure
+  - method: GET
+    path:
+      - "{{BaseURL}}/solr/admin/file"
+      - "{{BaseURL}}/solr/admin/file?file=solrconfig.xml"
+      - "{{BaseURL}}/solr/admin/file?file=schema.xml"
+      - "{{BaseURL}}/solr/admin/file?file=managed-schema"
+      - "{{BaseURL}}/solr/admin/file?contentType=text/xml;charset=utf-8&file=solrconfig.xml"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "<config>"
+          - "<solrconfig>"
+          - "<schema"
+          - "<requestHandler"
+          - "<searchComponent"
+          - "<field name="
+          - "<fieldType"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: header
+        words:
+          - "text/xml"
+          - "application/xml"
+        condition: or
+
+# Check for Solr metrics and monitoring
+  - method: GET
+    path:
+      - "{{BaseURL}}/solr/admin/metrics?wt=json"
+      - "{{BaseURL}}/solr/admin/metrics?group=core&wt=json"
+      - "{{BaseURL}}/solr/admin/metrics?group=jvm&wt=json"
+      - "{{BaseURL}}/solr/admin/metrics?group=node&wt=json"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      Accept: "application/json"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - '"metrics":'
+          - '"solr.core":'
+          - '"solr.node":'
+          - '"solr.jvm":'
+          - '"INDEX.size":'
+          - '"QUERY.requests":'
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+# Check for Solr Cloud and ZooKeeper endpoints
+  - method: GET
+    path:
+      - "{{BaseURL}}/solr/admin/zookeeper?path=/&wt=json"
+      - "{{BaseURL}}/solr/admin/zookeeper?path=/configs&wt=json"
+      - "{{BaseURL}}/solr/admin/zookeeper?path=/collections&wt=json"
+      - "{{BaseURL}}/solr/admin/collections?action=CLUSTERSTATUS&wt=json"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      Accept: "application/json"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - '"responseHeader":'
+          - '"status":0'
+          - '"tree":'
+          - '"cluster":'
+          - '"collections":'
+          - '"live_nodes":'
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+# Check for Solr logging and debug endpoints
+  - method: GET
+    path:
+      - "{{BaseURL}}/solr/admin/info/logging?wt=json"
+      - "{{BaseURL}}/solr/admin/info/threads?wt=json"
+      - "{{BaseURL}}/solr/admin/logging?wt=json"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      Accept: "application/json"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - '"loggers":'
+          - '"level":'
+          - '"name":'
+          - '"set":'
+          - '"watcher":'
+          - '"history":'
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+# Check for case variations and different contexts
+  - method: GET
+    path:
+      - "{{BaseURL}}/SOLR"
+      - "{{BaseURL}}/Solr"
+      - "{{BaseURL}}/SOLR/"
+      - "{{BaseURL}}/Solr/"
+      - "{{BaseURL}}/admin/solr"
+      - "{{BaseURL}}/admin/solr/"
+      - "{{BaseURL}}/app/solr"
+      - "{{BaseURL}}/app/solr/"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "Apache Solr"
+          - "Solr Admin"
+          - "Welcome to Solr"
+          - "solr-admin"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+# Check for Solr with authentication bypass attempts
+  - method: GET
+    path:
+      - "{{BaseURL}}/solr/admin/cores"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      Authorization: "Basic c29scjpzb2xy"  # solr:solr
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - '"responseHeader":'
+          - '"status":0'
+          - '"core":'
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "401 Unauthorized"
+          - "403 Forbidden"
+        negative: true

@@ -1,0 +1,299 @@
+id: php-info-page-exposure-elite
+
+info:
+  name: PHP Info Page Exposure - Elite Detection
+  author: redteam-elite
+  severity: medium
+  description: |
+    Detects exposed PHP info pages that reveal sensitive server configuration, environment variables,
+    loaded modules, and system information. This elite template uses advanced red team techniques
+    to identify various phpinfo() endpoints and bypass common restrictions.
+  reference:
+    - https://www.php.net/manual/en/function.phpinfo.php
+    - https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/02-Configuration_and_Deployment_Management_Testing/04-Test_File_Extensions_Handling_for_Sensitive_Information
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N
+    cvss-score: 5.3
+    cwe-id: CWE-200
+  metadata:
+    verified: true
+    max-request: 25
+    shodan-query: "phpinfo()"
+  tags: php,phpinfo,exposure,info-disclosure,misconfig
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/phpinfo.php"
+      - "{{BaseURL}}/phpinfo"
+      - "{{BaseURL}}/info.php"
+      - "{{BaseURL}}/info"
+      - "{{BaseURL}}/php.php"
+      - "{{BaseURL}}/test.php"
+      - "{{BaseURL}}/pi.php"
+      - "{{BaseURL}}/i.php"
+      - "{{BaseURL}}/php_info.php"
+      - "{{BaseURL}}/php-info.php"
+      - "{{BaseURL}}/infophp.php"
+      - "{{BaseURL}}/phpversion.php"
+      - "{{BaseURL}}/version.php"
+      - "{{BaseURL}}/configuration.php"
+      - "{{BaseURL}}/config.php"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+      X-Forwarded-For: "127.0.0.1"
+      X-Real-IP: "127.0.0.1"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "PHP Version"
+          - "phpinfo()"
+          - "PHP Configuration"
+          - "System"
+          - "Build Date"
+          - "Server API"
+          - "Virtual Directory Support"
+          - "Configuration File (php.ini) Path"
+          - "Loaded Configuration File"
+          - "PHP API"
+        condition: or
+
+      - type: word
+        part: body
+        words:
+          - "PHP Credits"
+          - "PHP Group"
+          - "Zend Engine"
+          - "extension_dir"
+          - "include_path"
+          - "open_basedir"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: header
+        words:
+          - "text/html"
+        condition: or
+
+    extractors:
+      - type: regex
+        name: php_version
+        part: body
+        group: 1
+        regex:
+          - 'PHP Version ([0-9.]+)'
+          - 'PHP/([0-9.]+)'
+
+      - type: regex
+        name: system_info
+        part: body
+        group: 1
+        regex:
+          - 'System</td><td class="v">([^<]+)'
+          - 'Build Date</td><td class="v">([^<]+)'
+          - 'Server API</td><td class="v">([^<]+)'
+
+      - type: regex
+        name: config_path
+        part: body
+        group: 1
+        regex:
+          - 'Configuration File \(php\.ini\) Path</td><td class="v">([^<]+)'
+          - 'Loaded Configuration File</td><td class="v">([^<]+)'
+
+# Advanced detection with IP bypass techniques
+  - method: GET
+    path:
+      - "{{BaseURL}}/phpinfo.php"
+      - "{{BaseURL}}/info.php"
+      - "{{BaseURL}}/test.php"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      X-Forwarded-For: "localhost"
+      X-Real-IP: "localhost"
+      X-Originating-IP: "localhost"
+      X-Remote-IP: "localhost"
+      X-Remote-Addr: "localhost"
+      X-ProxyUser-Ip: "localhost"
+      X-Original-URL: "/phpinfo.php"
+      X-Rewrite-URL: "/phpinfo.php"
+      Forwarded: "for=localhost"
+      CF-Connecting-IP: "127.0.0.1"
+      True-Client-IP: "127.0.0.1"
+      X-Cluster-Client-IP: "127.0.0.1"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "PHP Version"
+          - "phpinfo()"
+          - "PHP Configuration"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+# Check for alternative paths and directories
+  - method: GET
+    path:
+      - "{{BaseURL}}/admin/phpinfo.php"
+      - "{{BaseURL}}/admin/info.php"
+      - "{{BaseURL}}/test/phpinfo.php"
+      - "{{BaseURL}}/test/info.php"
+      - "{{BaseURL}}/dev/phpinfo.php"
+      - "{{BaseURL}}/dev/info.php"
+      - "{{BaseURL}}/debug/phpinfo.php"
+      - "{{BaseURL}}/debug/info.php"
+      - "{{BaseURL}}/tmp/phpinfo.php"
+      - "{{BaseURL}}/tmp/info.php"
+      - "{{BaseURL}}/backup/phpinfo.php"
+      - "{{BaseURL}}/old/phpinfo.php"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "PHP Version"
+          - "phpinfo()"
+          - "PHP Configuration"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "403 Forbidden"
+          - "Access denied"
+          - "Not authorized"
+        negative: true
+
+# Check for case variations and alternative extensions
+  - method: GET
+    path:
+      - "{{BaseURL}}/PHPINFO.PHP"
+      - "{{BaseURL}}/PhpInfo.php"
+      - "{{BaseURL}}/INFO.PHP"
+      - "{{BaseURL}}/Info.php"
+      - "{{BaseURL}}/phpinfo.html"
+      - "{{BaseURL}}/info.html"
+      - "{{BaseURL}}/phpinfo.txt"
+      - "{{BaseURL}}/info.txt"
+      - "{{BaseURL}}/phpinfo.asp"
+      - "{{BaseURL}}/phpinfo.aspx"
+      - "{{BaseURL}}/phpinfo.jsp"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "PHP Version"
+          - "phpinfo()"
+          - "PHP Configuration"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+# Check for common development and testing files
+  - method: GET
+    path:
+      - "{{BaseURL}}/check.php"
+      - "{{BaseURL}}/status.php"
+      - "{{BaseURL}}/health.php"
+      - "{{BaseURL}}/probe.php"
+      - "{{BaseURL}}/monitor.php"
+      - "{{BaseURL}}/diagnostic.php"
+      - "{{BaseURL}}/diagnostics.php"
+      - "{{BaseURL}}/system.php"
+      - "{{BaseURL}}/env.php"
+      - "{{BaseURL}}/environment.php"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "PHP Version"
+          - "phpinfo()"
+          - "PHP Configuration"
+          - "System"
+          - "Build Date"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+# Check for phpinfo with parameters
+  - method: GET
+    path:
+      - "{{BaseURL}}/phpinfo.php?info=1"
+      - "{{BaseURL}}/phpinfo.php?show=all"
+      - "{{BaseURL}}/phpinfo.php?debug=1"
+      - "{{BaseURL}}/info.php?info=1"
+      - "{{BaseURL}}/info.php?show=all"
+      - "{{BaseURL}}/test.php?phpinfo=1"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "PHP Version"
+          - "phpinfo()"
+          - "PHP Configuration"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+# Check for encoded or obfuscated phpinfo
+  - method: POST
+    path:
+      - "{{BaseURL}}/index.php"
+      - "{{BaseURL}}/test.php"
+      - "{{BaseURL}}/check.php"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      Content-Type: "application/x-www-form-urlencoded"
+
+    body: |
+      cmd=phpinfo
+      info=phpinfo()
+      debug=phpinfo
+      test=<?php phpinfo(); ?>
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "PHP Version"
+          - "phpinfo()"
+          - "PHP Configuration"
+        condition: or
+
+      - type: status
+        status:
+          - 200

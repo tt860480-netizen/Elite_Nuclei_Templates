@@ -1,0 +1,438 @@
+id: tomcat-manager-exposure-elite
+
+info:
+  name: Tomcat Manager Exposure - Elite Detection
+  author: redteam-elite
+  severity: medium
+  description: |
+    Detects exposed Apache Tomcat Manager applications that allow web application deployment,
+    undeployment, and server management. This elite template uses advanced red team techniques
+    to identify manager interfaces, bypass authentication, and detect default credentials.
+    Includes detection for Host Manager, Server Status, and various Tomcat versions.
+  reference:
+    - https://tomcat.apache.org/tomcat-9.0-doc/manager-howto.html
+    - https://tomcat.apache.org/tomcat-9.0-doc/host-manager-howto.html
+    - https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/02-Configuration_and_Deployment_Management_Testing/05-Test_Application_Platform_Configuration
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:L/A:L
+    cvss-score: 7.3
+    cwe-id: CWE-200
+  metadata:
+    verified: true
+    max-request: 40
+    shodan-query: "tomcat manager"
+  tags: tomcat,manager,exposure,misconfig,default-creds,java
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/manager"
+      - "{{BaseURL}}/manager/"
+      - "{{BaseURL}}/manager/html"
+      - "{{BaseURL}}/manager/html/"
+      - "{{BaseURL}}/manager/text"
+      - "{{BaseURL}}/manager/text/"
+      - "{{BaseURL}}/manager/jmxproxy"
+      - "{{BaseURL}}/manager/status"
+      - "{{BaseURL}}/manager/status/"
+      - "{{BaseURL}}/host-manager"
+      - "{{BaseURL}}/host-manager/"
+      - "{{BaseURL}}/host-manager/html"
+      - "{{BaseURL}}/host-manager/text"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+      X-Forwarded-For: "127.0.0.1"
+      X-Real-IP: "127.0.0.1"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "Tomcat Web Application Manager"
+          - "Tomcat Virtual Host Manager"
+          - "Apache Tomcat"
+          - "Manager App"
+          - "Host Manager"
+          - "Applications"
+          - "Deploy"
+          - "Undeploy"
+          - "Start"
+          - "Stop"
+          - "Reload"
+          - "Sessions"
+          - "Server Information"
+          - "OS Name"
+          - "OS Version"
+          - "JVM Version"
+        condition: or
+
+      - type: word
+        part: body
+        words:
+          - "tomcat-users.xml"
+          - "conf/tomcat-users.xml"
+          - "manager-gui"
+          - "manager-script"
+          - "manager-jmx"
+          - "admin-gui"
+          - "admin-script"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: header
+        words:
+          - "text/html"
+          - "text/plain"
+        condition: or
+
+    extractors:
+      - type: regex
+        name: tomcat_version
+        part: body
+        group: 1
+        regex:
+          - 'Apache Tomcat/([0-9.]+)'
+          - 'Tomcat ([0-9.]+)'
+
+      - type: regex
+        name: server_info
+        part: body
+        group: 1
+        regex:
+          - 'OS Name: ([^<\n]+)'
+          - 'OS Version: ([^<\n]+)'
+          - 'JVM Version: ([^<\n]+)'
+
+      - type: regex
+        name: applications
+        part: body
+        group: 1
+        regex:
+          - 'Path: ([^<\n]+)'
+          - 'Display Name: ([^<\n]+)'
+
+# Test with default credentials
+  - method: GET
+    path:
+      - "{{BaseURL}}/manager/html"
+      - "{{BaseURL}}/manager/text/list"
+      - "{{BaseURL}}/host-manager/html"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      Authorization: "Basic dG9tY2F0OnRvbWNhdA=="  # tomcat:tomcat
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "Tomcat Web Application Manager"
+          - "Tomcat Virtual Host Manager"
+          - "Applications"
+          - "Deploy"
+          - "Server Information"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "401 Unauthorized"
+          - "403 Forbidden"
+        negative: true
+
+# Test with more default credentials
+  - method: GET
+    path:
+      - "{{BaseURL}}/manager/html"
+      - "{{BaseURL}}/manager/text/list"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      Authorization: "Basic YWRtaW46YWRtaW4="  # admin:admin
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "Tomcat Web Application Manager"
+          - "Applications"
+          - "Deploy"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+# Test with additional default credentials
+  - method: GET
+    path:
+      - "{{BaseURL}}/manager/html"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      Authorization: "Basic dG9tY2F0OnM="  # tomcat:s
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "Tomcat Web Application Manager"
+          - "Applications"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+# Test with more common default credentials
+  - method: GET
+    path:
+      - "{{BaseURL}}/manager/html"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      Authorization: "Basic dG9tY2F0Om1hbmFnZXI="  # tomcat:manager
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "Tomcat Web Application Manager"
+          - "Applications"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+# Advanced detection with IP bypass techniques
+  - method: GET
+    path:
+      - "{{BaseURL}}/manager/html"
+      - "{{BaseURL}}/manager/text/list"
+      - "{{BaseURL}}/host-manager/html"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      X-Forwarded-For: "localhost"
+      X-Real-IP: "localhost"
+      X-Originating-IP: "localhost"
+      X-Remote-IP: "localhost"
+      X-Remote-Addr: "localhost"
+      X-ProxyUser-Ip: "localhost"
+      X-Original-URL: "/manager/html"
+      X-Rewrite-URL: "/manager/html"
+      Forwarded: "for=localhost"
+      CF-Connecting-IP: "127.0.0.1"
+      True-Client-IP: "127.0.0.1"
+      X-Cluster-Client-IP: "127.0.0.1"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "Tomcat Web Application Manager"
+          - "Tomcat Virtual Host Manager"
+          - "Applications"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+# Check for alternative manager paths
+  - method: GET
+    path:
+      - "{{BaseURL}}/admin"
+      - "{{BaseURL}}/admin/"
+      - "{{BaseURL}}/admin/manager"
+      - "{{BaseURL}}/tomcat/manager"
+      - "{{BaseURL}}/tomcat/manager/"
+      - "{{BaseURL}}/tomcat/manager/html"
+      - "{{BaseURL}}/webapps/manager"
+      - "{{BaseURL}}/webapps/manager/html"
+      - "{{BaseURL}}/Manager"
+      - "{{BaseURL}}/MANAGER"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "Tomcat Web Application Manager"
+          - "Apache Tomcat"
+          - "Manager App"
+          - "Applications"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "403 Forbidden"
+          - "Access denied"
+          - "Not authorized"
+        negative: true
+
+# Check for Tomcat status pages
+  - method: GET
+    path:
+      - "{{BaseURL}}/manager/status/all"
+      - "{{BaseURL}}/manager/serverinfo"
+      - "{{BaseURL}}/server-status"
+      - "{{BaseURL}}/server-info"
+      - "{{BaseURL}}/status"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "Server Information"
+          - "Tomcat Version"
+          - "JVM Version"
+          - "JVM Vendor"
+          - "OS Name"
+          - "OS Version"
+          - "OS Architecture"
+          - "Hostname"
+          - "IP Address"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+# Check for Tomcat examples and documentation
+  - method: GET
+    path:
+      - "{{BaseURL}}/examples"
+      - "{{BaseURL}}/examples/"
+      - "{{BaseURL}}/docs"
+      - "{{BaseURL}}/docs/"
+      - "{{BaseURL}}/tomcat-docs"
+      - "{{BaseURL}}/tomcat-docs/"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "Apache Tomcat Examples"
+          - "Tomcat Documentation"
+          - "JSP Examples"
+          - "Servlet Examples"
+          - "WebSocket Examples"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+# Check for JMX proxy and monitoring
+  - method: GET
+    path:
+      - "{{BaseURL}}/manager/jmxproxy"
+      - "{{BaseURL}}/manager/jmxproxy/"
+      - "{{BaseURL}}/manager/jmxproxy/?qry=*:*"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      Authorization: "Basic dG9tY2F0OnRvbWNhdA=="
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "Name: "
+          - "modelerType"
+          - "className"
+          - "Catalina:type="
+          - "java.lang:type="
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: header
+        words:
+          - "text/plain"
+
+# Check for text-based manager interface
+  - method: GET
+    path:
+      - "{{BaseURL}}/manager/text/list"
+      - "{{BaseURL}}/manager/text/serverinfo"
+      - "{{BaseURL}}/manager/text/sessions"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      Authorization: "Basic dG9tY2F0OnRvbWNhdA=="
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "OK - Listed applications"
+          - "OK - Server info"
+          - "OK - Session information"
+          - "/manager:running"
+          - "/host-manager:running"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: header
+        words:
+          - "text/plain"
+
+# Check for weak authentication bypass
+  - method: GET
+    path:
+      - "{{BaseURL}}/manager/html"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; SecurityScanner/1.0)"
+      Authorization: "Basic Og=="  # empty credentials
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "Tomcat Web Application Manager"
+          - "Applications"
+        condition: or
+
+      - type: status
+        status:
+          - 200
