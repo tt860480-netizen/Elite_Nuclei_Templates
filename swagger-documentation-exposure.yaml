@@ -1,0 +1,411 @@
+id: swagger-documentation-exposure
+
+info:
+  name: Swagger Documentation Exposure - Multiple Endpoint Discovery
+  author: elite-red-team
+  severity: medium
+  description: |
+    Advanced Swagger/OpenAPI documentation exposure detection with comprehensive endpoint discovery.
+    Tests multiple common paths and variations to discover exposed API documentation and schemas.
+  reference:
+    - https://owasp.org/www-project-api-security/
+    - https://swagger.io/specification/
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N
+    cvss-score: 5.3
+    cwe-id: CWE-200
+  metadata:
+    verified: true
+    max-request: 30
+  tags: swagger,openapi,documentation,exposure,information-disclosure
+
+http:
+  - method: GET
+    path:
+      # Standard Swagger UI paths
+      - "{{BaseURL}}/swagger"
+      - "{{BaseURL}}/swagger/"
+      - "{{BaseURL}}/swagger-ui"
+      - "{{BaseURL}}/swagger-ui/"
+      - "{{BaseURL}}/swagger-ui.html"
+      - "{{BaseURL}}/swagger/index.html"
+      - "{{BaseURL}}/swagger-ui/index.html"
+      
+      # API documentation paths
+      - "{{BaseURL}}/api-docs"
+      - "{{BaseURL}}/api-docs/"
+      - "{{BaseURL}}/apidocs"
+      - "{{BaseURL}}/apidocs/"
+      - "{{BaseURL}}/docs"
+      - "{{BaseURL}}/docs/"
+      - "{{BaseURL}}/documentation"
+      - "{{BaseURL}}/documentation/"
+      
+      # OpenAPI specification paths
+      - "{{BaseURL}}/openapi"
+      - "{{BaseURL}}/openapi/"
+      - "{{BaseURL}}/openapi.json"
+      - "{{BaseURL}}/openapi.yaml"
+      - "{{BaseURL}}/openapi.yml"
+      - "{{BaseURL}}/open-api"
+      - "{{BaseURL}}/open-api.json"
+      
+      # Swagger JSON/YAML files
+      - "{{BaseURL}}/swagger.json"
+      - "{{BaseURL}}/swagger.yaml"
+      - "{{BaseURL}}/swagger.yml"
+      - "{{BaseURL}}/swagger/swagger.json"
+      - "{{BaseURL}}/swagger/swagger.yaml"
+      
+      # API versioned documentation
+      - "{{BaseURL}}/api/swagger"
+      - "{{BaseURL}}/api/swagger-ui"
+      - "{{BaseURL}}/api/docs"
+      - "{{BaseURL}}/api/documentation"
+      - "{{BaseURL}}/api/openapi.json"
+      - "{{BaseURL}}/api/swagger.json"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; Swagger-Discovery-Scanner)"
+      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,application/json,*/*;q=0.8"
+      Accept-Language: "en-US,en;q=0.5"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        words:
+          - "swagger"
+          - "Swagger UI"
+          - "swagger-ui"
+          - "OpenAPI"
+          - "API Documentation"
+          - "Redoc"
+          - "swagger.json"
+          - "openapi.json"
+        condition: or
+        case-insensitive: true
+
+    extractors:
+      - type: regex
+        name: swagger_info
+        regex:
+          - '"title":\s*"([^"]*)"'
+          - '"version":\s*"([^"]*)"'
+          - '"description":\s*"([^"]*)"'
+        group: 1
+
+  - method: GET
+    path:
+      # Version-specific paths
+      - "{{BaseURL}}/v1/swagger"
+      - "{{BaseURL}}/v1/swagger-ui"
+      - "{{BaseURL}}/v1/docs"
+      - "{{BaseURL}}/v1/api-docs"
+      - "{{BaseURL}}/v1/openapi.json"
+      - "{{BaseURL}}/v1/swagger.json"
+      
+      - "{{BaseURL}}/v2/swagger"
+      - "{{BaseURL}}/v2/swagger-ui"
+      - "{{BaseURL}}/v2/docs"
+      - "{{BaseURL}}/v2/api-docs"
+      - "{{BaseURL}}/v2/openapi.json"
+      - "{{BaseURL}}/v2/swagger.json"
+      
+      - "{{BaseURL}}/v3/swagger"
+      - "{{BaseURL}}/v3/swagger-ui"
+      - "{{BaseURL}}/v3/docs"
+      - "{{BaseURL}}/v3/api-docs"
+      - "{{BaseURL}}/v3/openapi.json"
+      - "{{BaseURL}}/v3/swagger.json"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        words:
+          - "swagger"
+          - "OpenAPI"
+          - "paths"
+          - "definitions"
+          - "components"
+        condition: or
+        case-insensitive: true
+
+    extractors:
+      - type: json
+        name: api_endpoints
+        json:
+          - '.paths'
+          - '.definitions'
+          - '.components.schemas'
+
+  - method: GET
+    path:
+      # Admin and internal documentation
+      - "{{BaseURL}}/admin/swagger"
+      - "{{BaseURL}}/admin/swagger-ui"
+      - "{{BaseURL}}/admin/docs"
+      - "{{BaseURL}}/admin/api-docs"
+      
+      - "{{BaseURL}}/internal/swagger"
+      - "{{BaseURL}}/internal/swagger-ui"
+      - "{{BaseURL}}/internal/docs"
+      - "{{BaseURL}}/internal/api-docs"
+      
+      - "{{BaseURL}}/dev/swagger"
+      - "{{BaseURL}}/dev/swagger-ui"
+      - "{{BaseURL}}/dev/docs"
+      - "{{BaseURL}}/dev/api-docs"
+      
+      - "{{BaseURL}}/test/swagger"
+      - "{{BaseURL}}/test/swagger-ui"
+      - "{{BaseURL}}/test/docs"
+      - "{{BaseURL}}/test/api-docs"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        words:
+          - "swagger"
+          - "OpenAPI"
+          - "admin"
+          - "internal"
+          - "development"
+        condition: or
+        case-insensitive: true
+
+  - method: GET
+    path:
+      # Alternative documentation frameworks
+      - "{{BaseURL}}/redoc"
+      - "{{BaseURL}}/redoc/"
+      - "{{BaseURL}}/redoc.html"
+      - "{{BaseURL}}/api/redoc"
+      
+      - "{{BaseURL}}/rapidoc"
+      - "{{BaseURL}}/rapidoc/"
+      - "{{BaseURL}}/rapidoc.html"
+      
+      - "{{BaseURL}}/scalar"
+      - "{{BaseURL}}/scalar/"
+      - "{{BaseURL}}/scalar.html"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        words:
+          - "redoc"
+          - "ReDoc"
+          - "rapidoc"
+          - "RapiDoc"
+          - "scalar"
+          - "Scalar"
+        condition: or
+        case-insensitive: true
+
+  - method: GET
+    path:
+      # Framework-specific paths
+      - "{{BaseURL}}/api/swagger/ui"
+      - "{{BaseURL}}/api/swagger/index.html"
+      - "{{BaseURL}}/swagger/ui"
+      - "{{BaseURL}}/swagger/ui/index.html"
+      
+      # Spring Boot Actuator
+      - "{{BaseURL}}/actuator"
+      - "{{BaseURL}}/actuator/swagger-ui"
+      - "{{BaseURL}}/management/swagger-ui"
+      
+      # Django REST Framework
+      - "{{BaseURL}}/api/schema"
+      - "{{BaseURL}}/api/schema/"
+      - "{{BaseURL}}/schema"
+      - "{{BaseURL}}/schema/"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        words:
+          - "swagger"
+          - "OpenAPI"
+          - "actuator"
+          - "schema"
+          - "REST"
+        condition: or
+        case-insensitive: true
+
+  - method: GET
+    path:
+      # GraphQL documentation
+      - "{{BaseURL}}/graphql"
+      - "{{BaseURL}}/graphiql"
+      - "{{BaseURL}}/playground"
+      - "{{BaseURL}}/api/graphql"
+      - "{{BaseURL}}/api/graphiql"
+      - "{{BaseURL}}/api/playground"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        words:
+          - "graphql"
+          - "GraphQL"
+          - "graphiql"
+          - "GraphiQL"
+          - "playground"
+          - "Playground"
+        condition: or
+        case-insensitive: true
+
+    extractors:
+      - type: regex
+        name: graphql_schema
+        regex:
+          - '"schema":\s*{[^}]*}'
+          - '"query":\s*"([^"]*)"'
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/graphql"
+      - "{{BaseURL}}/api/graphql"
+
+    headers:
+      Content-Type: "application/json"
+
+    body: |
+      {
+        "query": "{ __schema { queryType { name } } }"
+      }
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        words:
+          - "__schema"
+          - "queryType"
+          - "data"
+        condition: or
+
+    extractors:
+      - type: json
+        name: graphql_introspection
+        json:
+          - '.data.__schema'
+
+  - method: GET
+    path:
+      # API specification files in common directories
+      - "{{BaseURL}}/static/swagger.json"
+      - "{{BaseURL}}/static/openapi.json"
+      - "{{BaseURL}}/assets/swagger.json"
+      - "{{BaseURL}}/assets/openapi.json"
+      - "{{BaseURL}}/public/swagger.json"
+      - "{{BaseURL}}/public/openapi.json"
+      
+      # Configuration files
+      - "{{BaseURL}}/.well-known/openapi"
+      - "{{BaseURL}}/.well-known/swagger"
+      - "{{BaseURL}}/meta/swagger.json"
+      - "{{BaseURL}}/meta/openapi.json"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        words:
+          - '"swagger":'
+          - '"openapi":'
+          - '"info":'
+          - '"paths":'
+        condition: or
+
+    extractors:
+      - type: json
+        name: api_spec
+        json:
+          - '.info.title'
+          - '.info.version'
+          - '.servers[].url'
+
+  - method: GET
+    path:
+      # Health and info endpoints that might expose API info
+      - "{{BaseURL}}/health"
+      - "{{BaseURL}}/info"
+      - "{{BaseURL}}/status"
+      - "{{BaseURL}}/api/health"
+      - "{{BaseURL}}/api/info"
+      - "{{BaseURL}}/api/status"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        words:
+          - "swagger"
+          - "openapi"
+          - "documentation"
+          - "api-docs"
+        condition: or
+        case-insensitive: true
+
+  - method: OPTIONS
+    path:
+      - "{{BaseURL}}/api"
+      - "{{BaseURL}}/api/"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 204
+
+      - type: word
+        words:
+          - "swagger"
+          - "openapi"
+          - "documentation"
+        condition: or
+        part: header
+
+    extractors:
+      - type: kval
+        kval:
+          - link
+          - x_api_documentation
+          - x_swagger_url
+        part: header

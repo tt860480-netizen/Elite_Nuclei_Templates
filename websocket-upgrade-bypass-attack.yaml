@@ -1,0 +1,505 @@
+id: websocket-upgrade-bypass-attack
+
+info:
+  name: WebSocket Upgrade Bypass Attack - Header Manipulation
+  author: elite-red-team
+  severity: high
+  description: |
+    Advanced WebSocket upgrade bypass detection using header manipulation techniques.
+    Tests various bypass methods including header injection, protocol confusion, and upgrade smuggling.
+  reference:
+    - https://owasp.org/www-community/attacks/WebSocket_security
+    - https://portswigger.net/web-security/websockets
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:L
+    cvss-score: 8.6
+    cwe-id: CWE-444
+  metadata:
+    verified: true
+    max-request: 20
+  tags: websocket,upgrade,bypass,header-manipulation,smuggling
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/ws"
+      - "{{BaseURL}}/websocket"
+      - "{{BaseURL}}/api/ws"
+
+    headers:
+      Connection: "upgrade"
+      Upgrade: "websocket"
+      Sec-WebSocket-Version: "13"
+      Sec-WebSocket-Key: "dGhlIHNhbXBsZSBub25jZQ=="
+      Host: "{{Hostname}}"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 101
+          - 400
+
+      - type: word
+        words:
+          - "Switching Protocols"
+          - "websocket"
+          - "Bad Request"
+        condition: or
+        part: header
+
+    extractors:
+      - type: kval
+        kval:
+          - sec_websocket_accept
+          - upgrade
+          - connection
+        part: header
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/ws"
+
+    headers:
+      Connection: "Upgrade, keep-alive"
+      Upgrade: "websocket"
+      Sec-WebSocket-Version: "13"
+      Sec-WebSocket-Key: "dGhlIHNhbXBsZSBub25jZQ=="
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 101
+          - 400
+
+      - type: word
+        words:
+          - "Switching Protocols"
+          - "keep-alive"
+        condition: or
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/ws"
+
+    headers:
+      Connection: "Upgrade"
+      Upgrade: "websocket, http/2.0"
+      Sec-WebSocket-Version: "13"
+      Sec-WebSocket-Key: "dGhlIHNhbXBsZSBub25jZQ=="
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 101
+          - 400
+
+      - type: word
+        words:
+          - "Switching Protocols"
+          - "http/2.0"
+        condition: or
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/ws"
+
+    headers:
+      Connection: "Upgrade"
+      Upgrade: "websocket"
+      Sec-WebSocket-Version: "13"
+      Sec-WebSocket-Key: "dGhlIHNhbXBsZSBub25jZQ=="
+      Transfer-Encoding: "chunked"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 101
+          - 400
+
+      - type: word
+        words:
+          - "Switching Protocols"
+          - "chunked"
+        condition: or
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/ws"
+
+    headers:
+      Connection: "Upgrade"
+      Upgrade: "websocket"
+      Sec-WebSocket-Version: "13"
+      Sec-WebSocket-Key: "dGhlIHNhbXBsZSBub25jZQ=="
+      Content-Length: "0"
+      Content-Length: "100"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 101
+          - 400
+
+      - type: word
+        words:
+          - "Switching Protocols"
+          - "Bad Request"
+        condition: or
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/ws"
+
+    headers:
+      Connection: "Upgrade"
+      Upgrade: "websocket"
+      Sec-WebSocket-Version: "13"
+      Sec-WebSocket-Key: "dGhlIHNhbXBsZSBub25jZQ=="
+      Content-Type: "application/json"
+
+    body: '{"upgrade": "websocket", "bypass": true}'
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 101
+          - 405
+
+      - type: word
+        words:
+          - "Switching Protocols"
+          - "Method Not Allowed"
+        condition: or
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/ws"
+
+    headers:
+      Connection: "Upgrade"
+      Upgrade: "websocket"
+      Sec-WebSocket-Version: "13"
+      Sec-WebSocket-Key: "dGhlIHNhbXBsZSBub25jZQ=="
+      X-Forwarded-Proto: "ws"
+      X-Forwarded-For: "127.0.0.1"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 101
+
+      - type: word
+        words:
+          - "Switching Protocols"
+        part: header
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/ws"
+
+    headers:
+      Connection: "Upgrade"
+      Upgrade: "websocket"
+      Sec-WebSocket-Version: "13"
+      Sec-WebSocket-Key: "dGhlIHNhbXBsZSBub25jZQ=="
+      Pragma: "no-cache"
+      Cache-Control: "no-cache"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 101
+
+      - type: word
+        words:
+          - "Switching Protocols"
+        part: header
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/ws"
+
+    headers:
+      Connection: "Upgrade"
+      Upgrade: "websocket"
+      Sec-WebSocket-Version: "13"
+      Sec-WebSocket-Key: "dGhlIHNhbXBsZSBub25jZQ=="
+      Origin: "https://{{Hostname}}"
+      Referer: "https://evil.com"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 101
+          - 403
+
+      - type: word
+        words:
+          - "Switching Protocols"
+          - "Forbidden"
+        condition: or
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/ws"
+
+    headers:
+      Connection: "Upgrade"
+      Upgrade: "websocket"
+      Sec-WebSocket-Version: "13"
+      Sec-WebSocket-Key: "dGhlIHNhbXBsZSBub25jZQ=="
+      User-Agent: "Mozilla/5.0 (compatible; WebSocket-Bypass-Scanner)"
+      Accept-Encoding: "gzip, deflate"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 101
+
+      - type: word
+        words:
+          - "Switching Protocols"
+        part: header
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/ws"
+
+    headers:
+      Connection: "Upgrade"
+      Upgrade: "websocket"
+      Sec-WebSocket-Version: "13"
+      Sec-WebSocket-Key: "dGhlIHNhbXBsZSBub25jZQ=="
+      Authorization: "Basic YWRtaW46cGFzc3dvcmQ="
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 101
+          - 401
+
+      - type: word
+        words:
+          - "Switching Protocols"
+          - "Unauthorized"
+        condition: or
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/ws"
+
+    headers:
+      Connection: "Upgrade"
+      Upgrade: "websocket"
+      Sec-WebSocket-Version: "13"
+      Sec-WebSocket-Key: "dGhlIHNhbXBsZSBub25jZQ=="
+      Cookie: "session=admin; token=bypass; auth=true"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 101
+
+      - type: word
+        words:
+          - "Switching Protocols"
+        part: header
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/ws"
+
+    headers:
+      Connection: "Upgrade"
+      Upgrade: "websocket"
+      Sec-WebSocket-Version: "13"
+      Sec-WebSocket-Key: "dGhlIHNhbXBsZSBub25jZQ=="
+      X-Real-IP: "127.0.0.1"
+      X-Forwarded-Host: "localhost"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 101
+
+      - type: word
+        words:
+          - "Switching Protocols"
+        part: header
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/ws"
+
+    headers:
+      Connection: "Upgrade"
+      Upgrade: "websocket"
+      Sec-WebSocket-Version: "13"
+      Sec-WebSocket-Key: "dGhlIHNhbXBsZSBub25jZQ=="
+      Sec-WebSocket-Extensions: "permessage-deflate; server_no_context_takeover; client_no_context_takeover"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 101
+
+      - type: word
+        words:
+          - "Switching Protocols"
+          - "permessage-deflate"
+        condition: or
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/ws"
+
+    headers:
+      Connection: "Upgrade"
+      Upgrade: "websocket"
+      Sec-WebSocket-Version: "13"
+      Sec-WebSocket-Key: "dGhlIHNhbXBsZSBub25jZQ=="
+      Sec-WebSocket-Protocol: "chat"
+      Sec-WebSocket-Protocol: "admin"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 101
+          - 400
+
+      - type: word
+        words:
+          - "Switching Protocols"
+          - "admin"
+          - "Bad Request"
+        condition: or
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/ws"
+
+    headers:
+      Connection: "Upgrade"
+      Upgrade: "websocket"
+      Sec-WebSocket-Version: "13"
+      Sec-WebSocket-Key: "dGhlIHNhbXBsZSBub25jZQ=="
+      Host: "{{Hostname}}"
+      Host: "evil.com"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 101
+          - 400
+
+      - type: word
+        words:
+          - "Switching Protocols"
+          - "Bad Request"
+        condition: or
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/ws"
+
+    headers:
+      Connection: "Upgrade"
+      Upgrade: "websocket"
+      Sec-WebSocket-Version: "13"
+      Sec-WebSocket-Key: "dGhlIHNhbXBsZSBub25jZQ=="
+      X-HTTP-Method-Override: "POST"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 101
+          - 405
+
+      - type: word
+        words:
+          - "Switching Protocols"
+          - "Method Not Allowed"
+        condition: or
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/ws"
+
+    headers:
+      Connection: "Upgrade"
+      Upgrade: "websocket"
+      Sec-WebSocket-Version: "13"
+      Sec-WebSocket-Key: "dGhlIHNhbXBsZSBub25jZQ=="
+      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 101
+
+      - type: word
+        words:
+          - "Switching Protocols"
+        part: header
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/ws"
+
+    headers:
+      Connection: "Upgrade"
+      Upgrade: "websocket"
+      Sec-WebSocket-Version: "13"
+      Sec-WebSocket-Key: "dGhlIHNhbXBsZSBub25jZQ=="
+      Via: "1.1 proxy.evil.com"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 101
+
+      - type: word
+        words:
+          - "Switching Protocols"
+        part: header
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/ws"
+
+    headers:
+      Connection: "Upgrade"
+      Upgrade: "websocket"
+      Sec-WebSocket-Version: "13"
+      Sec-WebSocket-Key: "dGhlIHNhbXBsZSBub25jZQ=="
+      X-Requested-With: "XMLHttpRequest"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 101
+
+      - type: word
+        words:
+          - "Switching Protocols"
+        part: header

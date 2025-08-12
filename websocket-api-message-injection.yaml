@@ -1,0 +1,417 @@
+id: websocket-api-message-injection
+
+info:
+  name: WebSocket API Message Injection - Protocol Upgrade Attacks
+  author: elite-red-team
+  severity: high
+  description: |
+    Advanced WebSocket message injection detection with protocol upgrade attacks.
+    Tests various WebSocket vulnerabilities including message injection, protocol confusion, and upgrade bypass.
+  reference:
+    - https://owasp.org/www-community/attacks/WebSocket_security
+    - https://portswigger.net/web-security/websockets
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:L
+    cvss-score: 8.6
+    cwe-id: CWE-20
+  metadata:
+    verified: true
+    max-request: 15
+  tags: websocket,injection,upgrade,protocol,bypass
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/ws"
+      - "{{BaseURL}}/websocket"
+      - "{{BaseURL}}/api/ws"
+      - "{{BaseURL}}/api/websocket"
+      - "{{BaseURL}}/socket"
+
+    headers:
+      Connection: "Upgrade"
+      Upgrade: "websocket"
+      Sec-WebSocket-Version: "13"
+      Sec-WebSocket-Key: "dGhlIHNhbXBsZSBub25jZQ=="
+      Sec-WebSocket-Protocol: "chat, superchat"
+      Origin: "https://evil.com"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 101
+          - 400
+          - 426
+
+      - type: word
+        words:
+          - "Switching Protocols"
+          - "websocket"
+          - "Upgrade Required"
+        condition: or
+        part: header
+
+    extractors:
+      - type: kval
+        kval:
+          - sec_websocket_accept
+          - sec_websocket_protocol
+          - upgrade
+        part: header
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/ws"
+      - "{{BaseURL}}/websocket"
+
+    headers:
+      Connection: "Upgrade"
+      Upgrade: "websocket"
+      Sec-WebSocket-Version: "8"
+      Sec-WebSocket-Key: "dGhlIHNhbXBsZSBub25jZQ=="
+      Sec-WebSocket-Protocol: "admin-protocol"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 101
+          - 400
+
+      - type: word
+        words:
+          - "Switching Protocols"
+          - "admin-protocol"
+        condition: or
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/ws"
+
+    headers:
+      Connection: "Upgrade"
+      Upgrade: "websocket"
+      Sec-WebSocket-Version: "13"
+      Sec-WebSocket-Key: "dGhlIHNhbXBsZSBub25jZQ=="
+      Sec-WebSocket-Extensions: "permessage-deflate; client_max_window_bits"
+      X-Forwarded-For: "127.0.0.1"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 101
+
+      - type: word
+        words:
+          - "Switching Protocols"
+          - "permessage-deflate"
+        condition: or
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/websocket/connect"
+      - "{{BaseURL}}/api/ws/connect"
+
+    headers:
+      Content-Type: "application/json"
+      Connection: "Upgrade"
+      Upgrade: "websocket"
+
+    body: |
+      {
+        "protocol": "websocket",
+        "version": 13,
+        "key": "dGhlIHNhbXBsZSBub25jZQ==",
+        "extensions": ["permessage-deflate"],
+        "subprotocols": ["chat", "admin"]
+      }
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 101
+
+      - type: word
+        words:
+          - "websocket"
+          - "connected"
+          - "admin"
+        condition: or
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/ws"
+
+    headers:
+      Connection: "Upgrade"
+      Upgrade: "websocket"
+      Sec-WebSocket-Version: "13"
+      Sec-WebSocket-Key: "dGhlIHNhbXBsZSBub25jZQ=="
+      Sec-WebSocket-Protocol: "echo"
+      Cookie: "session=admin; auth=bypass"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 101
+
+      - type: word
+        words:
+          - "Switching Protocols"
+          - "echo"
+        condition: or
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/ws"
+
+    headers:
+      Connection: "keep-alive, Upgrade"
+      Upgrade: "websocket"
+      Sec-WebSocket-Version: "13"
+      Sec-WebSocket-Key: "dGhlIHNhbXBsZSBub25jZQ=="
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 101
+          - 400
+
+      - type: word
+        words:
+          - "Switching Protocols"
+          - "Bad Request"
+        condition: or
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/ws"
+
+    headers:
+      Connection: "Upgrade"
+      Upgrade: "websocket"
+      Sec-WebSocket-Version: "13"
+      Sec-WebSocket-Key: "dGhlIHNhbXBsZSBub25jZQ=="
+      Host: "{{Hostname}}"
+      Origin: "null"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 101
+          - 403
+
+      - type: word
+        words:
+          - "Switching Protocols"
+          - "Forbidden"
+        condition: or
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/ws"
+
+    headers:
+      Connection: "Upgrade"
+      Upgrade: "websocket"
+      Sec-WebSocket-Version: "13"
+      Sec-WebSocket-Key: "../../../etc/passwd"
+      Sec-WebSocket-Protocol: "injection-test"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 101
+          - 400
+
+      - type: word
+        words:
+          - "Switching Protocols"
+          - "injection-test"
+          - "Bad Request"
+        condition: or
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/ws"
+
+    headers:
+      Connection: "Upgrade"
+      Upgrade: "websocket"
+      Sec-WebSocket-Version: "13"
+      Sec-WebSocket-Key: "dGhlIHNhbXBsZSBub25jZQ=="
+      Sec-WebSocket-Protocol: "chat\r\nX-Injected-Header: malicious"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 101
+          - 400
+
+      - type: word
+        words:
+          - "Switching Protocols"
+          - "malicious"
+          - "Bad Request"
+        condition: or
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/ws"
+
+    headers:
+      Connection: "Upgrade"
+      Upgrade: "websocket"
+      Sec-WebSocket-Version: "999"
+      Sec-WebSocket-Key: "dGhlIHNhbXBsZSBub25jZQ=="
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 400
+          - 426
+
+      - type: word
+        words:
+          - "Upgrade Required"
+          - "Bad Request"
+          - "Unsupported version"
+        condition: or
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/ws"
+
+    headers:
+      Connection: "Upgrade"
+      Upgrade: "websocket"
+      Sec-WebSocket-Version: "13"
+      Sec-WebSocket-Key: "dGhlIHNhbXBsZSBub25jZQ=="
+      Authorization: "Bearer admin-token"
+      X-API-Key: "admin-key-123"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 101
+          - 401
+
+      - type: word
+        words:
+          - "Switching Protocols"
+          - "Unauthorized"
+        condition: or
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/ws"
+
+    headers:
+      Connection: "Upgrade"
+      Upgrade: "websocket"
+      Sec-WebSocket-Version: "13"
+      Sec-WebSocket-Key: "dGhlIHNhbXBsZSBub25jZQ=="
+      Sec-WebSocket-Extensions: "x-webkit-deflate-frame"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 101
+          - 400
+
+      - type: word
+        words:
+          - "Switching Protocols"
+          - "x-webkit-deflate-frame"
+        condition: or
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/ws"
+
+    headers:
+      Connection: "Upgrade"
+      Upgrade: "websocket"
+      Sec-WebSocket-Version: "13"
+      Sec-WebSocket-Key: "dGhlIHNhbXBsZSBub25jZQ=="
+      Sec-WebSocket-Protocol: "binary"
+      Content-Type: "application/octet-stream"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 101
+
+      - type: word
+        words:
+          - "Switching Protocols"
+          - "binary"
+        condition: or
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/ws"
+
+    headers:
+      Connection: "Upgrade"
+      Upgrade: "websocket"
+      Sec-WebSocket-Version: "13"
+      Sec-WebSocket-Key: "dGhlIHNhbXBsZSBub25jZQ=="
+      X-Forwarded-Proto: "wss"
+      X-Forwarded-Port: "443"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 101
+
+      - type: word
+        words:
+          - "Switching Protocols"
+        part: header
+
+  - method: OPTIONS
+    path:
+      - "{{BaseURL}}/ws"
+      - "{{BaseURL}}/websocket"
+
+    headers:
+      Access-Control-Request-Method: "GET"
+      Access-Control-Request-Headers: "upgrade, connection, sec-websocket-key, sec-websocket-version"
+      Origin: "https://evil.com"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 204
+
+      - type: word
+        words:
+          - "Access-Control-Allow-Origin"
+          - "Access-Control-Allow-Methods"
+        condition: or
+        part: header
+
+    extractors:
+      - type: kval
+        kval:
+          - access_control_allow_origin
+          - access_control_allow_methods
+          - access_control_allow_headers
+        part: header

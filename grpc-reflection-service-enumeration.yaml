@@ -1,0 +1,476 @@
+id: grpc-reflection-service-enumeration
+
+info:
+  name: gRPC Reflection Service Enumeration - Service Discovery
+  author: elite-red-team
+  severity: medium
+  description: |
+    Advanced gRPC reflection service enumeration for discovering exposed services and methods.
+    Tests various gRPC endpoints and reflection APIs to enumerate available services.
+  reference:
+    - https://github.com/grpc/grpc/blob/master/doc/server-reflection.md
+    - https://grpc.io/docs/guides/reflection/
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N
+    cvss-score: 5.3
+    cwe-id: CWE-200
+  metadata:
+    verified: true
+    max-request: 15
+  tags: grpc,reflection,enumeration,service-discovery,protobuf
+
+http:
+  - method: POST
+    path:
+      - "{{BaseURL}}/grpc.reflection.v1alpha.ServerReflection/ServerReflectionInfo"
+      - "{{BaseURL}}/grpc.reflection.v1.ServerReflection/ServerReflectionInfo"
+      - "{{BaseURL}}/api/grpc.reflection.v1alpha.ServerReflection/ServerReflectionInfo"
+      - "{{BaseURL}}/api/grpc.reflection.v1.ServerReflection/ServerReflectionInfo"
+
+    headers:
+      Content-Type: "application/grpc"
+      Accept: "application/grpc"
+      User-Agent: "grpc-go/1.0.0"
+      TE: "trailers"
+
+    body: |
+      {
+        "list_services": ""
+      }
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 400
+          - 405
+
+      - type: word
+        words:
+          - "grpc"
+          - "reflection"
+          - "service"
+          - "method"
+          - "protobuf"
+        condition: or
+        case-insensitive: true
+
+    extractors:
+      - type: regex
+        name: grpc_services
+        regex:
+          - '"service":\s*"([^"]*)"'
+          - '"name":\s*"([^"]*)"'
+        group: 1
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/grpc.reflection.v1alpha.ServerReflection/ServerReflectionInfo"
+
+    headers:
+      Content-Type: "application/grpc+proto"
+      Accept: "application/grpc+proto"
+      Grpc-Encoding: "identity"
+
+    body: |
+      {
+        "file_by_filename": "reflection.proto"
+      }
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        words:
+          - "file_descriptor_response"
+          - "proto"
+          - "descriptor"
+        condition: or
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/grpc"
+      - "{{BaseURL}}/api/grpc"
+      - "{{BaseURL}}/grpc/health"
+      - "{{BaseURL}}/api/grpc/health"
+
+    headers:
+      Accept: "application/grpc, application/json"
+      User-Agent: "grpc-health-probe"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 405
+
+      - type: word
+        words:
+          - "grpc"
+          - "health"
+          - "serving"
+          - "not_serving"
+        condition: or
+        case-insensitive: true
+
+    extractors:
+      - type: json
+        name: grpc_health
+        json:
+          - '.status'
+          - '.service'
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/grpc.health.v1.Health/Check"
+      - "{{BaseURL}}/api/grpc.health.v1.Health/Check"
+
+    headers:
+      Content-Type: "application/grpc+json"
+      Accept: "application/grpc+json"
+
+    body: |
+      {
+        "service": ""
+      }
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        words:
+          - "SERVING"
+          - "NOT_SERVING"
+          - "UNKNOWN"
+        condition: or
+
+    extractors:
+      - type: json
+        name: health_status
+        json:
+          - '.status'
+
+  - method: OPTIONS
+    path:
+      - "{{BaseURL}}/grpc"
+      - "{{BaseURL}}/api/grpc"
+
+    headers:
+      Access-Control-Request-Method: "POST"
+      Access-Control-Request-Headers: "content-type, grpc-encoding"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 204
+
+      - type: word
+        words:
+          - "grpc"
+          - "Access-Control-Allow-Methods"
+        condition: or
+        part: header
+
+    extractors:
+      - type: kval
+        kval:
+          - access_control_allow_methods
+          - access_control_allow_headers
+        part: header
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/grpc.reflection.v1alpha.ServerReflection/ServerReflectionInfo"
+
+    headers:
+      Content-Type: "application/grpc+json"
+      Accept: "application/grpc+json"
+
+    body: |
+      {
+        "file_containing_symbol": "grpc.health.v1.Health"
+      }
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        words:
+          - "file_descriptor_response"
+          - "Health"
+          - "Check"
+        condition: or
+
+  - method: GET
+    path:
+      - "{{BaseURL}}:50051"
+      - "{{BaseURL}}:9090"
+      - "{{BaseURL}}:8080/grpc"
+
+    headers:
+      User-Agent: "grpc-curl/1.0"
+      Accept: "application/grpc"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 400
+          - 405
+
+      - type: word
+        words:
+          - "grpc"
+          - "http2"
+          - "protocol"
+        condition: or
+        case-insensitive: true
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/grpc-web"
+      - "{{BaseURL}}/api/grpc-web"
+
+    headers:
+      Content-Type: "application/grpc-web+proto"
+      Accept: "application/grpc-web+proto"
+      X-Grpc-Web: "1"
+
+    body: |
+      {
+        "list_services": ""
+      }
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        words:
+          - "grpc-web"
+          - "service"
+          - "method"
+        condition: or
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/grpc.reflection.v1alpha.ServerReflection/ServerReflectionInfo"
+
+    headers:
+      Content-Type: "application/grpc+json"
+
+    body: |
+      {
+        "file_containing_extension": {
+          "containing_type": "google.protobuf.MessageOptions",
+          "extension_number": 50001
+        }
+      }
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        words:
+          - "file_descriptor_response"
+          - "extension"
+        condition: or
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/grpc.reflection.v1alpha.ServerReflection/ServerReflectionInfo"
+
+    headers:
+      Content-Type: "application/grpc+json"
+
+    body: |
+      {
+        "all_extension_numbers_of_type": "google.protobuf.FileOptions"
+      }
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        words:
+          - "all_extension_numbers_response"
+          - "extension_number"
+        condition: or
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/debug/grpc"
+      - "{{BaseURL}}/api/debug/grpc"
+      - "{{BaseURL}}/admin/grpc"
+      - "{{BaseURL}}/api/admin/grpc"
+
+    headers:
+      Accept: "text/html, application/json"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        words:
+          - "grpc"
+          - "services"
+          - "methods"
+          - "reflection"
+          - "debug"
+        condition: or
+        case-insensitive: true
+
+    extractors:
+      - type: regex
+        name: debug_services
+        regex:
+          - 'service["\s]*[:=]["\s]*([^",\s}]+)'
+          - 'method["\s]*[:=]["\s]*([^",\s}]+)'
+        group: 1
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/envoy.service.discovery.v3.AggregatedDiscoveryService/StreamAggregatedResources"
+      - "{{BaseURL}}/api/envoy.service.discovery.v3.AggregatedDiscoveryService/StreamAggregatedResources"
+
+    headers:
+      Content-Type: "application/grpc+json"
+
+    body: |
+      {
+        "node": {
+          "id": "test-node"
+        },
+        "type_url": "type.googleapis.com/envoy.config.listener.v3.Listener"
+      }
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 400
+
+      - type: word
+        words:
+          - "envoy"
+          - "discovery"
+          - "listener"
+          - "cluster"
+        condition: or
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/grpc.channelz.v1.Channelz/GetTopChannels"
+      - "{{BaseURL}}/api/grpc.channelz.v1.Channelz/GetTopChannels"
+
+    headers:
+      Content-Type: "application/grpc+json"
+
+    body: |
+      {
+        "start_channel_id": 0,
+        "max_results": 100
+      }
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        words:
+          - "channel"
+          - "channelz"
+          - "target"
+          - "state"
+        condition: or
+
+    extractors:
+      - type: json
+        name: channelz_info
+        json:
+          - '.channel[].ref.name'
+          - '.channel[].data.target'
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/metrics"
+      - "{{BaseURL}}/api/metrics"
+
+    headers:
+      Accept: "text/plain, application/json"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        words:
+          - "grpc_"
+          - "grpc_server_"
+          - "grpc_client_"
+          - "rpc_"
+        condition: or
+
+    extractors:
+      - type: regex
+        name: grpc_metrics
+        regex:
+          - 'grpc_server_([a-zA-Z_]+)'
+          - 'grpc_client_([a-zA-Z_]+)'
+        group: 1
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/grpc.testing.TestService/EmptyCall"
+      - "{{BaseURL}}/api/grpc.testing.TestService/EmptyCall"
+
+    headers:
+      Content-Type: "application/grpc+json"
+
+    body: "{}"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 404
+          - 405
+
+      - type: word
+        words:
+          - "testing"
+          - "TestService"
+          - "EmptyCall"
+          - "unimplemented"
+        condition: or

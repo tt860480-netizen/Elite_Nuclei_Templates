@@ -1,0 +1,603 @@
+id: api-error-message-information-disclosure
+
+info:
+  name: API Error Message Information Disclosure - Error Triggering Payloads
+  author: elite-red-team
+  severity: medium
+  description: |
+    Advanced API error message information disclosure detection using error triggering payloads.
+    Tests various methods to trigger verbose error messages that reveal sensitive information.
+  reference:
+    - https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/08-Testing_for_Error_Handling/01-Testing_For_Improper_Error_Handling
+    - https://owasp.org/www-project-api-security/
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N
+    cvss-score: 5.3
+    cwe-id: CWE-209
+  metadata:
+    verified: true
+    max-request: 25
+  tags: api,error,information-disclosure,debug,stack-trace
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/users/999999999"
+      - "{{BaseURL}}/api/v1/users/999999999"
+      - "{{BaseURL}}/api/products/999999999"
+      - "{{BaseURL}}/api/v1/products/999999999"
+
+    headers:
+      Accept: "application/json"
+      User-Agent: "Mozilla/5.0 (compatible; Error-Disclosure-Scanner)"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 404
+          - 500
+
+      - type: word
+        words:
+          - "stack trace"
+          - "stacktrace"
+          - "exception"
+          - "SQLException"
+          - "database"
+          - "mysql"
+          - "postgresql"
+          - "mongodb"
+          - "redis"
+          - "file path"
+          - "directory"
+          - "/var/www"
+          - "/home/"
+          - "C:\\"
+          - "DEBUG"
+          - "TRACE"
+        condition: or
+        case-insensitive: true
+
+    extractors:
+      - type: regex
+        name: error_details
+        regex:
+          - 'Exception:\s*([^\n\r]+)'
+          - 'Error:\s*([^\n\r]+)'
+          - 'at\s+([^\n\r]+\.java:[0-9]+)'
+          - 'File\s+"([^"]+)"'
+          - 'in\s+([^\s]+\.py)'
+        group: 1
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/users"
+      - "{{BaseURL}}/api/v1/users"
+      - "{{BaseURL}}/api/login"
+      - "{{BaseURL}}/api/v1/login"
+
+    headers:
+      Content-Type: "application/json"
+      Accept: "application/json"
+
+    body: |
+      {
+        "username": "admin'\"",
+        "password": "test'\"",
+        "email": "invalid-email",
+        "age": "not-a-number",
+        "date": "invalid-date-format"
+      }
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 400
+          - 422
+          - 500
+
+      - type: word
+        words:
+          - "SQLException"
+          - "syntax error"
+          - "mysql"
+          - "postgresql"
+          - "ORA-"
+          - "Microsoft SQL"
+          - "SQLite"
+          - "MongoDB"
+          - "validation error"
+          - "constraint"
+          - "foreign key"
+          - "primary key"
+          - "duplicate entry"
+        condition: or
+        case-insensitive: true
+
+    extractors:
+      - type: regex
+        name: sql_errors
+        regex:
+          - 'SQL.*?error.*?:([^\n\r]+)'
+          - 'ORA-[0-9]+:\s*([^\n\r]+)'
+          - 'ERROR\s+[0-9]+\s+\([0-9A-Z]+\):\s*([^\n\r]+)'
+        group: 1
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/users"
+      - "{{BaseURL}}/api/v1/users"
+
+    headers:
+      Accept: "application/xml"
+      Content-Type: "application/xml"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 406
+          - 415
+          - 500
+
+      - type: word
+        words:
+          - "not acceptable"
+          - "unsupported media type"
+          - "XML"
+          - "parser"
+          - "serialization"
+          - "content type"
+          - "media type"
+        condition: or
+        case-insensitive: true
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/users"
+      - "{{BaseURL}}/api/v1/users"
+
+    headers:
+      Content-Type: "application/json"
+
+    body: |
+      {
+        "username": "test",
+        "password": "test",
+        "extra_field_that_should_not_exist": "value",
+        "another_invalid_field": 12345,
+        "nested": {
+          "invalid_nested_field": "test"
+        }
+      }
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 400
+          - 422
+
+      - type: word
+        words:
+          - "unknown field"
+          - "unexpected field"
+          - "invalid field"
+          - "schema"
+          - "validation"
+          - "property"
+          - "attribute"
+        condition: or
+        case-insensitive: true
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/users"
+
+    headers:
+      Content-Type: "application/json"
+
+    body: |
+      {
+        "username": null,
+        "password": "",
+        "email": null,
+        "required_field": null
+      }
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 400
+          - 422
+
+      - type: word
+        words:
+          - "required"
+          - "null"
+          - "empty"
+          - "missing"
+          - "field"
+          - "parameter"
+        condition: or
+        case-insensitive: true
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/users?limit=abc"
+      - "{{BaseURL}}/api/users?offset=xyz"
+      - "{{BaseURL}}/api/users?page=invalid"
+      - "{{BaseURL}}/api/users?sort=nonexistent_field"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 400
+          - 422
+
+      - type: word
+        words:
+          - "invalid"
+          - "parameter"
+          - "query"
+          - "limit"
+          - "offset"
+          - "page"
+          - "sort"
+          - "field"
+          - "column"
+        condition: or
+        case-insensitive: true
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/users"
+
+    headers:
+      Content-Type: "application/json"
+
+    body: |
+      {
+        "username": "a",
+        "password": "b",
+        "email": "c"
+      }
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 400
+          - 422
+
+      - type: word
+        words:
+          - "minimum length"
+          - "too short"
+          - "length"
+          - "characters"
+          - "validation"
+          - "constraint"
+        condition: or
+        case-insensitive: true
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/upload"
+      - "{{BaseURL}}/api/v1/upload"
+      - "{{BaseURL}}/api/files"
+
+    headers:
+      Content-Type: "multipart/form-data"
+
+    body: |
+      ------WebKitFormBoundary
+      Content-Disposition: form-data; name="file"; filename="../../../etc/passwd"
+      Content-Type: text/plain
+      
+      test content
+      ------WebKitFormBoundary--
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 400
+          - 403
+          - 500
+
+      - type: word
+        words:
+          - "path"
+          - "directory"
+          - "file"
+          - "upload"
+          - "forbidden"
+          - "traversal"
+          - "invalid"
+        condition: or
+        case-insensitive: true
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/users"
+
+    headers:
+      Authorization: "Bearer invalid-token-format"
+      Accept: "application/json"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 401
+          - 403
+
+      - type: word
+        words:
+          - "token"
+          - "jwt"
+          - "bearer"
+          - "authorization"
+          - "invalid"
+          - "expired"
+          - "malformed"
+          - "signature"
+        condition: or
+        case-insensitive: true
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/users"
+
+    headers:
+      Content-Type: "application/json"
+
+    body: |
+      {
+        "username": "test",
+        "password": "test",
+        "role": "admin",
+        "permissions": ["read", "write", "delete", "admin"]
+      }
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 403
+          - 422
+
+      - type: word
+        words:
+          - "permission"
+          - "role"
+          - "admin"
+          - "forbidden"
+          - "access denied"
+          - "unauthorized"
+        condition: or
+        case-insensitive: true
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/debug"
+      - "{{BaseURL}}/api/v1/debug"
+      - "{{BaseURL}}/debug"
+
+    headers:
+      X-Debug: "true"
+      X-Trace: "true"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 403
+          - 500
+
+      - type: word
+        words:
+          - "debug"
+          - "trace"
+          - "stack"
+          - "exception"
+          - "error"
+          - "log"
+          - "verbose"
+        condition: or
+        case-insensitive: true
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/users"
+
+    headers:
+      Content-Type: "application/json"
+
+    body: '{"username": "test", "password": "test", "malformed_json": true'
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 400
+          - 500
+
+      - type: word
+        words:
+          - "json"
+          - "parse"
+          - "syntax"
+          - "malformed"
+          - "invalid"
+          - "unexpected"
+          - "token"
+        condition: or
+        case-insensitive: true
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/users/1/orders/abc"
+      - "{{BaseURL}}/api/v1/users/1/orders/abc"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 400
+          - 404
+
+      - type: word
+        words:
+          - "invalid"
+          - "parameter"
+          - "id"
+          - "numeric"
+          - "integer"
+          - "format"
+          - "type"
+        condition: or
+        case-insensitive: true
+
+  - method: DELETE
+    path:
+      - "{{BaseURL}}/api/users/1"
+      - "{{BaseURL}}/api/v1/users/1"
+
+    headers:
+      Authorization: "Bearer test-token"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 403
+          - 405
+          - 500
+
+      - type: word
+        words:
+          - "method not allowed"
+          - "forbidden"
+          - "delete"
+          - "permission"
+          - "cascade"
+          - "constraint"
+          - "foreign key"
+        condition: or
+        case-insensitive: true
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/users"
+
+    headers:
+      Range: "bytes=0-invalid"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 400
+          - 416
+
+      - type: word
+        words:
+          - "range"
+          - "invalid"
+          - "bytes"
+          - "header"
+          - "format"
+        condition: or
+        case-insensitive: true
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/users"
+
+    headers:
+      Content-Type: "application/json"
+      Content-Length: "1000"
+
+    body: '{"test": "small"}'
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 400
+          - 413
+
+      - type: word
+        words:
+          - "content length"
+          - "mismatch"
+          - "size"
+          - "length"
+          - "payload"
+        condition: or
+        case-insensitive: true
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/users"
+
+    headers:
+      Accept-Encoding: "invalid-encoding"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 406
+          - 415
+
+      - type: word
+        words:
+          - "encoding"
+          - "compression"
+          - "unsupported"
+          - "invalid"
+          - "accept"
+        condition: or
+        case-insensitive: true
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/users"
+
+    headers:
+      Content-Type: "application/json"
+
+    body: |
+      {
+        "username": "test_user_with_very_long_name_that_exceeds_database_column_limits_and_should_trigger_an_error_message_that_reveals_database_schema_information",
+        "password": "test"
+      }
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 400
+          - 422
+          - 500
+
+      - type: word
+        words:
+          - "too long"
+          - "exceeds"
+          - "maximum"
+          - "length"
+          - "column"
+          - "field"
+          - "database"
+          - "constraint"
+        condition: or
+        case-insensitive: true

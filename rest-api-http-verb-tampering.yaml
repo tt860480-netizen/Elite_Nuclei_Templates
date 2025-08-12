@@ -1,0 +1,544 @@
+id: rest-api-http-verb-tampering
+
+info:
+  name: REST API HTTP Verb Tampering - Uncommon HTTP Methods
+  author: elite-red-team
+  severity: high
+  description: |
+    Advanced HTTP verb tampering detection using uncommon and dangerous HTTP methods.
+    Tests various HTTP methods to bypass security controls and access restricted functionality.
+  reference:
+    - https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/07-Input_Validation_Testing/03-Testing_for_HTTP_Verb_Tampering
+    - https://tools.ietf.org/html/rfc7231
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:L
+    cvss-score: 8.6
+    cwe-id: CWE-436
+  metadata:
+    verified: true
+    max-request: 25
+  tags: api,http-verb,tampering,method,bypass
+
+http:
+  - method: TRACE
+    path:
+      - "{{BaseURL}}/api/v1/users"
+      - "{{BaseURL}}/api/v1/admin"
+      - "{{BaseURL}}/api/v1/debug"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; HTTP-Verb-Scanner)"
+      X-Custom-Header: "trace-test"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        words:
+          - "TRACE"
+          - "X-Custom-Header"
+          - "trace-test"
+        condition: or
+
+    extractors:
+      - type: regex
+        name: trace_response
+        regex:
+          - "TRACE.*HTTP"
+          - "X-Custom-Header:.*"
+
+  - method: TRACK
+    path:
+      - "{{BaseURL}}/api/v1/users"
+      - "{{BaseURL}}/api/v1/admin"
+
+    headers:
+      X-Track-Header: "track-test"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        words:
+          - "TRACK"
+          - "X-Track-Header"
+        condition: or
+
+  - method: DEBUG
+    path:
+      - "{{BaseURL}}/api/v1/users"
+      - "{{BaseURL}}/api/v1/debug"
+      - "{{BaseURL}}/api/v1/admin"
+
+    headers:
+      Content-Type: "application/json"
+
+    body: '{"debug": true, "method": "DEBUG"}'
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 405
+
+      - type: word
+        words:
+          - "debug"
+          - "DEBUG"
+          - "Method Not Allowed"
+        condition: or
+
+  - method: PROPFIND
+    path:
+      - "{{BaseURL}}/api/v1/files"
+      - "{{BaseURL}}/api/v1/webdav"
+
+    headers:
+      Content-Type: "text/xml"
+      Depth: "1"
+
+    body: |
+      <?xml version="1.0" encoding="utf-8"?>
+      <propfind xmlns="DAV:">
+        <prop>
+          <getlastmodified/>
+          <getcontentlength/>
+          <resourcetype/>
+        </prop>
+      </propfind>
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 207
+          - 200
+
+      - type: word
+        words:
+          - "multistatus"
+          - "propstat"
+          - "DAV:"
+        condition: or
+
+  - method: PROPPATCH
+    path:
+      - "{{BaseURL}}/api/v1/files"
+      - "{{BaseURL}}/api/v1/webdav"
+
+    headers:
+      Content-Type: "text/xml"
+
+    body: |
+      <?xml version="1.0" encoding="utf-8"?>
+      <propertyupdate xmlns="DAV:">
+        <set>
+          <prop>
+            <displayname>Modified File</displayname>
+          </prop>
+        </set>
+      </propertyupdate>
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 207
+          - 200
+
+      - type: word
+        words:
+          - "propertyupdate"
+          - "multistatus"
+        condition: or
+
+  - method: MKCOL
+    path:
+      - "{{BaseURL}}/api/v1/files/newdir"
+      - "{{BaseURL}}/api/v1/webdav/newdir"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 201
+          - 405
+
+      - type: word
+        words:
+          - "created"
+          - "Method Not Allowed"
+        condition: or
+
+  - method: COPY
+    path:
+      - "{{BaseURL}}/api/v1/files/test.txt"
+
+    headers:
+      Destination: "{{BaseURL}}/api/v1/files/copied.txt"
+      Overwrite: "T"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 201
+          - 204
+          - 405
+
+      - type: word
+        words:
+          - "copied"
+          - "created"
+          - "Method Not Allowed"
+        condition: or
+
+  - method: MOVE
+    path:
+      - "{{BaseURL}}/api/v1/files/test.txt"
+
+    headers:
+      Destination: "{{BaseURL}}/api/v1/files/moved.txt"
+      Overwrite: "T"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 201
+          - 204
+          - 405
+
+      - type: word
+        words:
+          - "moved"
+          - "created"
+          - "Method Not Allowed"
+        condition: or
+
+  - method: LOCK
+    path:
+      - "{{BaseURL}}/api/v1/files/test.txt"
+
+    headers:
+      Content-Type: "text/xml"
+      Timeout: "Infinite, Second-4100000000"
+
+    body: |
+      <?xml version="1.0" encoding="utf-8"?>
+      <lockinfo xmlns="DAV:">
+        <lockscope><exclusive/></lockscope>
+        <locktype><write/></locktype>
+      </lockinfo>
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 405
+
+      - type: word
+        words:
+          - "lockdiscovery"
+          - "locktoken"
+          - "Method Not Allowed"
+        condition: or
+
+  - method: UNLOCK
+    path:
+      - "{{BaseURL}}/api/v1/files/test.txt"
+
+    headers:
+      Lock-Token: "<opaquelocktoken:test-token>"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 204
+          - 405
+
+      - type: word
+        words:
+          - "unlocked"
+          - "Method Not Allowed"
+        condition: or
+
+  - method: SEARCH
+    path:
+      - "{{BaseURL}}/api/v1/files"
+      - "{{BaseURL}}/api/v1/search"
+
+    headers:
+      Content-Type: "text/xml"
+
+    body: |
+      <?xml version="1.0"?>
+      <searchrequest xmlns="DAV:">
+        <basicsearch>
+          <select>
+            <prop>
+              <displayname/>
+              <getcontenttype/>
+            </prop>
+          </select>
+          <from>
+            <scope>
+              <href>/api/v1/files</href>
+              <depth>infinity</depth>
+            </scope>
+          </from>
+          <where>
+            <contains>
+              <prop>
+                <displayname/>
+              </prop>
+              <literal>admin</literal>
+            </contains>
+          </where>
+        </basicsearch>
+      </searchrequest>
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 207
+          - 200
+
+      - type: word
+        words:
+          - "multistatus"
+          - "searchrequest"
+          - "admin"
+        condition: or
+
+  - method: CONNECT
+    path:
+      - "{{BaseURL}}/api/v1/proxy"
+
+    headers:
+      Host: "internal.server.com:80"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 405
+          - 502
+
+      - type: word
+        words:
+          - "tunnel"
+          - "established"
+          - "Method Not Allowed"
+          - "Bad Gateway"
+        condition: or
+
+  - method: PATCH
+    path:
+      - "{{BaseURL}}/api/v1/users/1"
+      - "{{BaseURL}}/api/v1/admin/settings"
+
+    headers:
+      Content-Type: "application/json-patch+json"
+
+    body: |
+      [
+        {"op": "replace", "path": "/role", "value": "administrator"},
+        {"op": "add", "path": "/admin", "value": true}
+      ]
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 204
+
+      - type: word
+        words:
+          - "administrator"
+          - "admin"
+          - "patched"
+        condition: or
+
+  - method: PURGE
+    path:
+      - "{{BaseURL}}/api/v1/cache"
+      - "{{BaseURL}}/api/v1/users"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 405
+
+      - type: word
+        words:
+          - "purged"
+          - "cleared"
+          - "Method Not Allowed"
+        condition: or
+
+  - method: LINK
+    path:
+      - "{{BaseURL}}/api/v1/files/test.txt"
+
+    headers:
+      Link: "</api/v1/files/linked.txt>; rel=alternate"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 405
+
+      - type: word
+        words:
+          - "linked"
+          - "alternate"
+          - "Method Not Allowed"
+        condition: or
+
+  - method: UNLINK
+    path:
+      - "{{BaseURL}}/api/v1/files/test.txt"
+
+    headers:
+      Link: "</api/v1/files/linked.txt>; rel=alternate"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 405
+
+      - type: word
+        words:
+          - "unlinked"
+          - "removed"
+          - "Method Not Allowed"
+        condition: or
+
+  - method: BASELINE-CONTROL
+    path:
+      - "{{BaseURL}}/api/v1/version"
+
+    headers:
+      Content-Type: "text/xml"
+
+    body: |
+      <?xml version="1.0" encoding="utf-8"?>
+      <baseline-control xmlns="DAV:">
+        <href>/api/v1/baseline</href>
+      </baseline-control>
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 405
+
+      - type: word
+        words:
+          - "baseline"
+          - "version"
+          - "Method Not Allowed"
+        condition: or
+
+  - method: MERGE
+    path:
+      - "{{BaseURL}}/api/v1/version"
+
+    headers:
+      Content-Type: "text/xml"
+
+    body: |
+      <?xml version="1.0" encoding="utf-8"?>
+      <merge xmlns="DAV:">
+        <source>
+          <href>/api/v1/source</href>
+        </source>
+      </merge>
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 405
+
+      - type: word
+        words:
+          - "merge"
+          - "source"
+          - "Method Not Allowed"
+        condition: or
+
+  - method: MKACTIVITY
+    path:
+      - "{{BaseURL}}/api/v1/activity"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 201
+          - 405
+
+      - type: word
+        words:
+          - "activity"
+          - "created"
+          - "Method Not Allowed"
+        condition: or
+
+  - method: CHECKOUT
+    path:
+      - "{{BaseURL}}/api/v1/version/1"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 405
+
+      - type: word
+        words:
+          - "checkout"
+          - "version"
+          - "Method Not Allowed"
+        condition: or
+
+  - method: CHECKIN
+    path:
+      - "{{BaseURL}}/api/v1/version/1"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 201
+          - 405
+
+      - type: word
+        words:
+          - "checkin"
+          - "version"
+          - "Method Not Allowed"
+        condition: or

@@ -1,0 +1,532 @@
+id: api-version-disclosure-headers
+
+info:
+  name: API Version Disclosure Headers - Fingerprinting Techniques
+  author: elite-red-team
+  severity: low
+  description: |
+    Advanced API version disclosure detection through HTTP headers and response fingerprinting.
+    Identifies server versions, framework information, and technology stack details.
+  reference:
+    - https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/01-Information_Gathering/08-Fingerprint_Web_Application_Framework
+    - https://owasp.org/www-project-api-security/
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N
+    cvss-score: 5.3
+    cwe-id: CWE-200
+  metadata:
+    verified: true
+    max-request: 20
+  tags: api,version,disclosure,fingerprinting,headers,information-gathering
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/api"
+      - "{{BaseURL}}/api/"
+      - "{{BaseURL}}/api/v1"
+      - "{{BaseURL}}/api/v2"
+      - "{{BaseURL}}/api/v3"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; API-Version-Scanner)"
+      Accept: "application/json, text/plain, */*"
+
+    matchers-condition: or
+    matchers:
+      - type: word
+        words:
+          - "X-API-Version"
+          - "X-Version"
+          - "API-Version"
+          - "X-Service-Version"
+          - "X-App-Version"
+          - "X-Framework-Version"
+          - "X-Server-Version"
+          - "X-Build-Version"
+        condition: or
+        part: header
+        case-insensitive: true
+
+      - type: word
+        words:
+          - "Server:"
+          - "X-Powered-By:"
+          - "X-Runtime:"
+          - "X-AspNet-Version:"
+          - "X-AspNetMvc-Version:"
+        condition: or
+        part: header
+
+      - type: word
+        words:
+          - '"version":'
+          - '"api_version":'
+          - '"service_version":'
+          - '"build":'
+          - '"release":'
+        condition: or
+        part: body
+
+    extractors:
+      - type: kval
+        kval:
+          - server
+          - x_powered_by
+          - x_api_version
+          - x_version
+          - api_version
+          - x_service_version
+          - x_app_version
+          - x_framework_version
+          - x_runtime
+          - x_aspnet_version
+          - x_aspnetmvc_version
+        part: header
+
+      - type: json
+        name: version_info
+        json:
+          - '.version'
+          - '.api_version'
+          - '.service_version'
+          - '.build'
+          - '.release'
+
+  - method: HEAD
+    path:
+      - "{{BaseURL}}/api"
+      - "{{BaseURL}}/api/v1"
+      - "{{BaseURL}}/api/health"
+      - "{{BaseURL}}/api/status"
+
+    matchers-condition: or
+    matchers:
+      - type: word
+        words:
+          - "X-API-Version"
+          - "X-Version"
+          - "Server:"
+          - "X-Powered-By:"
+          - "X-Generator:"
+        condition: or
+        part: header
+
+      - type: status
+        status:
+          - 200
+          - 404
+          - 405
+
+    extractors:
+      - type: kval
+        kval:
+          - server
+          - x_powered_by
+          - x_generator
+          - x_api_version
+          - x_version
+          - date
+          - last_modified
+        part: header
+
+  - method: OPTIONS
+    path:
+      - "{{BaseURL}}/api"
+      - "{{BaseURL}}/api/v1"
+      - "{{BaseURL}}/api/v2"
+
+    matchers-condition: or
+    matchers:
+      - type: word
+        words:
+          - "Allow:"
+          - "X-API-Version"
+          - "X-Supported-Versions"
+          - "Access-Control-Allow-Methods"
+        condition: or
+        part: header
+
+      - type: status
+        status:
+          - 200
+          - 204
+
+    extractors:
+      - type: kval
+        kval:
+          - allow
+          - x_api_version
+          - x_supported_versions
+          - access_control_allow_methods
+          - access_control_expose_headers
+        part: header
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/version"
+      - "{{BaseURL}}/api/v1/version"
+      - "{{BaseURL}}/version"
+      - "{{BaseURL}}/api/info"
+      - "{{BaseURL}}/api/v1/info"
+      - "{{BaseURL}}/info"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        words:
+          - "version"
+          - "build"
+          - "release"
+          - "api"
+          - "service"
+        condition: or
+        case-insensitive: true
+
+    extractors:
+      - type: json
+        name: version_endpoint
+        json:
+          - '.version'
+          - '.api_version'
+          - '.build_version'
+          - '.release'
+          - '.build_date'
+          - '.commit'
+          - '.branch'
+
+      - type: regex
+        name: version_patterns
+        regex:
+          - 'version["\s]*[:=]["\s]*([^",\s}]+)'
+          - 'build["\s]*[:=]["\s]*([^",\s}]+)'
+          - 'release["\s]*[:=]["\s]*([^",\s}]+)'
+        group: 1
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/health"
+      - "{{BaseURL}}/api/v1/health"
+      - "{{BaseURL}}/health"
+      - "{{BaseURL}}/api/status"
+      - "{{BaseURL}}/api/v1/status"
+      - "{{BaseURL}}/status"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        words:
+          - "status"
+          - "health"
+          - "version"
+          - "uptime"
+          - "service"
+        condition: or
+        case-insensitive: true
+
+    extractors:
+      - type: json
+        name: health_info
+        json:
+          - '.version'
+          - '.service.version'
+          - '.build.version'
+          - '.application.version'
+          - '.server.version'
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/metrics"
+      - "{{BaseURL}}/api/v1/metrics"
+      - "{{BaseURL}}/metrics"
+      - "{{BaseURL}}/api/stats"
+      - "{{BaseURL}}/stats"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        words:
+          - "metrics"
+          - "stats"
+          - "version"
+          - "build"
+          - "runtime"
+        condition: or
+        case-insensitive: true
+
+    extractors:
+      - type: json
+        name: metrics_info
+        json:
+          - '.version'
+          - '.build_info'
+          - '.runtime_version'
+          - '.service_version'
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/api"
+
+    headers:
+      Accept: "application/vnd.api+json"
+      API-Version: "1.0"
+
+    matchers-condition: or
+    matchers:
+      - type: word
+        words:
+          - "X-API-Version"
+          - "Content-Type: application/vnd.api+json"
+        condition: or
+        part: header
+
+      - type: word
+        words:
+          - '"jsonapi":'
+          - '"version":'
+          - '"meta":'
+        condition: or
+        part: body
+
+    extractors:
+      - type: json
+        name: jsonapi_version
+        json:
+          - '.jsonapi.version'
+          - '.meta.version'
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/api"
+
+    headers:
+      Accept: "application/hal+json"
+
+    matchers-condition: or
+    matchers:
+      - type: word
+        words:
+          - "Content-Type: application/hal+json"
+          - "_links"
+        condition: or
+
+      - type: word
+        words:
+          - '"_links":'
+          - '"version":'
+        condition: or
+        part: body
+
+    extractors:
+      - type: json
+        name: hal_version
+        json:
+          - '.version'
+          - '._links.version.href'
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/openapi.json"
+      - "{{BaseURL}}/api/swagger.json"
+      - "{{BaseURL}}/openapi.json"
+      - "{{BaseURL}}/swagger.json"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        words:
+          - '"openapi":'
+          - '"swagger":'
+          - '"info":'
+        condition: or
+
+    extractors:
+      - type: json
+        name: openapi_version
+        json:
+          - '.openapi'
+          - '.swagger'
+          - '.info.version'
+          - '.info.title'
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/api"
+
+    headers:
+      User-Agent: "curl/7.68.0"
+
+    matchers-condition: or
+    matchers:
+      - type: word
+        words:
+          - "Server:"
+          - "X-Powered-By:"
+          - "X-API-Version:"
+        condition: or
+        part: header
+
+    extractors:
+      - type: kval
+        kval:
+          - server
+          - x_powered_by
+          - x_api_version
+        part: header
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/debug"
+      - "{{BaseURL}}/api/v1/debug"
+      - "{{BaseURL}}/debug"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 403
+
+      - type: word
+        words:
+          - "debug"
+          - "version"
+          - "environment"
+          - "config"
+        condition: or
+        case-insensitive: true
+
+    extractors:
+      - type: json
+        name: debug_info
+        json:
+          - '.version'
+          - '.environment'
+          - '.debug.version'
+          - '.config.version'
+
+  - method: TRACE
+    path:
+      - "{{BaseURL}}/api"
+      - "{{BaseURL}}/api/v1"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        words:
+          - "TRACE"
+          - "User-Agent"
+        condition: or
+
+    extractors:
+      - type: regex
+        name: trace_headers
+        regex:
+          - 'Server:\s*([^\r\n]+)'
+          - 'X-Powered-By:\s*([^\r\n]+)'
+          - 'X-API-Version:\s*([^\r\n]+)'
+        group: 1
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/api"
+
+    headers:
+      X-Requested-With: "XMLHttpRequest"
+      X-API-Version: "test"
+
+    matchers-condition: or
+    matchers:
+      - type: word
+        words:
+          - "X-API-Version"
+          - "X-Supported-Versions"
+          - "X-Current-Version"
+        condition: or
+        part: header
+
+    extractors:
+      - type: kval
+        kval:
+          - x_api_version
+          - x_supported_versions
+          - x_current_version
+        part: header
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/actuator"
+      - "{{BaseURL}}/actuator"
+      - "{{BaseURL}}/api/actuator/info"
+      - "{{BaseURL}}/actuator/info"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        words:
+          - "actuator"
+          - "build"
+          - "version"
+          - "git"
+        condition: or
+        case-insensitive: true
+
+    extractors:
+      - type: json
+        name: actuator_info
+        json:
+          - '.build.version'
+          - '.git.commit.id'
+          - '.git.branch'
+          - '.app.version'
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/api"
+
+    headers:
+      Accept: "text/xml, application/xml"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        words:
+          - "<?xml"
+          - "version="
+        condition: or
+
+    extractors:
+      - type: regex
+        name: xml_version
+        regex:
+          - 'version="([^"]+)"'
+          - '<version>([^<]+)</version>'
+        group: 1

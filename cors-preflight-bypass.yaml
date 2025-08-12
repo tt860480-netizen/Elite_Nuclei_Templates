@@ -1,0 +1,370 @@
+id: cors-preflight-bypass
+
+info:
+  name: CORS Preflight Bypass - Multiple Bypass Techniques
+  author: elite-red-team
+  severity: high
+  description: |
+    Advanced CORS preflight bypass detection using multiple techniques including
+    method override, header manipulation, and protocol confusion attacks.
+  reference:
+    - https://portswigger.net/web-security/cors
+    - https://owasp.org/www-community/attacks/CORS_OriginHeaderScrutiny
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:H/I:H/A:N
+    cvss-score: 8.1
+    cwe-id: CWE-346
+  metadata:
+    verified: true
+    max-request: 20
+  tags: cors,bypass,preflight,sop,origin
+
+http:
+  - method: OPTIONS
+    path:
+      - "{{BaseURL}}/api/v1/users"
+      - "{{BaseURL}}/api/v1/admin"
+      - "{{BaseURL}}/api/v1/data"
+
+    headers:
+      Origin: "https://evil.com"
+      Access-Control-Request-Method: "PUT"
+      Access-Control-Request-Headers: "X-Custom-Header, Authorization"
+      User-Agent: "Mozilla/5.0 (compatible; CORS-Bypass-Scanner)"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 204
+
+      - type: word
+        words:
+          - "Access-Control-Allow-Origin: *"
+          - "Access-Control-Allow-Origin: https://evil.com"
+          - "Access-Control-Allow-Credentials: true"
+        condition: or
+        part: header
+
+    extractors:
+      - type: kval
+        kval:
+          - access_control_allow_origin
+          - access_control_allow_methods
+          - access_control_allow_headers
+          - access_control_allow_credentials
+        part: header
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/v1/users"
+      - "{{BaseURL}}/api/v1/admin"
+      - "{{BaseURL}}/api/v1/sensitive"
+
+    headers:
+      Origin: "https://evil.com"
+      X-Forwarded-For: "127.0.0.1"
+      X-Real-IP: "127.0.0.1"
+      X-Originating-IP: "127.0.0.1"
+      Referer: "https://evil.com"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        words:
+          - "Access-Control-Allow-Origin: *"
+          - "Access-Control-Allow-Origin: https://evil.com"
+          - "Access-Control-Allow-Origin: null"
+        condition: or
+        part: header
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/v1/users"
+      - "{{BaseURL}}/api/v1/data"
+
+    headers:
+      Origin: "https://evil.com"
+      Content-Type: "application/json"
+      X-HTTP-Method-Override: "PUT"
+      X-Method-Override: "DELETE"
+
+    body: |
+      {
+        "test": "cors_bypass",
+        "data": "sensitive_operation"
+      }
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 201
+          - 204
+
+      - type: word
+        words:
+          - "Access-Control-Allow-Origin: *"
+          - "Access-Control-Allow-Origin: https://evil.com"
+        condition: or
+        part: header
+
+  - method: PUT
+    path:
+      - "{{BaseURL}}/api/v1/users"
+
+    headers:
+      Origin: "https://evil.com"
+      Content-Type: "text/plain"
+
+    body: |
+      {"admin": true, "role": "administrator"}
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 204
+
+      - type: word
+        words:
+          - "Access-Control-Allow-Origin"
+        part: header
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/v1/users"
+
+    headers:
+      Origin: "null"
+      X-Forwarded-Proto: "https"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        words:
+          - "Access-Control-Allow-Origin: null"
+        part: header
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/v1/users"
+
+    headers:
+      Origin: "https://{{Hostname}}.evil.com"
+      Host: "{{Hostname}}"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        words:
+          - "Access-Control-Allow-Origin: https://{{Hostname}}.evil.com"
+        part: header
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/v1/users"
+
+    headers:
+      Origin: "https://{{Hostname}}"
+      X-Forwarded-Host: "evil.com"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        words:
+          - "Access-Control-Allow-Origin"
+        part: header
+
+  - method: OPTIONS
+    path:
+      - "{{BaseURL}}/api/v1/users"
+
+    headers:
+      Origin: "https://evil.com"
+      Access-Control-Request-Method: "GET"
+      Access-Control-Request-Headers: "Authorization, X-API-Key"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 204
+
+      - type: word
+        words:
+          - "Access-Control-Allow-Methods"
+          - "Access-Control-Allow-Headers"
+        condition: and
+        part: header
+
+      - type: word
+        words:
+          - "GET"
+          - "POST"
+          - "PUT"
+          - "DELETE"
+          - "PATCH"
+        condition: or
+        part: header
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/v1/users"
+
+    headers:
+      Origin: "https://evil.com"
+      Cookie: "session=test; auth=bypass"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        words:
+          - "Access-Control-Allow-Origin: https://evil.com"
+          - "Access-Control-Allow-Credentials: true"
+        condition: and
+        part: header
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/v1/users"
+
+    headers:
+      Origin: "https://evil.com"
+      Content-Type: "application/x-www-form-urlencoded"
+
+    body: "username=admin&password=test&role=administrator"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 201
+
+      - type: word
+        words:
+          - "Access-Control-Allow-Origin"
+        part: header
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/v1/users"
+
+    headers:
+      Origin: "https://evil.com"
+      X-Requested-With: "XMLHttpRequest"
+      X-Custom-Header: "bypass"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        words:
+          - "Access-Control-Allow-Origin: *"
+          - "Access-Control-Allow-Origin: https://evil.com"
+        condition: or
+        part: header
+
+  - method: PATCH
+    path:
+      - "{{BaseURL}}/api/v1/users/1"
+
+    headers:
+      Origin: "https://evil.com"
+      Content-Type: "application/json"
+
+    body: |
+      {
+        "role": "admin",
+        "permissions": ["read", "write", "delete"]
+      }
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 204
+
+      - type: word
+        words:
+          - "Access-Control-Allow-Origin"
+        part: header
+
+  - method: DELETE
+    path:
+      - "{{BaseURL}}/api/v1/users/1"
+
+    headers:
+      Origin: "https://evil.com"
+      Authorization: "Bearer test-token"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 204
+
+      - type: word
+        words:
+          - "Access-Control-Allow-Origin: *"
+          - "Access-Control-Allow-Origin: https://evil.com"
+        condition: or
+        part: header
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/v1/users"
+
+    headers:
+      Origin: "https://evil.com"
+      Cache-Control: "no-cache"
+      Pragma: "no-cache"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        words:
+          - "Access-Control-Allow-Origin"
+          - "Vary: Origin"
+        condition: and
+        part: header
+
+      - type: word
+        negative: true
+        words:
+          - "Access-Control-Allow-Origin: https://legitimate-domain.com"
+        part: header

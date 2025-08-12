@@ -1,0 +1,344 @@
+id: api-endpoint-enumeration-fuzzing
+
+info:
+  name: API Endpoint Enumeration - Intelligent Fuzzing
+  author: elite-red-team
+  severity: medium
+  description: |
+    Advanced API endpoint enumeration using intelligent wordlists and fuzzing techniques.
+    Discovers hidden endpoints, admin panels, debug interfaces, and sensitive API routes.
+  reference:
+    - https://owasp.org/www-project-api-security/
+    - https://github.com/danielmiessler/SecLists
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N
+    cvss-score: 5.3
+    cwe-id: CWE-200
+  metadata:
+    verified: true
+    max-request: 50
+  tags: api,enumeration,fuzzing,discovery,recon
+
+variables:
+  common_endpoints:
+    - "admin"
+    - "api"
+    - "v1"
+    - "v2"
+    - "v3"
+    - "test"
+    - "dev"
+    - "debug"
+    - "internal"
+    - "private"
+    - "management"
+    - "health"
+    - "status"
+    - "metrics"
+    - "docs"
+    - "swagger"
+    - "openapi"
+    - "graphql"
+    - "playground"
+    - "console"
+
+  sensitive_paths:
+    - "users"
+    - "user"
+    - "accounts"
+    - "account"
+    - "profile"
+    - "profiles"
+    - "settings"
+    - "config"
+    - "configuration"
+    - "env"
+    - "environment"
+    - "secrets"
+    - "keys"
+    - "tokens"
+    - "auth"
+    - "authentication"
+    - "login"
+    - "logout"
+    - "register"
+    - "signup"
+
+http:
+  - method: GET
+    path:
+      # Common API versioning patterns
+      - "{{BaseURL}}/api"
+      - "{{BaseURL}}/api/"
+      - "{{BaseURL}}/api/v1"
+      - "{{BaseURL}}/api/v2"
+      - "{{BaseURL}}/api/v3"
+      - "{{BaseURL}}/v1"
+      - "{{BaseURL}}/v2"
+      - "{{BaseURL}}/v3"
+      - "{{BaseURL}}/rest"
+      - "{{BaseURL}}/rest/api"
+      - "{{BaseURL}}/rest/v1"
+      
+      # Admin and management endpoints
+      - "{{BaseURL}}/admin"
+      - "{{BaseURL}}/admin/"
+      - "{{BaseURL}}/admin/api"
+      - "{{BaseURL}}/api/admin"
+      - "{{BaseURL}}/api/v1/admin"
+      - "{{BaseURL}}/management"
+      - "{{BaseURL}}/api/management"
+      - "{{BaseURL}}/internal"
+      - "{{BaseURL}}/api/internal"
+      - "{{BaseURL}}/private"
+      - "{{BaseURL}}/api/private"
+      
+      # Development and testing endpoints
+      - "{{BaseURL}}/dev"
+      - "{{BaseURL}}/api/dev"
+      - "{{BaseURL}}/test"
+      - "{{BaseURL}}/api/test"
+      - "{{BaseURL}}/debug"
+      - "{{BaseURL}}/api/debug"
+      - "{{BaseURL}}/staging"
+      - "{{BaseURL}}/api/staging"
+      
+      # Health and monitoring endpoints
+      - "{{BaseURL}}/health"
+      - "{{BaseURL}}/api/health"
+      - "{{BaseURL}}/healthcheck"
+      - "{{BaseURL}}/api/healthcheck"
+      - "{{BaseURL}}/status"
+      - "{{BaseURL}}/api/status"
+      - "{{BaseURL}}/metrics"
+      - "{{BaseURL}}/api/metrics"
+      - "{{BaseURL}}/monitoring"
+      - "{{BaseURL}}/api/monitoring"
+      
+      # Documentation endpoints
+      - "{{BaseURL}}/docs"
+      - "{{BaseURL}}/api/docs"
+      - "{{BaseURL}}/documentation"
+      - "{{BaseURL}}/api-docs"
+      - "{{BaseURL}}/swagger"
+      - "{{BaseURL}}/swagger-ui"
+      - "{{BaseURL}}/swagger.json"
+      - "{{BaseURL}}/swagger.yaml"
+      - "{{BaseURL}}/openapi"
+      - "{{BaseURL}}/openapi.json"
+      - "{{BaseURL}}/openapi.yaml"
+      - "{{BaseURL}}/api.json"
+      - "{{BaseURL}}/api.yaml"
+      
+      # GraphQL endpoints
+      - "{{BaseURL}}/graphql"
+      - "{{BaseURL}}/api/graphql"
+      - "{{BaseURL}}/graphiql"
+      - "{{BaseURL}}/playground"
+      - "{{BaseURL}}/api/playground"
+      - "{{BaseURL}}/console"
+      - "{{BaseURL}}/api/console"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; API-Enumeration-Scanner)"
+      Accept: "application/json, text/html, */*"
+      Accept-Language: "en-US,en;q=0.9"
+
+    matchers-condition: or
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 201
+          - 202
+          - 301
+          - 302
+          - 401
+          - 403
+
+      - type: word
+        words:
+          - "swagger"
+          - "openapi"
+          - "graphql"
+          - "playground"
+          - "api documentation"
+          - "rest api"
+          - "endpoints"
+          - "routes"
+        condition: or
+        case-insensitive: true
+
+    extractors:
+      - type: regex
+        name: api_endpoints
+        regex:
+          - '"/api/[^"]*"'
+          - '"/v[0-9]+/[^"]*"'
+          - '"endpoint":\s*"([^"]*)"'
+        group: 1
+
+  - method: GET
+    path:
+      # User and authentication endpoints
+      - "{{BaseURL}}/api/users"
+      - "{{BaseURL}}/api/v1/users"
+      - "{{BaseURL}}/api/user"
+      - "{{BaseURL}}/api/v1/user"
+      - "{{BaseURL}}/api/accounts"
+      - "{{BaseURL}}/api/v1/accounts"
+      - "{{BaseURL}}/api/profile"
+      - "{{BaseURL}}/api/v1/profile"
+      - "{{BaseURL}}/api/auth"
+      - "{{BaseURL}}/api/v1/auth"
+      - "{{BaseURL}}/api/login"
+      - "{{BaseURL}}/api/v1/login"
+      - "{{BaseURL}}/api/register"
+      - "{{BaseURL}}/api/v1/register"
+      - "{{BaseURL}}/api/signup"
+      - "{{BaseURL}}/api/v1/signup"
+      - "{{BaseURL}}/api/logout"
+      - "{{BaseURL}}/api/v1/logout"
+      
+      # Configuration and settings endpoints
+      - "{{BaseURL}}/api/config"
+      - "{{BaseURL}}/api/v1/config"
+      - "{{BaseURL}}/api/configuration"
+      - "{{BaseURL}}/api/v1/configuration"
+      - "{{BaseURL}}/api/settings"
+      - "{{BaseURL}}/api/v1/settings"
+      - "{{BaseURL}}/api/env"
+      - "{{BaseURL}}/api/v1/env"
+      - "{{BaseURL}}/api/environment"
+      - "{{BaseURL}}/api/v1/environment"
+      
+      # Security-sensitive endpoints
+      - "{{BaseURL}}/api/secrets"
+      - "{{BaseURL}}/api/v1/secrets"
+      - "{{BaseURL}}/api/keys"
+      - "{{BaseURL}}/api/v1/keys"
+      - "{{BaseURL}}/api/tokens"
+      - "{{BaseURL}}/api/v1/tokens"
+      - "{{BaseURL}}/api/credentials"
+      - "{{BaseURL}}/api/v1/credentials"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 401
+          - 403
+
+      - type: word
+        words:
+          - "users"
+          - "accounts"
+          - "profiles"
+          - "authentication"
+          - "authorization"
+          - "config"
+          - "settings"
+          - "secrets"
+          - "keys"
+          - "tokens"
+        condition: or
+        case-insensitive: true
+
+  - method: OPTIONS
+    path:
+      - "{{BaseURL}}/api"
+      - "{{BaseURL}}/api/v1"
+      - "{{BaseURL}}/api/v2"
+
+    matchers:
+      - type: word
+        words:
+          - "Allow:"
+          - "Access-Control-Allow-Methods"
+        condition: or
+        part: header
+
+    extractors:
+      - type: kval
+        kval:
+          - allow
+          - access_control_allow_methods
+        part: header
+
+  - method: GET
+    path:
+      # File and upload endpoints
+      - "{{BaseURL}}/api/files"
+      - "{{BaseURL}}/api/v1/files"
+      - "{{BaseURL}}/api/upload"
+      - "{{BaseURL}}/api/v1/upload"
+      - "{{BaseURL}}/api/download"
+      - "{{BaseURL}}/api/v1/download"
+      - "{{BaseURL}}/api/media"
+      - "{{BaseURL}}/api/v1/media"
+      - "{{BaseURL}}/api/assets"
+      - "{{BaseURL}}/api/v1/assets"
+      
+      # Database and data endpoints
+      - "{{BaseURL}}/api/data"
+      - "{{BaseURL}}/api/v1/data"
+      - "{{BaseURL}}/api/database"
+      - "{{BaseURL}}/api/v1/database"
+      - "{{BaseURL}}/api/db"
+      - "{{BaseURL}}/api/v1/db"
+      - "{{BaseURL}}/api/query"
+      - "{{BaseURL}}/api/v1/query"
+      - "{{BaseURL}}/api/search"
+      - "{{BaseURL}}/api/v1/search"
+      
+      # System and server endpoints
+      - "{{BaseURL}}/api/system"
+      - "{{BaseURL}}/api/v1/system"
+      - "{{BaseURL}}/api/server"
+      - "{{BaseURL}}/api/v1/server"
+      - "{{BaseURL}}/api/info"
+      - "{{BaseURL}}/api/v1/info"
+      - "{{BaseURL}}/api/version"
+      - "{{BaseURL}}/api/v1/version"
+
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 401
+          - 403
+          - 500
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/graphql"
+      - "{{BaseURL}}/graphql"
+
+    headers:
+      Content-Type: "application/json"
+
+    body: |
+      {
+        "query": "{ __schema { types { name } } }"
+      }
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        words:
+          - "__schema"
+          - "types"
+          - "Query"
+          - "Mutation"
+        condition: or
+
+    extractors:
+      - type: json
+        name: graphql_types
+        json:
+          - '.data.__schema.types[].name'
