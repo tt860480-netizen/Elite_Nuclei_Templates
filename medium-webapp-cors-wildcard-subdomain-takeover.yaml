@@ -1,0 +1,399 @@
+id: medium-webapp-cors-wildcard-subdomain-takeover
+
+info:
+  name: CORS Wildcard Subdomain Takeover - Elite Red Team
+  author: elite-red-team
+  severity: high
+  description: |
+    Advanced CORS wildcard exploitation with subdomain takeover techniques.
+    Tests for CORS misconfigurations that allow subdomain wildcard bypass.
+    Includes multiple origin manipulation and subdomain takeover scenarios.
+  reference:
+    - https://portswigger.net/web-security/cors
+    - https://owasp.org/www-community/attacks/CORS_OriginHeaderScrutiny
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:H/I:H/A:N
+    cvss-score: 8.1
+    cwe-id: CWE-346
+  tags: cors,subdomain-takeover,origin-bypass,red-team
+
+variables:
+  # Common subdomain patterns for takeover
+  subdomain_patterns:
+    - "api"
+    - "admin"
+    - "dev"
+    - "test"
+    - "staging"
+    - "beta"
+    - "www"
+    - "mail"
+    - "ftp"
+    - "cdn"
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/user"
+      - "{{BaseURL}}/api/admin"
+      - "{{BaseURL}}/api/data"
+      - "{{BaseURL}}/admin/users"
+      - "{{BaseURL}}/user/profile"
+
+    headers:
+      Origin: https://evil.{{Hostname}}
+      X-Forwarded-For: 127.0.0.1
+      X-Real-IP: 127.0.0.1
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Origin: https://evil.{{Hostname}}"
+          - "Access-Control-Allow-Origin: *"
+        condition: or
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Credentials: true"
+
+    extractors:
+      - type: regex
+        part: header
+        regex:
+          - 'Access-Control-Allow-Origin:\s*([^\r\n]+)'
+          - 'Access-Control-Allow-Methods:\s*([^\r\n]+)'
+          - 'Access-Control-Allow-Headers:\s*([^\r\n]+)'
+
+  - method: OPTIONS
+    path:
+      - "{{BaseURL}}/api/sensitive"
+      - "{{BaseURL}}/api/admin"
+
+    headers:
+      Origin: https://api.evil.com
+      Access-Control-Request-Method: GET
+      Access-Control-Request-Headers: X-Custom-Header, Authorization
+      X-Forwarded-Proto: https
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 204
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Origin"
+
+      - type: word
+        part: header
+        words:
+          - "api.evil.com"
+          - "*"
+        condition: or
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/user"
+
+    headers:
+      Origin: https://{{Hostname}}.evil.com
+      Cookie: session=admin_session_token
+      Authorization: Bearer admin_token
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Origin"
+
+      - type: word
+        part: header
+        words:
+          - "{{Hostname}}.evil.com"
+          - "*"
+        condition: or
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/admin/users"
+
+    headers:
+      Content-Type: application/json
+      Origin: https://admin-{{Hostname}}.evil.com
+      X-Requested-With: XMLHttpRequest
+
+    body: |
+      {
+        "username": "newadmin",
+        "role": "admin",
+        "password": "password123"
+      }
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 201
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Origin"
+
+      - type: word
+        part: body
+        words:
+          - "admin"
+          - "created"
+          - "success"
+        condition: or
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/data"
+
+    headers:
+      Origin: https://dev.{{Hostname}}.attacker.com
+      Referer: https://dev.{{Hostname}}.attacker.com
+      X-Forwarded-Host: dev.{{Hostname}}.attacker.com
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Origin"
+
+      - type: word
+        part: header
+        words:
+          - "dev.{{Hostname}}.attacker.com"
+          - "*"
+        condition: or
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/sensitive"
+
+    headers:
+      Origin: https://test-{{Hostname}}.herokuapp.com
+      User-Agent: Mozilla/5.0 (compatible; CORS-Test)
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Origin"
+
+      - type: word
+        part: header
+        words:
+          - "test-{{Hostname}}.herokuapp.com"
+          - "*"
+        condition: or
+
+  - method: OPTIONS
+    path:
+      - "{{BaseURL}}/api/admin"
+
+    headers:
+      Origin: https://staging.{{Hostname}}.github.io
+      Access-Control-Request-Method: DELETE
+      Access-Control-Request-Headers: Authorization, X-API-Key
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 204
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Origin"
+
+      - type: word
+        part: header
+        words:
+          - "staging.{{Hostname}}.github.io"
+          - "*"
+        condition: or
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/user/profile"
+
+    headers:
+      Origin: https://beta-{{Hostname}}.netlify.app
+      Cookie: auth_token=sensitive_token
+      X-API-Key: secret_api_key
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Origin"
+
+      - type: word
+        part: header
+        words:
+          - "beta-{{Hostname}}.netlify.app"
+          - "*"
+        condition: or
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/upload"
+
+    headers:
+      Content-Type: application/json
+      Origin: https://cdn.{{Hostname}}.s3.amazonaws.com
+      X-Forwarded-For: 127.0.0.1
+
+    body: |
+      {
+        "file": "malicious_payload.js",
+        "content": "alert('XSS via CORS')"
+      }
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 201
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Origin"
+
+      - type: word
+        part: header
+        words:
+          - "cdn.{{Hostname}}.s3.amazonaws.com"
+          - "*"
+        condition: or
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/config"
+
+    headers:
+      Origin: https://www.{{Hostname}}.evil.com
+      X-Forwarded-Proto: https
+      X-Forwarded-Host: www.{{Hostname}}.evil.com
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Origin"
+
+      - type: word
+        part: header
+        words:
+          - "www.{{Hostname}}.evil.com"
+          - "*"
+        condition: or
+
+  - method: DELETE
+    path:
+      - "{{BaseURL}}/api/admin/user/1"
+
+    headers:
+      Origin: https://mail.{{Hostname}}.attacker.net
+      Authorization: Bearer hijacked_token
+      Content-Type: application/json
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 204
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Origin"
+
+      - type: word
+        part: header
+        words:
+          - "mail.{{Hostname}}.attacker.net"
+          - "*"
+        condition: or
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/secrets"
+
+    headers:
+      Origin: https://ftp-{{Hostname}}.malicious.org
+      Cookie: admin=true; role=superuser
+      X-Custom-Header: bypass
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Origin"
+
+      - type: word
+        part: header
+        words:
+          - "ftp-{{Hostname}}.malicious.org"
+          - "*"
+        condition: or
+
+    extractors:
+      - type: regex
+        part: body
+        regex:
+          - '"api_key":\s*"([^"]+)"'
+          - '"secret":\s*"([^"]+)"'
+          - '"token":\s*"([^"]+)"'
+          - '"password":\s*"([^"]+)"'

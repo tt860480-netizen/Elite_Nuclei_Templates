@@ -1,0 +1,391 @@
+id: medium-webapp-advanced-idor-uuid-prediction
+
+info:
+  name: Advanced IDOR with UUID Prediction - Elite Red Team
+  author: elite-red-team
+  severity: high
+  description: |
+    Advanced Insecure Direct Object Reference with UUID prediction techniques.
+    Tests for predictable UUID patterns, sequential IDs, and weak randomization.
+    Includes multiple IDOR exploitation vectors and ID enumeration methods.
+  reference:
+    - https://portswigger.net/web-security/access-control/idor
+    - https://owasp.org/www-project-web-security-testing-guide/v42/4-Web_Application_Security_Testing/05-Authorization_Testing/04-Testing_for_Insecure_Direct_Object_References
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:L/A:N
+    cvss-score: 7.1
+    cwe-id: CWE-639
+  tags: idor,uuid-prediction,access-control,enumeration,red-team
+
+variables:
+  # Common UUID patterns for prediction
+  uuid_patterns:
+    - "00000000-0000-0000-0000-000000000001"
+    - "11111111-1111-1111-1111-111111111111"
+    - "12345678-1234-1234-1234-123456789012"
+    - "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/user/1"
+      - "{{BaseURL}}/api/user/2"
+      - "{{BaseURL}}/api/user/3"
+      - "{{BaseURL}}/api/user/100"
+      - "{{BaseURL}}/api/user/999"
+      - "{{BaseURL}}/user/profile/1"
+      - "{{BaseURL}}/user/profile/2"
+
+    headers:
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+      Authorization: Bearer {{token}}
+      X-Forwarded-For: 127.0.0.1
+      X-Real-IP: 127.0.0.1
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "user"
+          - "profile"
+          - "email"
+          - "username"
+          - "id"
+        condition: or
+
+      - type: word
+        part: body
+        words:
+          - "unauthorized"
+          - "forbidden"
+          - "access denied"
+        condition: and
+        negative: true
+
+    extractors:
+      - type: regex
+        part: body
+        regex:
+          - '"id":\s*"?(\d+)"?'
+          - '"user_id":\s*"?(\d+)"?'
+          - '"email":\s*"([^"]+)"'
+          - '"username":\s*"([^"]+)"'
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/document/00000000-0000-0000-0000-000000000001"
+      - "{{BaseURL}}/api/document/11111111-1111-1111-1111-111111111111"
+      - "{{BaseURL}}/api/document/12345678-1234-1234-1234-123456789012"
+      - "{{BaseURL}}/api/file/aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+      - "{{BaseURL}}/document/bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+
+    headers:
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+      Authorization: Bearer {{token}}
+      X-Forwarded-Proto: https
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "document"
+          - "file"
+          - "content"
+          - "data"
+        condition: or
+
+    extractors:
+      - type: regex
+        part: body
+        regex:
+          - '"uuid":\s*"([a-f0-9-]{36})"'
+          - '"document_id":\s*"([a-f0-9-]{36})"'
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/order/{{BaseURL}}/api/order/ORD-000001"
+      - "{{BaseURL}}/api/order/ORD-000002"
+      - "{{BaseURL}}/api/order/ORD-000100"
+      - "{{BaseURL}}/order/INV-2024-001"
+      - "{{BaseURL}}/order/INV-2024-002"
+
+    headers:
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+      Cookie: session={{session_id}}
+      X-Forwarded-For: 127.0.0.1
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "order"
+          - "invoice"
+          - "amount"
+          - "customer"
+        condition: or
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/message/MSG-{{timestamp}}-001"
+      - "{{BaseURL}}/api/message/MSG-{{timestamp}}-002"
+      - "{{BaseURL}}/message/{{timestamp}}001"
+      - "{{BaseURL}}/message/{{timestamp}}002"
+
+    headers:
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+      Authorization: Bearer {{token}}
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "message"
+          - "content"
+          - "sender"
+          - "recipient"
+        condition: or
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/admin/user/1"
+      - "{{BaseURL}}/api/admin/user/2"
+      - "{{BaseURL}}/admin/users/1"
+      - "{{BaseURL}}/admin/users/100"
+
+    headers:
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+      Authorization: Bearer {{admin_token}}
+      X-Forwarded-Proto: https
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "admin"
+          - "user"
+          - "role"
+          - "permissions"
+        condition: or
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/report/RPT-001"
+      - "{{BaseURL}}/api/report/RPT-002"
+      - "{{BaseURL}}/api/report/RPT-100"
+      - "{{BaseURL}}/report/2024-01-001"
+      - "{{BaseURL}}/report/2024-01-002"
+
+    headers:
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+      Cookie: auth_token={{auth_token}}
+      X-Forwarded-For: 127.0.0.1
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "report"
+          - "data"
+          - "analytics"
+          - "statistics"
+        condition: or
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/ticket/TKT-000001"
+      - "{{BaseURL}}/api/ticket/TKT-000002"
+      - "{{BaseURL}}/api/ticket/TKT-000100"
+      - "{{BaseURL}}/support/ticket/1"
+      - "{{BaseURL}}/support/ticket/2"
+
+    headers:
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+      Authorization: Bearer {{token}}
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "ticket"
+          - "support"
+          - "issue"
+          - "status"
+        condition: or
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/payment/PAY-{{date}}-001"
+      - "{{BaseURL}}/api/payment/PAY-{{date}}-002"
+      - "{{BaseURL}}/payment/TXN-001"
+      - "{{BaseURL}}/payment/TXN-002"
+
+    headers:
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+      Authorization: Bearer {{token}}
+      X-Forwarded-Proto: https
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "payment"
+          - "transaction"
+          - "amount"
+          - "card"
+        condition: or
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/backup/BCK-001"
+      - "{{BaseURL}}/api/backup/BCK-002"
+      - "{{BaseURL}}/backup/daily-001"
+      - "{{BaseURL}}/backup/daily-002"
+
+    headers:
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+      Authorization: Bearer {{admin_token}}
+      X-Forwarded-For: 127.0.0.1
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "backup"
+          - "database"
+          - "file"
+          - "restore"
+        condition: or
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/log/LOG-{{date}}-001"
+      - "{{BaseURL}}/api/log/LOG-{{date}}-002"
+      - "{{BaseURL}}/logs/access-001"
+      - "{{BaseURL}}/logs/error-001"
+
+    headers:
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+      Authorization: Bearer {{admin_token}}
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "log"
+          - "timestamp"
+          - "event"
+          - "error"
+        condition: or
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/config/CFG-001"
+      - "{{BaseURL}}/api/config/CFG-002"
+      - "{{BaseURL}}/config/app-001"
+      - "{{BaseURL}}/config/db-001"
+
+    headers:
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+      Authorization: Bearer {{admin_token}}
+      X-Forwarded-Proto: https
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "config"
+          - "settings"
+          - "database"
+          - "api_key"
+        condition: or
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/session/SES-{{timestamp}}-001"
+      - "{{BaseURL}}/api/session/SES-{{timestamp}}-002"
+      - "{{BaseURL}}/session/active-001"
+      - "{{BaseURL}}/session/active-002"
+
+    headers:
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+      Cookie: session_id={{session_id}}
+      X-Forwarded-For: 127.0.0.1
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "session"
+          - "user_id"
+          - "expires"
+          - "token"
+        condition: or
+
+    extractors:
+      - type: regex
+        part: body
+        regex:
+          - '"session_id":\s*"([^"]+)"'
+          - '"user_id":\s*"?(\d+)"?'
+          - '"token":\s*"([^"]+)"'
+          - '"expires":\s*"([^"]+)"'

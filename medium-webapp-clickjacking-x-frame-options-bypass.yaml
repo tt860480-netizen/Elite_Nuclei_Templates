@@ -1,0 +1,406 @@
+id: medium-webapp-clickjacking-x-frame-options-bypass
+
+info:
+  name: X-Frame-Options Bypass Clickjacking - Elite Red Team
+  author: elite-red-team
+  severity: medium
+  description: |
+    Advanced X-Frame-Options bypass techniques for clickjacking attacks.
+    Tests for frame busting bypass, CSP frame-ancestors bypass, and iframe sandbox escape.
+    Includes multiple evasion techniques and protocol manipulation methods.
+  reference:
+    - https://portswigger.net/web-security/clickjacking
+    - https://owasp.org/www-community/attacks/Clickjacking
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:L/I:L/A:N
+    cvss-score: 5.4
+    cwe-id: CWE-1021
+  tags: clickjacking,x-frame-options,frame-busting,bypass,red-team
+
+variables:
+  # Sensitive pages that should be protected from framing
+  sensitive_pages:
+    - "/admin"
+    - "/profile"
+    - "/settings"
+    - "/account"
+    - "/dashboard"
+    - "/transfer"
+    - "/payment"
+    - "/delete"
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/admin"
+      - "{{BaseURL}}/profile"
+      - "{{BaseURL}}/settings"
+      - "{{BaseURL}}/account"
+      - "{{BaseURL}}/dashboard"
+      - "{{BaseURL}}/user/profile"
+      - "{{BaseURL}}/admin/users"
+
+    headers:
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+      X-Forwarded-For: 127.0.0.1
+      X-Real-IP: 127.0.0.1
+      Referer: https://evil.com/iframe-test
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: header
+        words:
+          - "X-Frame-Options: DENY"
+          - "X-Frame-Options: SAMEORIGIN"
+          - "Content-Security-Policy"
+        condition: and
+        negative: true
+
+      - type: word
+        part: body
+        words:
+          - "admin"
+          - "profile"
+          - "settings"
+          - "dashboard"
+          - "account"
+        condition: or
+
+    extractors:
+      - type: regex
+        part: header
+        regex:
+          - 'X-Frame-Options:\s*([^\r\n]+)'
+          - 'Content-Security-Policy:\s*([^\r\n]*frame-ancestors[^\r\n]*)'
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/admin"
+      - "{{BaseURL}}/profile"
+
+    headers:
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+      X-Forwarded-Proto: https
+      # Test with different protocols
+      X-Forwarded-Host: evil.com
+      Origin: https://evil.com
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: header
+        words:
+          - "X-Frame-Options: ALLOWALL"
+          - "X-Frame-Options: ALLOW-FROM https://evil.com"
+        condition: or
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/settings"
+
+    headers:
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+      # Test with null origin
+      Origin: null
+      Referer: null
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: header
+        words:
+          - "X-Frame-Options"
+        negative: true
+
+      - type: word
+        part: body
+        words:
+          - "settings"
+          - "account"
+        condition: or
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/admin"
+
+    headers:
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+      # Test with data URI origin
+      Origin: data:text/html,<iframe src="{{BaseURL}}/admin"></iframe>
+      X-Forwarded-For: 127.0.0.1
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: header
+        words:
+          - "X-Frame-Options: DENY"
+        negative: true
+
+      - type: word
+        part: body
+        words:
+          - "admin"
+          - "dashboard"
+        condition: or
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/profile"
+
+    headers:
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+      # Test with file protocol
+      Origin: file://
+      Referer: file:///C:/evil.html
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: header
+        words:
+          - "X-Frame-Options"
+        negative: true
+
+      - type: word
+        part: body
+        words:
+          - "profile"
+          - "user"
+        condition: or
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/dashboard"
+
+    headers:
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+      # Test with chrome-extension protocol
+      Origin: chrome-extension://abcdefghijklmnopqrstuvwxyz
+      X-Forwarded-Proto: https
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: header
+        words:
+          - "X-Frame-Options: DENY"
+        negative: true
+
+      - type: word
+        part: body
+        words:
+          - "dashboard"
+          - "admin"
+        condition: or
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/account"
+
+    headers:
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+      # Test with moz-extension protocol
+      Origin: moz-extension://12345678-1234-1234-1234-123456789abc
+      Referer: moz-extension://12345678-1234-1234-1234-123456789abc/evil.html
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: header
+        words:
+          - "X-Frame-Options"
+        negative: true
+
+      - type: word
+        part: body
+        words:
+          - "account"
+          - "settings"
+        condition: or
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/admin/users"
+
+    headers:
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+      # Test with about:blank
+      Origin: about:blank
+      Referer: about:blank
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: header
+        words:
+          - "X-Frame-Options: DENY"
+        negative: true
+
+      - type: word
+        part: body
+        words:
+          - "users"
+          - "admin"
+        condition: or
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/transfer"
+      - "{{BaseURL}}/payment"
+
+    headers:
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+      # Test with javascript protocol
+      Origin: javascript:void(0)
+      X-Forwarded-For: 127.0.0.1
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: header
+        words:
+          - "X-Frame-Options"
+        negative: true
+
+      - type: word
+        part: body
+        words:
+          - "transfer"
+          - "payment"
+          - "amount"
+          - "send"
+        condition: or
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/settings"
+
+    headers:
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+      # Test with vbscript protocol
+      Origin: vbscript:msgbox("XSS")
+      Referer: vbscript:evil()
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: header
+        words:
+          - "X-Frame-Options: DENY"
+        negative: true
+
+      - type: word
+        part: body
+        words:
+          - "settings"
+          - "configuration"
+        condition: or
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/admin"
+
+    headers:
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+      # Test with blob protocol
+      Origin: blob:https://evil.com/12345678-1234-1234-1234-123456789abc
+      X-Forwarded-Proto: https
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: header
+        words:
+          - "X-Frame-Options"
+        negative: true
+
+      - type: word
+        part: body
+        words:
+          - "admin"
+          - "control"
+        condition: or
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/profile"
+
+    headers:
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+      # Test with filesystem protocol
+      Origin: filesystem:https://evil.com/persistent/
+      Referer: filesystem:https://evil.com/persistent/evil.html
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: header
+        words:
+          - "X-Frame-Options: SAMEORIGIN"
+        negative: true
+
+      - type: word
+        part: body
+        words:
+          - "profile"
+          - "personal"
+        condition: or
+
+    extractors:
+      - type: regex
+        part: body
+        regex:
+          - 'if\s*\(\s*top\s*[!=]=\s*self\s*\)'
+          - 'if\s*\(\s*parent\s*[!=]=\s*window\s*\)'
+          - 'top\.location\s*=\s*self\.location'
+          - 'parent\.location\s*=\s*window\.location'
