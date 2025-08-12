@@ -1,0 +1,233 @@
+id: medium-auth-remember-me-token-hijacking
+
+info:
+  name: Remember Me Token Hijacking Attack
+  author: elite-red-team
+  severity: medium
+  description: |
+    Detects remember me token hijacking vulnerabilities where persistent login
+    tokens can be stolen, reused, or predicted. Tests for weak token generation,
+    token exposure, and session fixation through remember me functionality.
+  reference:
+    - https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/06-Session_Management_Testing/02-Testing_for_Cookies_Attributes
+    - https://portswigger.net/web-security/authentication/other-mechanisms
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N
+    cvss-score: 7.5
+    cwe-id: CWE-384
+  metadata:
+    verified: true
+    max-request: 8
+  tags: remember-me,token-hijacking,session-fixation,persistent-login,red-team
+
+variables:
+  weak_tokens: ["12345678", "abcdefgh", "remember123", "token123"]
+  predictable_patterns: ["user_123_token", "remember_admin_001", "persistent_user1"]
+
+http:
+  - raw:
+      - |
+        POST /login HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Content-Type: application/x-www-form-urlencoded
+        Content-Length: 65
+        Connection: close
+        
+        username=testuser&password=testpass&remember_me=1
+
+      - |
+        GET /api/auth/remember-token HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Accept: application/json
+        Connection: close
+
+      - |
+        POST /api/auth/validate-remember-token HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Content-Type: application/json
+        Content-Length: 85
+        Connection: close
+        
+        {"remember_token":"{{remember_token}}","user_id":"admin"}
+
+      - |
+        GET /dashboard HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Cookie: remember_token={{remember_token}}; user_id=admin
+        Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8
+        Connection: close
+
+      - |
+        POST /api/auth/validate-remember-token HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Content-Type: application/json
+        Content-Length: 85
+        Connection: close
+        
+        {"remember_token":"12345678","user_id":"admin"}
+
+      - |
+        GET /profile HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Cookie: remember_me=user_123_token; session_id=hijacked_session
+        Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8
+        Connection: close
+
+      - |
+        POST /api/auth/remember-me/extend HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Content-Type: application/json
+        Content-Length: 85
+        Connection: close
+        
+        {"remember_token":"{{remember_token}}","extend_days":365}
+
+      - |
+        GET /api/auth/remember-tokens/list HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Accept: application/json
+        Connection: close
+
+    extractors:
+      - type: regex
+        name: remember_token
+        part: header_1
+        group: 1
+        regex:
+          - 'Set-Cookie:\s*remember[_-]?(?:me|token)[=:]([^;]+)'
+          - 'Set-Cookie:\s*persistent[_-]?token[=:]([^;]+)'
+          - 'Set-Cookie:\s*auth[_-]?token[=:]([^;]+)'
+        internal: true
+
+      - type: regex
+        name: remember_token_body
+        part: body_2
+        group: 1
+        regex:
+          - '"remember_token":\s*"([^"]+)"'
+          - '"persistent_token":\s*"([^"]+)"'
+          - '"auth_token":\s*"([^"]+)"'
+        internal: true
+
+    matchers-condition: or
+    matchers:
+      - type: dsl
+        name: remember-token-exposed
+        dsl:
+          - 'status_code_2 == 200'
+          - 'contains(body_2, "remember_token") || contains(body_2, "persistent_token")'
+          - 'len(remember_token_body) > 0'
+        condition: and
+
+      - type: dsl
+        name: token-hijacking-successful
+        dsl:
+          - 'status_code_3 == 200'
+          - 'contains(body_3, "valid") || contains(body_3, "authenticated")'
+          - 'contains(body_3, "admin") || contains(body_3, "success")'
+        condition: and
+
+      - type: dsl
+        name: cookie-based-authentication-bypass
+        dsl:
+          - 'status_code_4 == 200'
+          - 'contains(body_4, "dashboard") || contains(body_4, "welcome")'
+          - '!contains(body_4, "login required") && !contains(body_4, "unauthorized")'
+        condition: and
+
+      - type: dsl
+        name: weak-token-accepted
+        dsl:
+          - 'status_code_5 == 200'
+          - 'contains(body_5, "authenticated") || contains(body_5, "valid")'
+          - '!contains(body_5, "invalid token")'
+        condition: and
+
+      - type: dsl
+        name: predictable-token-bypass
+        dsl:
+          - 'status_code_6 == 200'
+          - 'contains(body_6, "profile") || contains(body_6, "user")'
+          - '!contains(body_6, "access denied")'
+        condition: and
+
+      - type: dsl
+        name: token-extension-vulnerability
+        dsl:
+          - 'status_code_7 == 200'
+          - 'contains(body_7, "extended") || contains(body_7, "updated")'
+          - 'contains(body_7, "365") || contains(body_7, "days")'
+        condition: and
+
+      - type: dsl
+        name: token-enumeration
+        dsl:
+          - 'status_code_8 == 200'
+          - 'contains(body_8, "tokens") || contains(body_8, "remember")'
+          - 'contains(body_8, "[") && contains(body_8, "]")'
+        condition: and
+
+      - type: word
+        name: insecure-cookie-attributes
+        part: header_1
+        words:
+          - "HttpOnly"
+          - "Secure"
+          - "SameSite"
+        condition: or
+        negative: true
+
+    extractors:
+      - type: regex
+        name: cookie-data
+        part: header
+        group: 1
+        regex:
+          - 'Set-Cookie:\s*([^;]+remember[^;]*)'
+          - 'Set-Cookie:\s*([^;]+persistent[^;]*)'
+          - 'Set-Cookie:\s*([^;]+auth[^;]*)'
+
+      - type: regex
+        name: token-info
+        part: body
+        group: 1
+        regex:
+          - '"remember_token":\s*"([^"]+)"'
+          - '"token_expiry":\s*"([^"]+)"'
+          - '"user_id":\s*"([^"]+)"'
+
+      - type: regex
+        name: authentication-response
+        part: body
+        group: 1
+        regex:
+          - '"message":\s*"([^"]+)"'
+          - '"status":\s*"([^"]+)"'
+          - '"authenticated":\s*(true|false)'
+
+      - type: regex
+        name: token-list
+        part: body_8
+        group: 1
+        regex:
+          - '"tokens":\s*(\[[^\]]+\])'
+          - '"active_tokens":\s*(\[[^\]]+\])'
+
+      - type: kval
+        kval:
+          - status_code_1
+          - status_code_2
+          - status_code_3
+          - status_code_4
+          - status_code_5
+          - status_code_6
+          - status_code_7
+          - status_code_8

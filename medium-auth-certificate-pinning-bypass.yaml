@@ -1,0 +1,161 @@
+id: medium-auth-certificate-pinning-bypass
+
+info:
+  name: Certificate Pinning Bypass Detection
+  author: elite-red-team
+  severity: medium
+  description: |
+    Detects certificate pinning bypass vulnerabilities where SSL/TLS certificate
+    validation can be bypassed. Tests for weak pinning implementation, fallback
+    mechanisms, and certificate validation bypass techniques used by red teams.
+  reference:
+    - https://owasp.org/www-community/controls/Certificate_and_Public_Key_Pinning
+    - https://www.netspi.com/blog/technical/mobile-application-penetration-testing/four-ways-bypass-android-ssl-verification-certificate-pinning/
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:N
+    cvss-score: 7.4
+    cwe-id: CWE-295
+  metadata:
+    verified: true
+    max-request: 6
+  tags: ssl,tls,certificate,pinning,bypass,mitm,red-team
+
+http:
+  - raw:
+      - |
+        GET / HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8
+        Connection: close
+
+      - |
+        GET /api/config HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        X-Forwarded-Proto: http
+        X-Forwarded-For: 127.0.0.1
+        Accept: application/json
+        Connection: close
+
+      - |
+        GET /api/health HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        X-SSL-Client-Verify: NONE
+        X-SSL-Client-DN: 
+        Accept: application/json
+        Connection: close
+
+      - |
+        GET /.well-known/security.txt HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Accept: text/plain
+        Connection: close
+
+      - |
+        OPTIONS /api/auth HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Origin: http://evil.com
+        Access-Control-Request-Method: POST
+        Access-Control-Request-Headers: X-Custom-Header
+        Connection: close
+
+      - |
+        POST /api/cert-validation HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Content-Type: application/json
+        Content-Length: 156
+        Connection: close
+        
+        {"certificate":"-----BEGIN CERTIFICATE-----\nMIIBkTCB+wIJAL7dGJp5FjJdMA0GCSqGSIb3DQEBCwUAMBQxEjAQBgNVBAMMCWV2aWwuY29tMA==\n-----END CERTIFICATE-----","validate":false}
+
+    matchers-condition: or
+    matchers:
+      - type: dsl
+        name: weak-ssl-configuration
+        dsl:
+          - 'contains(header_1, "Strict-Transport-Security") == false'
+          - 'contains(header_1, "Public-Key-Pins") == false'
+          - 'status_code_1 == 200'
+        condition: and
+
+      - type: dsl
+        name: http-fallback-allowed
+        dsl:
+          - 'status_code_2 == 200'
+          - 'contains(header_2, "X-Forwarded-Proto: http")'
+          - '!contains(body_2, "https required") && !contains(body_2, "ssl required")'
+        condition: and
+
+      - type: dsl
+        name: ssl-client-verification-bypass
+        dsl:
+          - 'status_code_3 == 200'
+          - 'contains(body_3, "health") || contains(body_3, "ok") || contains(body_3, "status")'
+          - '!contains(body_3, "certificate required")'
+        condition: and
+
+      - type: word
+        name: security-policy-missing
+        part: body_4
+        words:
+          - "certificate pinning"
+          - "ssl pinning"
+          - "public key pinning"
+        condition: or
+        negative: true
+
+      - type: dsl
+        name: cors-ssl-bypass
+        dsl:
+          - 'status_code_5 == 200'
+          - 'contains(header_5, "Access-Control-Allow-Origin")'
+          - 'contains(header_5, "http://") || contains(header_5, "*")'
+        condition: and
+
+      - type: dsl
+        name: certificate-validation-disabled
+        dsl:
+          - 'status_code_6 == 200'
+          - 'contains(body_6, "success") || contains(body_6, "accepted")'
+          - 'contains(body_6, "validate\":false") || contains(body_6, "validation disabled")'
+        condition: and
+
+    extractors:
+      - type: regex
+        name: ssl-headers
+        part: header
+        group: 1
+        regex:
+          - '(Strict-Transport-Security:[^\r\n]+)'
+          - '(Public-Key-Pins:[^\r\n]+)'
+          - '(Content-Security-Policy:[^\r\n]+)'
+
+      - type: regex
+        name: certificate-info
+        part: body
+        group: 1
+        regex:
+          - '"certificate":\s*"([^"]+)"'
+          - '"fingerprint":\s*"([^"]+)"'
+          - '"issuer":\s*"([^"]+)"'
+
+      - type: regex
+        name: cors-headers
+        part: header_5
+        group: 1
+        regex:
+          - 'Access-Control-Allow-Origin:\s*([^\r\n]+)'
+          - 'Access-Control-Allow-Methods:\s*([^\r\n]+)'
+
+      - type: kval
+        kval:
+          - status_code_1
+          - status_code_2
+          - status_code_3
+          - status_code_5
+          - status_code_6
