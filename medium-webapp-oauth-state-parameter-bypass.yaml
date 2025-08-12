@@ -1,0 +1,287 @@
+id: medium-webapp-oauth-state-parameter-bypass
+
+info:
+  name: OAuth State Parameter Bypass - Elite Red Team
+  author: elite-red-team
+  severity: medium
+  description: |
+    Advanced OAuth state parameter manipulation and bypass techniques.
+    Tests for OAuth implementations that don't properly validate state parameter.
+    Includes CSRF attacks via state parameter manipulation and bypass methods.
+  reference:
+    - https://portswigger.net/web-security/oauth
+    - https://owasp.org/www-community/attacks/csrf
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:L/I:L/A:N
+    cvss-score: 5.4
+    cwe-id: CWE-352
+  tags: oauth,csrf,state-parameter,bypass,red-team
+
+variables:
+  # Common OAuth endpoints
+  oauth_paths:
+    - "/oauth/authorize"
+    - "/auth/oauth"
+    - "/login/oauth"
+    - "/api/oauth/authorize"
+    - "/oauth2/authorize"
+    - "/auth/oauth2"
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/oauth/authorize"
+      - "{{BaseURL}}/auth/oauth/authorize"
+      - "{{BaseURL}}/login/oauth/authorize"
+      - "{{BaseURL}}/api/oauth/authorize"
+      - "{{BaseURL}}/oauth2/authorize"
+
+    headers:
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+      X-Forwarded-For: 127.0.0.1
+      X-Real-IP: 127.0.0.1
+
+    # Test without state parameter
+    raw:
+      - |
+        GET {{path}}?client_id=test&redirect_uri=https://evil.com&response_type=code&scope=read HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        X-Forwarded-For: 127.0.0.1
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 302
+
+      - type: word
+        part: body
+        words:
+          - "authorize"
+          - "oauth"
+          - "login"
+          - "consent"
+        condition: or
+
+      - type: word
+        part: body
+        words:
+          - "state parameter required"
+          - "invalid state"
+          - "missing state"
+        condition: and
+        negative: true
+
+    extractors:
+      - type: regex
+        part: body
+        regex:
+          - 'name="state"\s+value="([^"]+)"'
+          - 'state=([^&\s]+)'
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/oauth/authorize"
+      - "{{BaseURL}}/auth/oauth/authorize"
+
+    # Test with empty state parameter
+    raw:
+      - |
+        GET {{path}}?client_id=test&redirect_uri=https://attacker.com&response_type=code&scope=read&state= HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Referer: https://attacker.com
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 302
+
+      - type: word
+        part: body
+        words:
+          - "authorize"
+          - "oauth"
+        condition: or
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/oauth/authorize"
+
+    # Test with predictable state parameter
+    raw:
+      - |
+        GET {{path}}?client_id=legitimate_app&redirect_uri=https://evil.com/callback&response_type=code&scope=read+write&state=123456 HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (compatible; MSIE 9.0; Windows NT 6.1; Trident/5.0)
+        X-Forwarded-Proto: https
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 302
+
+      - type: word
+        part: body
+        words:
+          - "authorize"
+          - "consent"
+        condition: or
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/oauth/authorize"
+      - "{{BaseURL}}/auth/oauth/authorize"
+
+    headers:
+      Content-Type: application/x-www-form-urlencoded
+      Origin: https://attacker.com
+      Referer: https://attacker.com
+
+    # Test state parameter manipulation in POST
+    body: |
+      client_id=test_app&redirect_uri=https://evil.com/callback&response_type=code&scope=read&state=attacker_controlled&user_consent=true
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 302
+
+      - type: word
+        part: body
+        words:
+          - "code="
+          - "authorization_code"
+          - "redirect"
+        condition: or
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/oauth/callback"
+      - "{{BaseURL}}/auth/callback"
+      - "{{BaseURL}}/login/callback"
+
+    # Test callback without state validation
+    raw:
+      - |
+        GET {{path}}?code=test_auth_code&state=malicious_state HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        X-Forwarded-For: 127.0.0.1
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 302
+
+      - type: word
+        part: body
+        words:
+          - "success"
+          - "logged in"
+          - "welcome"
+          - "dashboard"
+        condition: or
+
+      - type: word
+        part: body
+        words:
+          - "invalid state"
+          - "state mismatch"
+          - "csrf"
+        condition: and
+        negative: true
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/oauth/authorize"
+
+    # Test with multiple state parameters
+    raw:
+      - |
+        GET {{path}}?client_id=app&redirect_uri=https://evil.com&response_type=code&state=legitimate&state=malicious HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 302
+
+      - type: word
+        part: body
+        words:
+          - "authorize"
+          - "oauth"
+        condition: or
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/oauth/authorize"
+
+    # Test with URL encoded state bypass
+    raw:
+      - |
+        GET {{path}}?client_id=test&redirect_uri=https%3A//evil.com&response_type=code&state=%00null HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        X-Forwarded-Proto: https
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 302
+
+      - type: word
+        part: body
+        words:
+          - "authorize"
+          - "consent"
+        condition: or
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/oauth/authorize"
+
+    # Test with JSON injection in state
+    raw:
+      - |
+        GET {{path}}?client_id=app&redirect_uri=https://evil.com&response_type=code&state={"admin":true,"role":"admin"} HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 302
+
+      - type: word
+        part: body
+        words:
+          - "authorize"
+          - "oauth"
+        condition: or
+
+    extractors:
+      - type: regex
+        part: response
+        regex:
+          - 'Location:\s*([^\r\n]+)'
+          - 'code=([^&\s]+)'
+          - 'state=([^&\s]+)'

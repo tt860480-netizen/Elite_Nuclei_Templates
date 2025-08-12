@@ -1,0 +1,339 @@
+id: medium-webapp-websocket-csrf-attack
+
+info:
+  name: WebSocket CSRF Attack - Elite Red Team
+  author: elite-red-team
+  severity: medium
+  description: |
+    Advanced WebSocket Cross-Site Request Forgery (CSRF) exploitation.
+    Tests WebSocket endpoints for CSRF vulnerabilities and origin validation bypass.
+    Includes multiple origin spoofing techniques and connection hijacking methods.
+  reference:
+    - https://portswigger.net/web-security/websockets
+    - https://owasp.org/www-community/attacks/csrf
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:L/I:L/A:N
+    cvss-score: 5.4
+    cwe-id: CWE-352
+  tags: websocket,csrf,origin-bypass,red-team
+
+variables:
+  # Common WebSocket endpoints
+  ws_endpoints:
+    - "/ws"
+    - "/websocket"
+    - "/socket.io"
+    - "/api/ws"
+    - "/chat"
+    - "/live"
+    - "/stream"
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/ws"
+      - "{{BaseURL}}/websocket"
+      - "{{BaseURL}}/socket.io"
+      - "{{BaseURL}}/api/ws"
+      - "{{BaseURL}}/chat"
+      - "{{BaseURL}}/live"
+      - "{{BaseURL}}/stream"
+
+    headers:
+      Connection: Upgrade
+      Upgrade: websocket
+      Sec-WebSocket-Version: 13
+      Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==
+      Origin: https://evil.com
+      X-Forwarded-For: 127.0.0.1
+      X-Real-IP: 127.0.0.1
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 101
+          - 200
+          - 400
+
+      - type: word
+        part: header
+        words:
+          - "websocket"
+          - "upgrade"
+        condition: or
+
+      - type: word
+        part: body
+        words:
+          - "origin not allowed"
+          - "forbidden origin"
+          - "invalid origin"
+        condition: and
+        negative: true
+
+    extractors:
+      - type: regex
+        part: header
+        regex:
+          - 'Sec-WebSocket-Accept:\s*([^\r\n]+)'
+          - 'Sec-WebSocket-Protocol:\s*([^\r\n]+)'
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/ws"
+      - "{{BaseURL}}/websocket"
+
+    headers:
+      Connection: Upgrade
+      Upgrade: websocket
+      Sec-WebSocket-Version: 13
+      Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==
+      # Origin spoofing with null origin
+      Origin: null
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 101
+
+      - type: word
+        part: header
+        words:
+          - "websocket"
+          - "upgrade"
+        condition: and
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/ws"
+      - "{{BaseURL}}/websocket"
+
+    headers:
+      Connection: Upgrade
+      Upgrade: websocket
+      Sec-WebSocket-Version: 13
+      Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==
+      # Origin spoofing with legitimate subdomain
+      Origin: https://{{Hostname}}
+      Referer: https://{{Hostname}}
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 101
+
+      - type: word
+        part: header
+        words:
+          - "websocket"
+        condition: and
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/socket.io"
+
+    headers:
+      Connection: Upgrade
+      Upgrade: websocket
+      Sec-WebSocket-Version: 13
+      Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==
+      # Origin bypass with data URI
+      Origin: data:text/html,<script>alert('XSS')</script>
+      X-Forwarded-Proto: https
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 101
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "socket.io"
+          - "websocket"
+        condition: or
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/ws"
+
+    headers:
+      Connection: Upgrade
+      Upgrade: websocket
+      Sec-WebSocket-Version: 13
+      Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==
+      # Origin bypass with file protocol
+      Origin: file://
+      Host: {{Hostname}}
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 101
+
+      - type: word
+        part: header
+        words:
+          - "upgrade"
+          - "websocket"
+        condition: and
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/websocket"
+
+    headers:
+      Connection: Upgrade
+      Upgrade: websocket
+      Sec-WebSocket-Version: 13
+      Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==
+      # Multiple origin headers
+      Origin: https://legitimate.com
+      Origin: https://evil.com
+      X-Forwarded-For: 127.0.0.1
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 101
+
+      - type: word
+        part: header
+        words:
+          - "websocket"
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/ws"
+
+    headers:
+      Connection: Upgrade
+      Upgrade: websocket
+      Sec-WebSocket-Version: 13
+      Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==
+      # Origin bypass with chrome-extension
+      Origin: chrome-extension://abcdefghijklmnopqrstuvwxyz
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 101
+
+      - type: word
+        part: header
+        words:
+          - "websocket"
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/chat"
+      - "{{BaseURL}}/api/ws"
+
+    headers:
+      Connection: Upgrade
+      Upgrade: websocket
+      Sec-WebSocket-Version: 13
+      Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==
+      # Origin bypass with moz-extension
+      Origin: moz-extension://12345678-1234-1234-1234-123456789abc
+      X-Forwarded-Proto: https
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 101
+
+      - type: word
+        part: header
+        words:
+          - "websocket"
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/ws"
+
+    headers:
+      Connection: Upgrade
+      Upgrade: websocket
+      Sec-WebSocket-Version: 13
+      Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==
+      # Origin bypass with about:blank
+      Origin: about:blank
+      Referer: about:blank
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 101
+
+      - type: word
+        part: header
+        words:
+          - "websocket"
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/websocket"
+
+    headers:
+      Connection: Upgrade
+      Upgrade: websocket
+      Sec-WebSocket-Version: 13
+      Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==
+      # Case sensitivity bypass
+      origin: https://evil.com
+      ORIGIN: https://legitimate.com
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 101
+
+      - type: word
+        part: header
+        words:
+          - "websocket"
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/ws"
+
+    headers:
+      Connection: Upgrade
+      Upgrade: websocket
+      Sec-WebSocket-Version: 13
+      Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==
+      # Unicode bypass attempt
+      Origin: https://еvil.com
+      X-Forwarded-For: 127.0.0.1
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 101
+
+      - type: word
+        part: header
+        words:
+          - "websocket"
+
+    extractors:
+      - type: regex
+        part: header
+        regex:
+          - 'Sec-WebSocket-Accept:\s*([^\r\n]+)'
+          - 'Access-Control-Allow-Origin:\s*([^\r\n]+)'

