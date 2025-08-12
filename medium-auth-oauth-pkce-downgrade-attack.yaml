@@ -1,0 +1,125 @@
+id: medium-auth-oauth-pkce-downgrade-attack
+
+info:
+  name: OAuth PKCE Downgrade Attack Detection
+  author: nuclei-community
+  severity: medium
+  description: |
+    Detects OAuth 2.0 PKCE (Proof Key for Code Exchange) downgrade attacks where
+    an attacker can bypass PKCE protection by removing or manipulating PKCE parameters
+    to downgrade the flow to a less secure authorization code flow.
+  reference:
+    - https://datatracker.ietf.org/doc/html/rfc7636
+    - https://portswigger.net/web-security/oauth/grant-types
+    - https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/05-Authorization_Testing/05.1-Testing_OAuth
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:H/I:H/A:N
+    cvss-score: 8.1
+    cwe-id: CWE-287
+  metadata:
+    verified: true
+    max-request: 5
+  tags: oauth,pkce,downgrade,auth,bypass,medium
+
+http:
+  - raw:
+      # Test 1: Normal PKCE flow to establish baseline
+      - |
+        GET {{BaseURL}}/oauth/authorize?response_type=code&client_id=test_client&redirect_uri=https://example.com/callback&code_challenge=E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM&code_challenge_method=S256&state=xyz HTTP/1.1
+        Host: {{Hostname}}
+      
+      # Test 2: PKCE downgrade - remove code_challenge parameter
+      - |
+        GET {{BaseURL}}/oauth/authorize?response_type=code&client_id=test_client&redirect_uri=https://example.com/callback&state=xyz HTTP/1.1
+        Host: {{Hostname}}
+      
+      # Test 3: PKCE downgrade - remove code_challenge_method
+      - |
+        GET {{BaseURL}}/oauth/authorize?response_type=code&client_id=test_client&redirect_uri=https://example.com/callback&code_challenge=E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM&state=xyz HTTP/1.1
+        Host: {{Hostname}}
+      
+      # Test 4: PKCE downgrade - use plain method instead of S256
+      - |
+        GET {{BaseURL}}/oauth/authorize?response_type=code&client_id=test_client&redirect_uri=https://example.com/callback&code_challenge=dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk&code_challenge_method=plain&state=xyz HTTP/1.1
+        Host: {{Hostname}}
+      
+      # Test 5: Token exchange without PKCE verification
+      - |
+        POST {{BaseURL}}/oauth/token HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/x-www-form-urlencoded
+        
+        grant_type=authorization_code&code=test_auth_code&client_id=test_client&redirect_uri=https://example.com/callback
+
+    cookie-reuse: true
+    redirects: true
+    max-redirects: 3
+
+    matchers-condition: or
+    matchers:
+      # Detect successful authorization without PKCE
+      - type: word
+        part: body
+        words:
+          - "authorization_code"
+          - "access_token"
+          - "code="
+        condition: or
+        name: "pkce-bypass-success"
+
+      # Detect redirect with authorization code (vulnerable)
+      - type: regex
+        part: header
+        regex:
+          - '(?i)location:.*[?&]code=([a-zA-Z0-9_-]+)'
+        name: "auth-code-redirect"
+
+      # Detect successful token response without PKCE verification
+      - type: regex
+        part: body
+        regex:
+          - '(?i)"access_token"[\s]*:[\s]*"([^"]+)"'
+          - '(?i)"token_type"[\s]*:[\s]*"bearer"'
+        condition: and
+        name: "token-without-pkce"
+
+      # Detect PKCE downgrade acceptance
+      - type: word
+        part: body
+        words:
+          - '"error":"invalid_request"'
+          - '"error":"unsupported_challenge_method"'
+        condition: or
+        negative: true
+        name: "pkce-not-enforced"
+
+      # Check for successful OAuth flow without proper PKCE
+      - type: status
+        status:
+          - 200
+          - 302
+        name: "successful-response"
+
+    extractors:
+      - type: regex
+        part: header
+        name: "authorization-code"
+        regex:
+          - '(?i)location:.*[?&]code=([a-zA-Z0-9_-]+)'
+
+      - type: regex
+        part: body
+        name: "access-token"
+        regex:
+          - '(?i)"access_token"[\s]*:[\s]*"([^"]+)"'
+
+      - type: regex
+        part: body
+        name: "token-type"
+        regex:
+          - '(?i)"token_type"[\s]*:[\s]*"([^"]+)"'
+
+      - type: kval
+        part: header
+        kval:
+          - location

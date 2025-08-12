@@ -1,0 +1,146 @@
+id: medium-info-grafana-dashboard-exposure
+
+info:
+  name: Grafana Dashboard Exposure Detection
+  author: nuclei-community
+  severity: medium
+  description: |
+    Detects exposed Grafana dashboards and admin interfaces that may reveal
+    sensitive monitoring data, system metrics, infrastructure information,
+    and potentially allow unauthorized access to visualization tools.
+  reference:
+    - https://grafana.com/docs/grafana/latest/http_api/
+    - https://grafana.com/docs/grafana/latest/administration/security/
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:M/I:N/A:N
+    cvss-score: 5.3
+    cwe-id: CWE-200
+  metadata:
+    verified: true
+    max-request: 10
+  tags: grafana,dashboard,exposure,monitoring,medium
+
+http:
+  - raw:
+      # Test 1: Grafana login page
+      - |
+        GET {{BaseURL}}/login HTTP/1.1
+        Host: {{Hostname}}
+      
+      # Test 2: Grafana API health
+      - |
+        GET {{BaseURL}}/api/health HTTP/1.1
+        Host: {{Hostname}}
+        Accept: application/json
+      
+      # Test 3: Grafana dashboards API
+      - |
+        GET {{BaseURL}}/api/search HTTP/1.1
+        Host: {{Hostname}}
+        Accept: application/json
+      
+      # Test 4: Grafana datasources
+      - |
+        GET {{BaseURL}}/api/datasources HTTP/1.1
+        Host: {{Hostname}}
+        Accept: application/json
+      
+      # Test 5: Grafana admin stats
+      - |
+        GET {{BaseURL}}/api/admin/stats HTTP/1.1
+        Host: {{Hostname}}
+        Accept: application/json
+      
+      # Test 6: Grafana org info
+      - |
+        GET {{BaseURL}}/api/org HTTP/1.1
+        Host: {{Hostname}}
+        Accept: application/json
+      
+      # Test 7: Grafana public dashboards
+      - |
+        GET {{BaseURL}}/public/dashboards HTTP/1.1
+        Host: {{Hostname}}
+      
+      # Test 8: Grafana snapshot
+      - |
+        GET {{BaseURL}}/dashboard/snapshot HTTP/1.1
+        Host: {{Hostname}}
+      
+      # Test 9: Grafana metrics
+      - |
+        GET {{BaseURL}}/metrics HTTP/1.1
+        Host: {{Hostname}}
+        Accept: text/plain
+      
+      # Test 10: Grafana frontend settings
+      - |
+        GET {{BaseURL}}/api/frontend/settings HTTP/1.1
+        Host: {{Hostname}}
+        Accept: application/json
+
+    cookie-reuse: true
+    redirects: true
+    max-redirects: 3
+
+    matchers-condition: and
+    matchers:
+      # Check for successful response
+      - type: status
+        status:
+          - 200
+
+      # Detect Grafana responses
+      - type: word
+        part: body
+        words:
+          - "Grafana"
+          - "grafana"
+          - '"database"'
+          - '"version"'
+          - '"commit"'
+          - '"buildstamp"'
+          - "dashboards"
+          - "datasources"
+        condition: or
+
+    extractors:
+      - type: regex
+        part: body
+        name: "grafana-version"
+        regex:
+          - '"version"\s*:\s*"([^"]+)"'
+          - 'Grafana v([0-9.]+)'
+
+      - type: regex
+        part: body
+        name: "dashboard-info"
+        regex:
+          - '"title"\s*:\s*"([^"]+)"'
+          - '"uid"\s*:\s*"([^"]+)"'
+
+      - type: regex
+        part: body
+        name: "datasource-info"
+        regex:
+          - '"name"\s*:\s*"([^"]+)".*"type"\s*:\s*"([^"]+)"'
+          - '"url"\s*:\s*"([^"]+)"'
+
+      - type: regex
+        part: body
+        name: "organization-info"
+        regex:
+          - '"name"\s*:\s*"([^"]+)".*"id"\s*:\s*([0-9]+)'
+
+      - type: regex
+        part: body
+        name: "database-info"
+        regex:
+          - '"database"\s*:\s*"([^"]+)"'
+          - '"host"\s*:\s*"([^"]+)"'
+
+      - type: kval
+        part: header
+        kval:
+          - content_type
+          - server

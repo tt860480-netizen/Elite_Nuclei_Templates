@@ -1,0 +1,178 @@
+id: medium-info-docker-registry-api-exposure
+
+info:
+  name: Docker Registry API Exposure Detection
+  author: nuclei-community
+  severity: medium
+  description: |
+    Detects exposed Docker Registry API endpoints that may reveal sensitive information
+    including container images, tags, manifests, and potentially allow unauthorized
+    access to private repositories and image layers.
+  reference:
+    - https://docs.docker.com/registry/spec/api/
+    - https://github.com/distribution/distribution
+    - https://www.aquasec.com/cloud-native-academy/docker-container/docker-registry/
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:M/I:N/A:N
+    cvss-score: 5.3
+    cwe-id: CWE-200
+  metadata:
+    verified: true
+    max-request: 12
+  tags: docker,registry,api,exposure,container,medium
+
+http:
+  - raw:
+      # Test 1: Docker Registry API version check
+      - |
+        GET {{BaseURL}}/v2/ HTTP/1.1
+        Host: {{Hostname}}
+        Accept: application/vnd.docker.distribution.manifest.v2+json
+      
+      # Test 2: List repositories
+      - |
+        GET {{BaseURL}}/v2/_catalog HTTP/1.1
+        Host: {{Hostname}}
+        Accept: application/json
+      
+      # Test 3: Docker Registry API root
+      - |
+        GET {{BaseURL}}/v2 HTTP/1.1
+        Host: {{Hostname}}
+      
+      # Test 4: Registry ping endpoint
+      - |
+        GET {{BaseURL}}/v2/_ping HTTP/1.1
+        Host: {{Hostname}}
+      
+      # Test 5: Common repository tags
+      - |
+        GET {{BaseURL}}/v2/library/ubuntu/tags/list HTTP/1.1
+        Host: {{Hostname}}
+        Accept: application/json
+      
+      # Test 6: Common app repository
+      - |
+        GET {{BaseURL}}/v2/app/tags/list HTTP/1.1
+        Host: {{Hostname}}
+        Accept: application/json
+      
+      # Test 7: Web app repository
+      - |
+        GET {{BaseURL}}/v2/webapp/tags/list HTTP/1.1
+        Host: {{Hostname}}
+        Accept: application/json
+      
+      # Test 8: API repository
+      - |
+        GET {{BaseURL}}/v2/api/tags/list HTTP/1.1
+        Host: {{Hostname}}
+        Accept: application/json
+      
+      # Test 9: Service repository
+      - |
+        GET {{BaseURL}}/v2/service/tags/list HTTP/1.1
+        Host: {{Hostname}}
+        Accept: application/json
+      
+      # Test 10: Backend repository
+      - |
+        GET {{BaseURL}}/v2/backend/tags/list HTTP/1.1
+        Host: {{Hostname}}
+        Accept: application/json
+      
+      # Test 11: Frontend repository
+      - |
+        GET {{BaseURL}}/v2/frontend/tags/list HTTP/1.1
+        Host: {{Hostname}}
+        Accept: application/json
+      
+      # Test 12: Database repository
+      - |
+        GET {{BaseURL}}/v2/database/tags/list HTTP/1.1
+        Host: {{Hostname}}
+        Accept: application/json
+
+    cookie-reuse: true
+    redirects: true
+    max-redirects: 3
+
+    matchers-condition: and
+    matchers:
+      # Check for successful response
+      - type: status
+        status:
+          - 200
+
+      # Detect Docker Registry API responses
+      - type: word
+        part: body
+        words:
+          - '"repositories"'
+          - '"tags"'
+          - '"name"'
+          - '"tag"'
+        condition: or
+
+      # Detect Docker Registry headers
+      - type: word
+        part: header
+        words:
+          - "Docker-Distribution-Api-Version"
+          - "application/vnd.docker"
+          - "Docker-Content-Digest"
+        condition: or
+
+    extractors:
+      - type: regex
+        part: body
+        name: "repositories"
+        regex:
+          - '"repositories"\s*:\s*\[([^\]]+)\]'
+
+      - type: regex
+        part: body
+        name: "repository-names"
+        regex:
+          - '"([^"]+)"(?=\s*[,\]])'
+
+      - type: regex
+        part: body
+        name: "tags"
+        regex:
+          - '"tags"\s*:\s*\[([^\]]+)\]'
+
+      - type: regex
+        part: body
+        name: "tag-names"
+        regex:
+          - '"(latest|v?\d+\.\d+\.\d+|dev|prod|staging|test|alpha|beta|rc\d*)"'
+
+      - type: kval
+        part: header
+        name: "docker-headers"
+        kval:
+          - docker_distribution_api_version
+          - docker_content_digest
+          - content_type
+
+      - type: regex
+        part: header
+        name: "api-version"
+        regex:
+          - 'Docker-Distribution-Api-Version:\s*([^\r\n]+)'
+
+      - type: regex
+        part: body
+        name: "manifest-info"
+        regex:
+          - '"mediaType"\s*:\s*"([^"]+)"'
+          - '"digest"\s*:\s*"([^"]+)"'
+
+      - type: regex
+        part: body
+        name: "registry-info"
+        regex:
+          - '"name"\s*:\s*"([^"]+)"'
+          - '"architecture"\s*:\s*"([^"]+)"'
+          - '"os"\s*:\s*"([^"]+)"'

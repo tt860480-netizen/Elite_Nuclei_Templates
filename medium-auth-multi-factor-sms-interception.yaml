@@ -1,0 +1,177 @@
+id: medium-auth-multi-factor-sms-interception
+
+info:
+  name: Multi-Factor Authentication SMS Interception
+  author: nuclei-community
+  severity: medium
+  description: |
+    Detects vulnerabilities in SMS-based multi-factor authentication that can be
+    exploited through SIM swapping, SS7 attacks, or SMS interception techniques.
+    This template identifies weak SMS 2FA implementations and bypass methods.
+  reference:
+    - https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/04-Authentication_Testing/09-Testing_for_Weak_Cryptography
+    - https://www.nist.gov/publications/digital-identity-guidelines-authentication-and-lifecycle-management
+    - https://krebsonsecurity.com/2021/03/can-we-stop-pretending-sms-is-secure-now/
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:H/PR:N/UI:R/S:U/C:H/I:H/A:N
+    cvss-score: 7.4
+    cwe-id: CWE-287
+  metadata:
+    verified: true
+    max-request: 7
+  tags: mfa,sms,interception,2fa,bypass,medium
+
+http:
+  - raw:
+      # Test 1: Check SMS 2FA implementation
+      - |
+        POST {{BaseURL}}/auth/sms/send HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/x-www-form-urlencoded
+        
+        phone=%2B1234567890&username=testuser
+      
+      # Test 2: Test SMS code verification with timing attack
+      - |
+        POST {{BaseURL}}/auth/sms/verify HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/x-www-form-urlencoded
+        
+        phone=%2B1234567890&code=000000&username=testuser
+      
+      # Test 3: Test SMS bypass with phone number manipulation
+      - |
+        POST {{BaseURL}}/auth/sms/send HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/x-www-form-urlencoded
+        
+        phone=%2B1234567890%00&username=testuser
+      
+      # Test 4: Test SMS code reuse vulnerability
+      - |
+        POST {{BaseURL}}/auth/sms/verify HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/x-www-form-urlencoded
+        
+        phone=%2B1234567890&code=123456&username=testuser&reuse=true
+      
+      # Test 5: Test SMS rate limiting bypass
+      - |
+        POST {{BaseURL}}/auth/sms/send HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/x-www-form-urlencoded
+        X-Forwarded-For: 192.168.1.100
+        
+        phone=%2B1234567890&username=testuser
+      
+      # Test 6: Test SMS code brute force protection
+      - |
+        POST {{BaseURL}}/auth/sms/verify HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/x-www-form-urlencoded
+        
+        phone=%2B1234567890&code=111111&username=testuser
+      
+      # Test 7: Test SMS fallback bypass
+      - |
+        POST {{BaseURL}}/auth/fallback HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/x-www-form-urlencoded
+        
+        username=testuser&method=sms_bypass&reason=no_signal
+
+    cookie-reuse: true
+    redirects: true
+    max-redirects: 3
+
+    matchers-condition: or
+    matchers:
+      # Detect SMS code sent successfully
+      - type: word
+        part: body
+        words:
+          - "sms sent"
+          - "code sent"
+          - "verification code"
+          - "otp sent"
+          - "text message sent"
+        condition: or
+        name: "sms-sent"
+
+      # Detect weak SMS verification
+      - type: word
+        part: body
+        words:
+          - "verification successful"
+          - "code accepted"
+          - "authentication complete"
+          - "login successful"
+        condition: or
+        name: "sms-bypass-success"
+
+      # Detect SMS rate limiting issues
+      - type: word
+        part: body
+        words:
+          - "rate limit exceeded"
+          - "too many requests"
+          - "cooldown period"
+        condition: or
+        negative: true
+        name: "no-rate-limiting"
+
+      # Detect SMS code reuse vulnerability
+      - type: word
+        part: body
+        words:
+          - "code already used"
+          - "expired code"
+          - "invalid code"
+        condition: or
+        negative: true
+        name: "code-reuse-allowed"
+
+      # Detect successful authentication bypass
+      - type: status
+        status:
+          - 200
+          - 302
+        name: "auth-success"
+
+    extractors:
+      - type: regex
+        part: body
+        name: "sms-code"
+        regex:
+          - '(?i)(code|otp|token)[\s]*:[\s]*(\d{4,8})'
+          - '(?i)verification[\s]*code[\s]*:[\s]*(\d{4,8})'
+
+      - type: regex
+        part: body
+        name: "phone-number"
+        regex:
+          - '(?i)phone[\s]*:[\s]*(\+?[\d\s\-\(\)]+)'
+          - '(?i)mobile[\s]*:[\s]*(\+?[\d\s\-\(\)]+)'
+
+      - type: regex
+        part: body
+        name: "sms-provider"
+        regex:
+          - '(?i)(twilio|nexmo|aws[\s]*sns|messagebird|plivo)'
+
+      - type: kval
+        part: header
+        kval:
+          - set_cookie
+
+      - type: regex
+        part: body
+        name: "session-token"
+        regex:
+          - '(?i)(session|auth|token)[\s]*:[\s]*["\']?([a-zA-Z0-9+/=]{20,})["\']?'
+
+      - type: regex
+        part: response
+        name: "timing-info"
+        regex:
+          - '(?i)(response[\s]*time|duration)[\s]*:[\s]*(\d+)'

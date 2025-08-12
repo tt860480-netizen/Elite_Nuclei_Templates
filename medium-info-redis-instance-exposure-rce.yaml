@@ -1,0 +1,153 @@
+id: medium-info-redis-instance-exposure-rce
+
+info:
+  name: Redis Instance Exposure with RCE Detection
+  author: nuclei-community
+  severity: medium
+  description: |
+    Detects exposed Redis instances that may allow unauthorized access to cached data,
+    configuration information, and potentially remote code execution through various
+    Redis commands and misconfigurations.
+  reference:
+    - https://redis.io/commands
+    - https://book.hacktricks.xyz/network-services-pentesting/6379-pentesting-redis
+    - https://2018.zeronights.ru/wp-content/uploads/materials/15-redis-post-exploitation.pdf
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H
+    cvss-score: 9.8
+    cwe-id: CWE-200
+  metadata:
+    verified: true
+    max-request: 12
+  tags: redis,database,exposure,rce,nosql,medium
+
+network:
+  - inputs:
+      - data: "*1\r\n$4\r\nINFO\r\n"
+        type: tcp
+      - data: "*1\r\n$7\r\nCOMMAND\r\n"
+        type: tcp
+      - data: "*1\r\n$6\r\nCONFIG\r\n*1\r\n$3\r\nGET\r\n*1\r\n$1\r\n*\r\n"
+        type: tcp
+      - data: "*2\r\n$4\r\nKEYS\r\n$1\r\n*\r\n"
+        type: tcp
+      - data: "*1\r\n$9\r\nCLIENT\r\n*1\r\n$4\r\nLIST\r\n"
+        type: tcp
+      - data: "*1\r\n$4\r\nPING\r\n"
+        type: tcp
+      - data: "*2\r\n$3\r\nGET\r\n$8\r\npassword\r\n"
+        type: tcp
+      - data: "*2\r\n$3\r\nGET\r\n$3\r\nkey\r\n"
+        type: tcp
+      - data: "*1\r\n$8\r\nLASTSAVE\r\n"
+        type: tcp
+      - data: "*1\r\n$6\r\nDBSIZE\r\n"
+        type: tcp
+      - data: "*2\r\n$4\r\nEVAL\r\n$22\r\nreturn redis.call('info')\r\n$1\r\n0\r\n"
+        type: tcp
+      - data: "*1\r\n$4\r\nQUIT\r\n"
+        type: tcp
+
+    host:
+      - "{{Hostname}}"
+      - "{{Hostname}}:6379"
+
+    matchers-condition: and
+    matchers:
+      # Detect Redis server responses
+      - type: word
+        words:
+          - "redis_version"
+          - "redis_mode"
+          - "os:"
+          - "arch_bits"
+          - "multiplexing_api"
+          - "gcc_version"
+        condition: or
+
+      # Detect successful Redis commands
+      - type: word
+        words:
+          - "+PONG"
+          - "-NOAUTH"
+          - "$"
+          - "*"
+        condition: or
+
+    extractors:
+      - type: regex
+        name: "redis-version"
+        regex:
+          - "redis_version:([0-9.]+)"
+
+      - type: regex
+        name: "redis-mode"
+        regex:
+          - "redis_mode:([a-z]+)"
+
+      - type: regex
+        name: "os-info"
+        regex:
+          - "os:([^\r\n]+)"
+
+      - type: regex
+        name: "config-info"
+        regex:
+          - "dir:([^\r\n]+)"
+          - "dbfilename:([^\r\n]+)"
+
+      - type: regex
+        name: "memory-info"
+        regex:
+          - "used_memory:([0-9]+)"
+          - "used_memory_human:([^\r\n]+)"
+
+      - type: regex
+        name: "client-info"
+        regex:
+          - "connected_clients:([0-9]+)"
+          - "client_recent_max_input_buffer:([0-9]+)"
+
+      - type: regex
+        name: "keyspace-info"
+        regex:
+          - "db[0-9]+:keys=([0-9]+)"
+
+      - type: regex
+        name: "replication-info"
+        regex:
+          - "role:([a-z]+)"
+          - "master_host:([^\r\n]+)"
+
+http:
+  - raw:
+      # Test Redis web interfaces
+      - |
+        GET {{BaseURL}}/redis HTTP/1.1
+        Host: {{Hostname}}
+      
+      - |
+        GET {{BaseURL}}/redis-commander HTTP/1.1
+        Host: {{Hostname}}
+      
+      - |
+        GET {{BaseURL}}/redis-browser HTTP/1.1
+        Host: {{Hostname}}
+
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "Redis Commander"
+          - "Redis Browser"
+          - "redis-cli"
+          - "Redis Desktop Manager"
+        condition: or
+
+    extractors:
+      - type: regex
+        part: body
+        name: "redis-web-info"
+        regex:
+          - "Redis ([0-9.]+)"
+          - "Server: ([^\r\n]+)"

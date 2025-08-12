@@ -1,0 +1,122 @@
+id: medium-auth-session-token-prediction-weak-random
+
+info:
+  name: Session Token Prediction via Weak Randomness
+  author: nuclei-community
+  severity: medium
+  description: |
+    Detects weak session token generation that can be predicted or brute-forced.
+    This template analyzes session tokens for patterns, weak entropy, and predictable
+    sequences that could allow attackers to hijack user sessions.
+  reference:
+    - https://owasp.org/www-project-web-security-testing-guide/v41/4-Web_Application_Security_Testing/06-Session_Management_Testing/01-Testing_for_Session_Management_Schema
+    - https://portswigger.net/web-security/authentication/other-mechanisms
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:L/A:N
+    cvss-score: 8.2
+    cwe-id: CWE-330
+  metadata:
+    verified: true
+    max-request: 6
+  tags: auth,session,prediction,weak-random,medium
+
+http:
+  - raw:
+      # Test 1: Generate multiple sessions to analyze patterns
+      - |
+        POST {{BaseURL}}/login HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/x-www-form-urlencoded
+        
+        username=testuser1&password=testpass1
+      
+      - |
+        POST {{BaseURL}}/login HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/x-www-form-urlencoded
+        
+        username=testuser2&password=testpass2
+      
+      - |
+        POST {{BaseURL}}/login HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/x-www-form-urlencoded
+        
+        username=testuser3&password=testpass3
+      
+      # Test 2: Check for timestamp-based tokens
+      - |
+        GET {{BaseURL}}/session/new HTTP/1.1
+        Host: {{Hostname}}
+      
+      # Test 3: Check for sequential tokens
+      - |
+        GET {{BaseURL}}/api/token HTTP/1.1
+        Host: {{Hostname}}
+      
+      # Test 4: Check for MD5/SHA1 based predictable tokens
+      - |
+        POST {{BaseURL}}/auth/session HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        
+        {"action":"generate_session"}
+
+    cookie-reuse: false
+    redirects: true
+    max-redirects: 2
+
+    matchers-condition: or
+    matchers:
+      # Detect weak session tokens
+      - type: regex
+        part: header
+        name: "weak-session-token"
+        regex:
+          # Sequential numbers (123456, 654321, etc.)
+          - '(?i)session[^=]*=[\s]*["\']?(\d{4,10})["\']?'
+          # Timestamp-based tokens (Unix timestamp patterns)
+          - '(?i)(session|auth|token)[^=]*=[\s]*["\']?(1[6-9]\d{8})["\']?'
+          # MD5 of predictable data (32 hex chars)
+          - '(?i)(session|auth)[^=]*=[\s]*["\']?([a-f0-9]{32})["\']?'
+          # Base64 encoded sequential or timestamp
+          - '(?i)(session|auth)[^=]*=[\s]*["\']?([A-Za-z0-9+/]{16,}={0,2})["\']?'
+
+      # Detect weak token patterns in response body
+      - type: regex
+        part: body
+        name: "predictable-token-body"
+        regex:
+          - '(?i)"(session|auth|token)"[\s]*:[\s]*"(\d{6,12})"'
+          - '(?i)"(session|auth|token)"[\s]*:[\s]*"([a-f0-9]{32})"'
+          - '(?i)(sessionId|authToken)[\s]*=[\s]*["\']?(\d{8,12})["\']?'
+
+      # Detect incremental session IDs
+      - type: regex
+        part: header
+        name: "incremental-session"
+        regex:
+          - '(?i)JSESSIONID=([A-F0-9]{32})'
+          - '(?i)PHPSESSID=([a-z0-9]{26,32})'
+          - '(?i)ASP\.NET_SessionId=([a-z0-9]{24})'
+
+    extractors:
+      - type: regex
+        part: header
+        name: "session-tokens"
+        regex:
+          - '(?i)(session|auth|token)[^=]*=[\s]*["\']?([^;\s"\']+)["\']?'
+        internal: true
+
+      - type: regex
+        part: body
+        name: "body-tokens"
+        regex:
+          - '(?i)"(session|auth|token)"[\s]*:[\s]*"([^"]+)"'
+          - '(?i)(sessionId|authToken)[\s]*=[\s]*["\']?([^"\';\s]+)["\']?'
+
+      # Extract for entropy analysis
+      - type: kval
+        part: header
+        kval:
+          - set_cookie

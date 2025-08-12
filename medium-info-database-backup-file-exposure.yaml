@@ -1,0 +1,216 @@
+id: medium-info-database-backup-file-exposure
+
+info:
+  name: Database Backup File Exposure Detection
+  author: nuclei-community
+  severity: medium
+  description: |
+    Detects exposed database backup files including SQL dumps, database exports,
+    and backup archives that may contain sensitive data such as user credentials,
+    personal information, and application secrets.
+  reference:
+    - https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/01-Information_Gathering/03-Review_Webserver_Metafiles_for_Information_Leakage
+    - https://portswigger.net/kb/issues/00600400_backup-file-disclosed
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N
+    cvss-score: 7.5
+    cwe-id: CWE-200
+  metadata:
+    verified: true
+    max-request: 20
+  tags: database,backup,exposure,sql,dump,medium
+
+http:
+  - raw:
+      # Test 1: Common SQL dump files
+      - |
+        GET {{BaseURL}}/backup.sql HTTP/1.1
+        Host: {{Hostname}}
+      
+      # Test 2: Database dump with timestamp
+      - |
+        GET {{BaseURL}}/database.sql HTTP/1.1
+        Host: {{Hostname}}
+      
+      # Test 3: MySQL dump files
+      - |
+        GET {{BaseURL}}/mysql.sql HTTP/1.1
+        Host: {{Hostname}}
+      
+      # Test 4: PostgreSQL dump files
+      - |
+        GET {{BaseURL}}/postgres.sql HTTP/1.1
+        Host: {{Hostname}}
+      
+      # Test 5: Compressed backup files
+      - |
+        GET {{BaseURL}}/backup.sql.gz HTTP/1.1
+        Host: {{Hostname}}
+      
+      # Test 6: ZIP backup files
+      - |
+        GET {{BaseURL}}/database.zip HTTP/1.1
+        Host: {{Hostname}}
+      
+      # Test 7: TAR backup files
+      - |
+        GET {{BaseURL}}/backup.tar.gz HTTP/1.1
+        Host: {{Hostname}}
+      
+      # Test 8: Common backup directory
+      - |
+        GET {{BaseURL}}/backups/ HTTP/1.1
+        Host: {{Hostname}}
+      
+      # Test 9: Database exports
+      - |
+        GET {{BaseURL}}/export.sql HTTP/1.1
+        Host: {{Hostname}}
+      
+      # Test 10: Dump files with dates
+      - |
+        GET {{BaseURL}}/dump_2024.sql HTTP/1.1
+        Host: {{Hostname}}
+      
+      # Test 11: Application specific backups
+      - |
+        GET {{BaseURL}}/app_backup.sql HTTP/1.1
+        Host: {{Hostname}}
+      
+      # Test 12: User data exports
+      - |
+        GET {{BaseURL}}/users.sql HTTP/1.1
+        Host: {{Hostname}}
+      
+      # Test 13: Full database backup
+      - |
+        GET {{BaseURL}}/full_backup.sql HTTP/1.1
+        Host: {{Hostname}}
+      
+      # Test 14: SQLite database files
+      - |
+        GET {{BaseURL}}/database.db HTTP/1.1
+        Host: {{Hostname}}
+      
+      # Test 15: SQLite backup files
+      - |
+        GET {{BaseURL}}/backup.db HTTP/1.1
+        Host: {{Hostname}}
+      
+      # Test 16: MongoDB backup files
+      - |
+        GET {{BaseURL}}/mongodb_backup.json HTTP/1.1
+        Host: {{Hostname}}
+      
+      # Test 17: CSV data exports
+      - |
+        GET {{BaseURL}}/data_export.csv HTTP/1.1
+        Host: {{Hostname}}
+      
+      # Test 18: XML data exports
+      - |
+        GET {{BaseURL}}/database_export.xml HTTP/1.1
+        Host: {{Hostname}}
+      
+      # Test 19: Backup with common naming
+      - |
+        GET {{BaseURL}}/db_backup.sql HTTP/1.1
+        Host: {{Hostname}}
+      
+      # Test 20: Old backup files
+      - |
+        GET {{BaseURL}}/old_backup.sql HTTP/1.1
+        Host: {{Hostname}}
+
+    cookie-reuse: true
+    redirects: true
+    max-redirects: 3
+
+    matchers-condition: and
+    matchers:
+      # Check for successful response
+      - type: status
+        status:
+          - 200
+
+      # Detect SQL dump content
+      - type: regex
+        part: body
+        regex:
+          # MySQL dump patterns
+          - '(?i)--\s*MySQL\s*dump'
+          - '(?i)mysqldump'
+          - '(?i)CREATE\s+TABLE\s+`?(\w+)`?'
+          - '(?i)INSERT\s+INTO\s+`?(\w+)`?'
+          - '(?i)DROP\s+TABLE\s+IF\s+EXISTS'
+          # PostgreSQL dump patterns
+          - '(?i)--\s*PostgreSQL\s*database\s*dump'
+          - '(?i)pg_dump'
+          - '(?i)CREATE\s+SEQUENCE'
+          - '(?i)COPY\s+(\w+)\s+\('
+          # General SQL patterns
+          - '(?i)CREATE\s+DATABASE'
+          - '(?i)USE\s+`?(\w+)`?'
+          - '(?i)GRANT\s+.*\s+ON'
+          - '(?i)ALTER\s+TABLE'
+          # SQLite patterns
+          - 'SQLite\s+format\s+\d+'
+          - 'PRAGMA\s+foreign_keys'
+          # Database content indicators
+          - '(?i)(username|password|email|user_id).*VALUES'
+          - '(?i)INSERT\s+INTO\s+.*users'
+          - '(?i)CREATE\s+TABLE\s+.*users'
+        condition: or
+
+    extractors:
+      - type: regex
+        part: body
+        name: "database-names"
+        regex:
+          - '(?i)CREATE\s+DATABASE\s+`?(\w+)`?'
+          - '(?i)USE\s+`?(\w+)`?'
+
+      - type: regex
+        part: body
+        name: "table-names"
+        regex:
+          - '(?i)CREATE\s+TABLE\s+`?(\w+)`?'
+          - '(?i)INSERT\s+INTO\s+`?(\w+)`?'
+          - '(?i)DROP\s+TABLE\s+.*`?(\w+)`?'
+
+      - type: regex
+        part: body
+        name: "user-credentials"
+        regex:
+          - '(?i)(username|user|login)[\s]*[=,][\s]*["\']([^"\']+)["\']'
+          - '(?i)(password|pass|pwd)[\s]*[=,][\s]*["\']([^"\']+)["\']'
+          - '(?i)(email|mail)[\s]*[=,][\s]*["\']([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})["\']'
+
+      - type: regex
+        part: body
+        name: "sensitive-data"
+        regex:
+          - '(?i)(api_key|secret_key|token)[\s]*[=,][\s]*["\']([^"\']+)["\']'
+          - '(?i)(credit_card|ssn|social_security)[\s]*[=,][\s]*["\']([^"\']+)["\']'
+
+      - type: regex
+        part: body
+        name: "database-version"
+        regex:
+          - '(?i)MySQL\s+dump\s+([\d.]+)'
+          - '(?i)PostgreSQL\s+database\s+dump.*version\s+([\d.]+)'
+          - '(?i)SQLite\s+format\s+(\d+)'
+
+      - type: regex
+        part: body
+        name: "dump-metadata"
+        regex:
+          - '(?i)--\s*Host:\s*([^\s]+)'
+          - '(?i)--\s*Database:\s*([^\s]+)'
+          - '(?i)--\s*Dump\s+completed\s+on\s+(.+)'
+
+      - type: kval
+        part: header
+        kval:
+          - content_type
+          - content_length

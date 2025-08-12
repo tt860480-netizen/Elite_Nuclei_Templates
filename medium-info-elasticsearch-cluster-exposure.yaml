@@ -1,0 +1,211 @@
+id: medium-info-elasticsearch-cluster-exposure
+
+info:
+  name: Elasticsearch Cluster Exposure Detection
+  author: nuclei-community
+  severity: medium
+  description: |
+    Detects exposed Elasticsearch clusters that may reveal sensitive data including
+    indices, documents, cluster configuration, and allow unauthorized data access
+    or manipulation without proper authentication.
+  reference:
+    - https://www.elastic.co/guide/en/elasticsearch/reference/current/rest-apis.html
+    - https://www.shodan.io/report/89bnfUyJ
+    - https://blog.shodan.io/the-search-for-elasticsearch/
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:L/A:N
+    cvss-score: 8.2
+    cwe-id: CWE-200
+  metadata:
+    verified: true
+    max-request: 15
+  tags: elasticsearch,database,exposure,nosql,medium
+
+http:
+  - raw:
+      # Test 1: Elasticsearch cluster info
+      - |
+        GET {{BaseURL}}/ HTTP/1.1
+        Host: {{Hostname}}
+        Accept: application/json
+      
+      # Test 2: Cluster health status
+      - |
+        GET {{BaseURL}}/_cluster/health HTTP/1.1
+        Host: {{Hostname}}
+        Accept: application/json
+      
+      # Test 3: List all indices
+      - |
+        GET {{BaseURL}}/_cat/indices?v HTTP/1.1
+        Host: {{Hostname}}
+        Accept: text/plain
+      
+      # Test 4: Cluster stats
+      - |
+        GET {{BaseURL}}/_cluster/stats HTTP/1.1
+        Host: {{Hostname}}
+        Accept: application/json
+      
+      # Test 5: Node information
+      - |
+        GET {{BaseURL}}/_nodes HTTP/1.1
+        Host: {{Hostname}}
+        Accept: application/json
+      
+      # Test 6: Search all documents
+      - |
+        GET {{BaseURL}}/_search HTTP/1.1
+        Host: {{Hostname}}
+        Accept: application/json
+      
+      # Test 7: Mapping information
+      - |
+        GET {{BaseURL}}/_mapping HTTP/1.1
+        Host: {{Hostname}}
+        Accept: application/json
+      
+      # Test 8: Cluster settings
+      - |
+        GET {{BaseURL}}/_cluster/settings HTTP/1.1
+        Host: {{Hostname}}
+        Accept: application/json
+      
+      # Test 9: Index templates
+      - |
+        GET {{BaseURL}}/_template HTTP/1.1
+        Host: {{Hostname}}
+        Accept: application/json
+      
+      # Test 10: Aliases information
+      - |
+        GET {{BaseURL}}/_aliases HTTP/1.1
+        Host: {{Hostname}}
+        Accept: application/json
+      
+      # Test 11: Pending tasks
+      - |
+        GET {{BaseURL}}/_cluster/pending_tasks HTTP/1.1
+        Host: {{Hostname}}
+        Accept: application/json
+      
+      # Test 12: Hot threads
+      - |
+        GET {{BaseURL}}/_nodes/hot_threads HTTP/1.1
+        Host: {{Hostname}}
+        Accept: text/plain
+      
+      # Test 13: Segments information
+      - |
+        GET {{BaseURL}}/_segments HTTP/1.1
+        Host: {{Hostname}}
+        Accept: application/json
+      
+      # Test 14: Recovery information
+      - |
+        GET {{BaseURL}}/_recovery HTTP/1.1
+        Host: {{Hostname}}
+        Accept: application/json
+      
+      # Test 15: Shard allocation
+      - |
+        GET {{BaseURL}}/_cat/allocation?v HTTP/1.1
+        Host: {{Hostname}}
+        Accept: text/plain
+
+    cookie-reuse: true
+    redirects: true
+    max-redirects: 3
+
+    matchers-condition: and
+    matchers:
+      # Check for successful response
+      - type: status
+        status:
+          - 200
+
+      # Detect Elasticsearch responses
+      - type: word
+        part: body
+        words:
+          - '"cluster_name"'
+          - '"version"'
+          - '"lucene_version"'
+          - '"elasticsearch"'
+          - '"number"'
+          - '"build_hash"'
+        condition: or
+
+      # Detect Elasticsearch cluster info
+      - type: word
+        part: body
+        words:
+          - '"status"'
+          - '"timed_out"'
+          - '"number_of_nodes"'
+          - '"number_of_data_nodes"'
+          - '"active_primary_shards"'
+          - '"active_shards"'
+        condition: or
+
+    extractors:
+      - type: regex
+        part: body
+        name: "elasticsearch-version"
+        regex:
+          - '"version"\s*:\s*{\s*"number"\s*:\s*"([^"]+)"'
+          - '"lucene_version"\s*:\s*"([^"]+)"'
+
+      - type: regex
+        part: body
+        name: "cluster-info"
+        regex:
+          - '"cluster_name"\s*:\s*"([^"]+)"'
+          - '"cluster_uuid"\s*:\s*"([^"]+)"'
+
+      - type: regex
+        part: body
+        name: "node-info"
+        regex:
+          - '"number_of_nodes"\s*:\s*(\d+)'
+          - '"number_of_data_nodes"\s*:\s*(\d+)'
+
+      - type: regex
+        part: body
+        name: "indices-info"
+        regex:
+          - '"active_primary_shards"\s*:\s*(\d+)'
+          - '"active_shards"\s*:\s*(\d+)'
+          - '"indices"\s*:\s*(\d+)'
+
+      - type: regex
+        part: body
+        name: "index-names"
+        regex:
+          - '([a-zA-Z0-9_.-]+)\s+[a-z]+\s+[a-z]+\s+\d+'
+
+      - type: regex
+        part: body
+        name: "document-data"
+        regex:
+          - '"_source"\s*:\s*{([^}]+)}'
+          - '"hits"\s*:\s*{\s*"total"'
+
+      - type: regex
+        part: body
+        name: "sensitive-fields"
+        regex:
+          - '"(password|email|username|token|key|secret)"\s*:\s*"([^"]+)"'
+
+      - type: regex
+        part: body
+        name: "cluster-status"
+        regex:
+          - '"status"\s*:\s*"([^"]+)"'
+          - '"timed_out"\s*:\s*(true|false)'
+
+      - type: kval
+        part: header
+        kval:
+          - content_type
+          - server

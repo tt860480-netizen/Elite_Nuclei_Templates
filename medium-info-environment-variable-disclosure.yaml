@@ -1,0 +1,153 @@
+id: medium-info-environment-variable-disclosure
+
+info:
+  name: Environment Variable Disclosure Detection
+  author: nuclei-community
+  severity: medium
+  description: |
+    Detects exposure of environment variables containing sensitive information such as
+    API keys, database credentials, secret tokens, and configuration details through
+    various endpoints and debug pages.
+  reference:
+    - https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/01-Information_Gathering/05-Review_Webpage_Content_for_Information_Leakage
+    - https://12factor.net/config
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N
+    cvss-score: 7.5
+    cwe-id: CWE-200
+  metadata:
+    verified: true
+    max-request: 10
+  tags: env,environment,disclosure,secrets,medium
+
+http:
+  - raw:
+      # Test 1: Common environment variable endpoints
+      - |
+        GET {{BaseURL}}/env HTTP/1.1
+        Host: {{Hostname}}
+      
+      # Test 2: Environment info endpoint
+      - |
+        GET {{BaseURL}}/environment HTTP/1.1
+        Host: {{Hostname}}
+      
+      # Test 3: System info endpoint
+      - |
+        GET {{BaseURL}}/system/env HTTP/1.1
+        Host: {{Hostname}}
+      
+      # Test 4: Debug environment endpoint
+      - |
+        GET {{BaseURL}}/debug/env HTTP/1.1
+        Host: {{Hostname}}
+      
+      # Test 5: Admin environment endpoint
+      - |
+        GET {{BaseURL}}/admin/env HTTP/1.1
+        Host: {{Hostname}}
+      
+      # Test 6: API environment endpoint
+      - |
+        GET {{BaseURL}}/api/env HTTP/1.1
+        Host: {{Hostname}}
+      
+      # Test 7: Configuration endpoint
+      - |
+        GET {{BaseURL}}/config/env HTTP/1.1
+        Host: {{Hostname}}
+      
+      # Test 8: Server info endpoint
+      - |
+        GET {{BaseURL}}/server-info HTTP/1.1
+        Host: {{Hostname}}
+      
+      # Test 9: Environment variables via POST
+      - |
+        POST {{BaseURL}}/api/system/info HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        
+        {"action":"get_env","type":"all"}
+      
+      # Test 10: Process environment endpoint
+      - |
+        GET {{BaseURL}}/proc/env HTTP/1.1
+        Host: {{Hostname}}
+
+    cookie-reuse: true
+    redirects: true
+    max-redirects: 3
+
+    matchers-condition: and
+    matchers:
+      # Check for successful response
+      - type: status
+        status:
+          - 200
+
+      # Detect environment variable patterns
+      - type: regex
+        part: body
+        regex:
+          # Common environment variable patterns
+          - '(?i)(API_KEY|SECRET_KEY|ACCESS_TOKEN|PRIVATE_KEY)[\s]*[=:][\s]*["\']?([a-zA-Z0-9_\-+/=]{10,})["\']?'
+          - '(?i)(DATABASE_URL|DB_PASSWORD|DB_USER)[\s]*[=:][\s]*["\']?([^"\s\n\r]+)["\']?'
+          - '(?i)(AWS_ACCESS_KEY|AWS_SECRET|GOOGLE_API_KEY)[\s]*[=:][\s]*["\']?([a-zA-Z0-9_\-+/=]{10,})["\']?'
+          - '(?i)(REDIS_URL|MONGODB_URI|ELASTICSEARCH_URL)[\s]*[=:][\s]*["\']?([^"\s\n\r]+)["\']?'
+          - '(?i)(JWT_SECRET|SESSION_SECRET|ENCRYPTION_KEY)[\s]*[=:][\s]*["\']?([a-zA-Z0-9_\-+/=]{10,})["\']?'
+          - '(?i)(SMTP_PASSWORD|MAIL_PASSWORD|EMAIL_PASSWORD)[\s]*[=:][\s]*["\']?([^"\s\n\r]+)["\']?'
+          - '(?i)(GITHUB_TOKEN|GITLAB_TOKEN|BITBUCKET_TOKEN)[\s]*[=:][\s]*["\']?([a-zA-Z0-9_\-]{10,})["\']?'
+          - '(?i)(SLACK_TOKEN|DISCORD_TOKEN|TELEGRAM_TOKEN)[\s]*[=:][\s]*["\']?([a-zA-Z0-9_\-:]{10,})["\']?'
+          - '(?i)(STRIPE_KEY|PAYPAL_SECRET|PAYMENT_KEY)[\s]*[=:][\s]*["\']?([a-zA-Z0-9_\-]{10,})["\']?'
+          - '(?i)(CLOUDFLARE_API|DIGITALOCEAN_TOKEN|HEROKU_API_KEY)[\s]*[=:][\s]*["\']?([a-zA-Z0-9_\-]{10,})["\']?'
+        condition: or
+
+    extractors:
+      - type: regex
+        part: body
+        name: "api-keys"
+        regex:
+          - '(?i)(API_KEY|SECRET_KEY|ACCESS_TOKEN)[\s]*[=:][\s]*["\']?([a-zA-Z0-9_\-+/=]{10,})["\']?'
+
+      - type: regex
+        part: body
+        name: "database-credentials"
+        regex:
+          - '(?i)(DATABASE_URL|DB_PASSWORD|DB_USER|DB_HOST)[\s]*[=:][\s]*["\']?([^"\s\n\r]+)["\']?'
+
+      - type: regex
+        part: body
+        name: "cloud-credentials"
+        regex:
+          - '(?i)(AWS_ACCESS_KEY|AWS_SECRET|GOOGLE_API_KEY|AZURE_KEY)[\s]*[=:][\s]*["\']?([a-zA-Z0-9_\-+/=]{10,})["\']?'
+
+      - type: regex
+        part: body
+        name: "service-urls"
+        regex:
+          - '(?i)(REDIS_URL|MONGODB_URI|ELASTICSEARCH_URL|RABBITMQ_URL)[\s]*[=:][\s]*["\']?([^"\s\n\r]+)["\']?'
+
+      - type: regex
+        part: body
+        name: "encryption-secrets"
+        regex:
+          - '(?i)(JWT_SECRET|SESSION_SECRET|ENCRYPTION_KEY|PRIVATE_KEY)[\s]*[=:][\s]*["\']?([a-zA-Z0-9_\-+/=]{10,})["\']?'
+
+      - type: regex
+        part: body
+        name: "third-party-tokens"
+        regex:
+          - '(?i)(GITHUB_TOKEN|GITLAB_TOKEN|SLACK_TOKEN|STRIPE_KEY)[\s]*[=:][\s]*["\']?([a-zA-Z0-9_\-:]{10,})["\']?'
+
+      - type: regex
+        part: body
+        name: "email-credentials"
+        regex:
+          - '(?i)(SMTP_PASSWORD|MAIL_PASSWORD|EMAIL_PASSWORD|SENDGRID_API_KEY)[\s]*[=:][\s]*["\']?([^"\s\n\r]+)["\']?'
+
+      - type: regex
+        part: body
+        name: "environment-variables"
+        regex:
+          - '(?i)([A-Z_][A-Z0-9_]*?)[\s]*[=:][\s]*["\']?([^"\s\n\r]{5,})["\']?'

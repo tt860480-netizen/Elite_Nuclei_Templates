@@ -1,0 +1,188 @@
+id: medium-info-git-folder-exposure-advanced
+
+info:
+  name: Advanced Git Folder Exposure with Source Code Extraction
+  author: nuclei-community
+  severity: medium
+  description: |
+    Detects exposed .git folders and attempts to extract sensitive information including
+    source code, configuration files, commit history, and credentials. This template
+    uses advanced techniques to bypass common protections and extract maximum information.
+  reference:
+    - https://en.internetwache.org/dont-publicly-expose-git-or-how-we-downloaded-your-websites-sourcecode-an-analysis-of-alexas-1m-28-07-2015/
+    - https://blog.netspi.com/dumping-git-data-from-misconfigured-web-servers/
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N
+    cvss-score: 7.5
+    cwe-id: CWE-200
+  metadata:
+    verified: true
+    max-request: 12
+  tags: git,exposure,source-code,disclosure,medium
+
+http:
+  - raw:
+      # Test 1: Basic .git folder detection
+      - |
+        GET {{BaseURL}}/.git/ HTTP/1.1
+        Host: {{Hostname}}
+      
+      # Test 2: Git HEAD file exposure
+      - |
+        GET {{BaseURL}}/.git/HEAD HTTP/1.1
+        Host: {{Hostname}}
+      
+      # Test 3: Git config file exposure
+      - |
+        GET {{BaseURL}}/.git/config HTTP/1.1
+        Host: {{Hostname}}
+      
+      # Test 4: Git index file exposure
+      - |
+        GET {{BaseURL}}/.git/index HTTP/1.1
+        Host: {{Hostname}}
+      
+      # Test 5: Git logs exposure
+      - |
+        GET {{BaseURL}}/.git/logs/HEAD HTTP/1.1
+        Host: {{Hostname}}
+      
+      # Test 6: Git refs exposure
+      - |
+        GET {{BaseURL}}/.git/refs/heads/master HTTP/1.1
+        Host: {{Hostname}}
+      
+      # Test 7: Git refs main branch
+      - |
+        GET {{BaseURL}}/.git/refs/heads/main HTTP/1.1
+        Host: {{Hostname}}
+      
+      # Test 8: Git packed-refs
+      - |
+        GET {{BaseURL}}/.git/packed-refs HTTP/1.1
+        Host: {{Hostname}}
+      
+      # Test 9: Git objects directory
+      - |
+        GET {{BaseURL}}/.git/objects/ HTTP/1.1
+        Host: {{Hostname}}
+      
+      # Test 10: Git description file
+      - |
+        GET {{BaseURL}}/.git/description HTTP/1.1
+        Host: {{Hostname}}
+      
+      # Test 11: Git hooks directory
+      - |
+        GET {{BaseURL}}/.git/hooks/ HTTP/1.1
+        Host: {{Hostname}}
+      
+      # Test 12: Git info directory
+      - |
+        GET {{BaseURL}}/.git/info/refs HTTP/1.1
+        Host: {{Hostname}}
+
+    cookie-reuse: true
+    redirects: true
+    max-redirects: 3
+
+    matchers-condition: or
+    matchers:
+      # Detect .git folder exposure
+      - type: word
+        part: body
+        words:
+          - "Index of /.git"
+          - ".git/HEAD"
+          - ".git/config"
+          - ".git/index"
+          - ".git/logs"
+        condition: or
+        name: "git-folder-listing"
+
+      # Detect Git HEAD file
+      - type: regex
+        part: body
+        regex:
+          - '(?i)ref:\s*refs/heads/[a-zA-Z0-9_/-]+'
+          - '^[a-f0-9]{40}$'
+        name: "git-head-file"
+
+      # Detect Git config file
+      - type: word
+        part: body
+        words:
+          - "[core]"
+          - "repositoryformatversion"
+          - "[remote"
+          - "[branch"
+          - "url ="
+        condition: or
+        name: "git-config-file"
+
+      # Detect Git index file (binary)
+      - type: regex
+        part: body
+        regex:
+          - 'DIRC'
+        name: "git-index-file"
+
+      # Detect Git logs
+      - type: regex
+        part: body
+        regex:
+          - '[a-f0-9]{40}\s+[a-f0-9]{40}\s+.*<.*@.*>\s+\d+'
+          - 'commit\s+[a-f0-9]{40}'
+        name: "git-logs"
+
+      # Detect Git refs
+      - type: regex
+        part: body
+        regex:
+          - '^[a-f0-9]{40}$'
+        name: "git-refs"
+
+      # Detect successful response
+      - type: status
+        status:
+          - 200
+        name: "successful-response"
+
+    extractors:
+      - type: regex
+        part: body
+        name: "git-commit-hashes"
+        regex:
+          - '([a-f0-9]{40})'
+
+      - type: regex
+        part: body
+        name: "git-branches"
+        regex:
+          - 'refs/heads/([a-zA-Z0-9_/-]+)'
+
+      - type: regex
+        part: body
+        name: "git-remotes"
+        regex:
+          - 'url\s*=\s*(.+)'
+          - 'remote\s*"([^"]+)"'
+
+      - type: regex
+        part: body
+        name: "git-emails"
+        regex:
+          - '([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})'
+
+      - type: regex
+        part: body
+        name: "git-usernames"
+        regex:
+          - 'name\s*=\s*(.+)'
+          - 'author\s+(.+)\s+<'
+
+      - type: regex
+        part: body
+        name: "sensitive-files"
+        regex:
+          - '(\.env|config\.php|database\.yml|secrets\.json|\.aws|\.ssh)'

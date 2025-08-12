@@ -1,0 +1,161 @@
+id: medium-info-jenkins-build-logs-exposure
+
+info:
+  name: Jenkins Build Logs Exposure Detection
+  author: nuclei-community
+  severity: medium
+  description: |
+    Detects exposed Jenkins build logs and CI/CD information that may reveal
+    sensitive data including credentials, API keys, deployment details,
+    source code paths, and internal infrastructure information.
+  reference:
+    - https://www.jenkins.io/doc/book/system-administration/security/
+    - https://jenkins.io/security/advisory/
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:M/I:N/A:N
+    cvss-score: 5.3
+    cwe-id: CWE-200
+  metadata:
+    verified: true
+    max-request: 12
+  tags: jenkins,ci-cd,exposure,build-logs,medium
+
+http:
+  - raw:
+      # Test 1: Jenkins main page
+      - |
+        GET {{BaseURL}}/ HTTP/1.1
+        Host: {{Hostname}}
+      
+      # Test 2: Jenkins API
+      - |
+        GET {{BaseURL}}/api/json HTTP/1.1
+        Host: {{Hostname}}
+        Accept: application/json
+      
+      # Test 3: Jenkins job list
+      - |
+        GET {{BaseURL}}/view/all/api/json HTTP/1.1
+        Host: {{Hostname}}
+        Accept: application/json
+      
+      # Test 4: Jenkins build queue
+      - |
+        GET {{BaseURL}}/queue/api/json HTTP/1.1
+        Host: {{Hostname}}
+        Accept: application/json
+      
+      # Test 5: Jenkins console output
+      - |
+        GET {{BaseURL}}/job/build/1/consoleText HTTP/1.1
+        Host: {{Hostname}}
+      
+      # Test 6: Jenkins build artifacts
+      - |
+        GET {{BaseURL}}/job/build/lastBuild/artifact/ HTTP/1.1
+        Host: {{Hostname}}
+      
+      # Test 7: Jenkins system info
+      - |
+        GET {{BaseURL}}/systemInfo HTTP/1.1
+        Host: {{Hostname}}
+      
+      # Test 8: Jenkins script console
+      - |
+        GET {{BaseURL}}/script HTTP/1.1
+        Host: {{Hostname}}
+      
+      # Test 9: Jenkins people
+      - |
+        GET {{BaseURL}}/people/ HTTP/1.1
+        Host: {{Hostname}}
+      
+      # Test 10: Jenkins asynchPeople
+      - |
+        GET {{BaseURL}}/asynchPeople/ HTTP/1.1
+        Host: {{Hostname}}
+      
+      # Test 11: Jenkins computer list
+      - |
+        GET {{BaseURL}}/computer/api/json HTTP/1.1
+        Host: {{Hostname}}
+        Accept: application/json
+      
+      # Test 12: Jenkins log
+      - |
+        GET {{BaseURL}}/log/all HTTP/1.1
+        Host: {{Hostname}}
+
+    cookie-reuse: true
+    redirects: true
+    max-redirects: 3
+
+    matchers-condition: and
+    matchers:
+      # Check for successful response
+      - type: status
+        status:
+          - 200
+
+      # Detect Jenkins responses
+      - type: word
+        part: body
+        words:
+          - "Jenkins"
+          - "hudson"
+          - "Build Queue"
+          - "Console Output"
+          - '"jobs"'
+          - '"builds"'
+          - "Dashboard"
+          - "Manage Jenkins"
+        condition: or
+
+    extractors:
+      - type: regex
+        part: body
+        name: "jenkins-version"
+        regex:
+          - 'Jenkins ver\. ([0-9.]+)'
+          - '"version"\s*:\s*"([^"]+)"'
+
+      - type: regex
+        part: body
+        name: "job-names"
+        regex:
+          - '"name"\s*:\s*"([^"]+)".*"url"'
+
+      - type: regex
+        part: body
+        name: "build-info"
+        regex:
+          - '"number"\s*:\s*([0-9]+)'
+          - '"result"\s*:\s*"([^"]+)"'
+
+      - type: regex
+        part: body
+        name: "sensitive-data"
+        regex:
+          - '(?i)(password|secret|key|token|api_key)[\s]*[=:][\s]*([^\s\n\r]+)'
+          - '(?i)(username|user)[\s]*[=:][\s]*([^\s\n\r]+)'
+
+      - type: regex
+        part: body
+        name: "build-paths"
+        regex:
+          - '(/var/jenkins_home/[^\s]+)'
+          - '(/home/jenkins/[^\s]+)'
+          - '(C:\\\\Jenkins\\\\[^\s]+)'
+
+      - type: regex
+        part: body
+        name: "git-info"
+        regex:
+          - 'git clone ([^\s]+)'
+          - 'Cloning into ([^\s]+)'
+
+      - type: kval
+        part: header
+        kval:
+          - content_type
+          - server

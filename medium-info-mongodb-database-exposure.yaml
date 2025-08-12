@@ -1,0 +1,174 @@
+id: medium-info-mongodb-database-exposure
+
+info:
+  name: MongoDB Database Exposure Detection
+  author: nuclei-community
+  severity: medium
+  description: |
+    Detects exposed MongoDB instances that may reveal sensitive data including
+    databases, collections, documents, and configuration information without
+    proper authentication mechanisms in place.
+  reference:
+    - https://docs.mongodb.com/manual/reference/method/
+    - https://blog.shodan.io/its-the-data-stupid/
+    - https://www.shodan.io/report/89bnfUyJ
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:L/A:N
+    cvss-score: 8.2
+    cwe-id: CWE-200
+  metadata:
+    verified: true
+    max-request: 10
+  tags: mongodb,database,exposure,nosql,medium
+
+http:
+  - raw:
+      # Test 1: MongoDB HTTP interface
+      - |
+        GET {{BaseURL}}/ HTTP/1.1
+        Host: {{Hostname}}
+      
+      # Test 2: MongoDB admin interface
+      - |
+        GET {{BaseURL}}/admin HTTP/1.1
+        Host: {{Hostname}}
+      
+      # Test 3: MongoDB status page
+      - |
+        GET {{BaseURL}}/serverStatus HTTP/1.1
+        Host: {{Hostname}}
+      
+      # Test 4: MongoDB REST interface
+      - |
+        GET {{BaseURL}}/rest HTTP/1.1
+        Host: {{Hostname}}
+      
+      # Test 5: MongoDB web interface
+      - |
+        GET {{BaseURL}}/mongo HTTP/1.1
+        Host: {{Hostname}}
+      
+      # Test 6: MongoDB Express interface
+      - |
+        GET {{BaseURL}}/mongo-express HTTP/1.1
+        Host: {{Hostname}}
+      
+      # Test 7: MongoDB admin web interface
+      - |
+        GET {{BaseURL}}/admin/index.html HTTP/1.1
+        Host: {{Hostname}}
+      
+      # Test 8: MongoDB database listing
+      - |
+        GET {{BaseURL}}/listDatabases HTTP/1.1
+        Host: {{Hostname}}
+      
+      # Test 9: MongoDB collection listing
+      - |
+        GET {{BaseURL}}/listCollections HTTP/1.1
+        Host: {{Hostname}}
+      
+      # Test 10: MongoDB stats
+      - |
+        GET {{BaseURL}}/stats HTTP/1.1
+        Host: {{Hostname}}
+
+    cookie-reuse: true
+    redirects: true
+    max-redirects: 3
+
+    matchers-condition: and
+    matchers:
+      # Check for successful response
+      - type: status
+        status:
+          - 200
+
+      # Detect MongoDB responses
+      - type: word
+        part: body
+        words:
+          - "MongoDB"
+          - "mongo"
+          - "db.version()"
+          - "listDatabases"
+          - "listCollections"
+          - "serverStatus"
+          - "buildInfo"
+          - "isMaster"
+        condition: or
+
+    extractors:
+      - type: regex
+        part: body
+        name: "mongodb-version"
+        regex:
+          - 'MongoDB ([0-9.]+)'
+          - '"version"\s*:\s*"([0-9.]+)"'
+
+      - type: regex
+        part: body
+        name: "database-names"
+        regex:
+          - '"name"\s*:\s*"([^"]+)".*"sizeOnDisk"'
+          - 'Database:\s*([a-zA-Z0-9_-]+)'
+
+      - type: regex
+        part: body
+        name: "collection-names"
+        regex:
+          - '"name"\s*:\s*"([^"]+)".*"type"\s*:\s*"collection"'
+
+      - type: regex
+        part: body
+        name: "server-info"
+        regex:
+          - '"host"\s*:\s*"([^"]+)"'
+          - '"process"\s*:\s*"([^"]+)"'
+          - '"pid"\s*:\s*([0-9]+)'
+
+      - type: kval
+        part: header
+        kval:
+          - content_type
+          - server
+
+network:
+  - inputs:
+      # MongoDB wire protocol commands
+      - data: "3a000000a741000000000000d40700000000000061646d696e2e24636d640000000000ffffffff130000001069736d6173746572000100000000"
+        type: tcp
+        hex: true
+      - data: "480000000200000000000000d40700000000000061646d696e2e24636d6400000000000000000021000000026c6973744461746162617365730001000000000000"
+        type: tcp  
+        hex: true
+      - data: "3e000000040000000000000000d4070000000000061646d696e2e24636d6400000000000000000017000000107365727665725374617475730001000000000000"
+        type: tcp
+        hex: true
+
+    host:
+      - "{{Hostname}}"
+      - "{{Hostname}}:27017"
+
+    matchers:
+      # Detect MongoDB wire protocol responses
+      - type: word
+        words:
+          - "ismaster"
+          - "maxBsonObjectSize"
+          - "maxMessageSizeBytes"
+          - "localTime"
+          - "databases"
+          - "totalSize"
+        condition: or
+
+    extractors:
+      - type: regex
+        name: "mongodb-wire-version"
+        regex:
+          - '"version"\s*:\s*"([0-9.]+)"'
+
+      - type: regex
+        name: "mongodb-wire-databases"
+        regex:
+          - '"name"\s*:\s*"([^"]+)"'

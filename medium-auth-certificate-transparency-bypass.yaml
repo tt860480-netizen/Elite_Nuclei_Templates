@@ -1,0 +1,142 @@
+id: medium-auth-certificate-transparency-bypass
+
+info:
+  name: Certificate Transparency Log Bypass Detection
+  author: nuclei-community
+  severity: medium
+  description: |
+    Detects certificate transparency bypass techniques where attackers use
+    certificates that are not logged in CT logs or exploit CT log inconsistencies
+    to perform man-in-the-middle attacks or bypass certificate validation.
+  reference:
+    - https://certificate.transparency.dev/
+    - https://tools.ietf.org/html/rfc6962
+    - https://www.certificate-transparency.org/what-is-ct
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:H/PR:N/UI:R/S:U/C:H/I:H/A:N
+    cvss-score: 7.4
+    cwe-id: CWE-295
+  metadata:
+    verified: true
+    max-request: 5
+  tags: certificate,transparency,bypass,tls,ssl,medium
+
+http:
+  - raw:
+      # Test 1: Check for CT log validation bypass
+      - |
+        GET {{BaseURL}}/ HTTP/1.1
+        Host: {{Hostname}}
+        Expect-CT: max-age=86400, enforce, report-uri="https://example.com/ct-report"
+      
+      # Test 2: Test certificate pinning bypass
+      - |
+        GET {{BaseURL}}/api/secure HTTP/1.1
+        Host: {{Hostname}}
+        Public-Key-Pins: pin-sha256="fake-pin-hash"; max-age=5184000; includeSubDomains
+      
+      # Test 3: Check for SCT (Signed Certificate Timestamp) validation
+      - |
+        GET {{BaseURL}}/login HTTP/1.1
+        Host: {{Hostname}}
+        Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8
+      
+      # Test 4: Test for certificate transparency policy bypass
+      - |
+        POST {{BaseURL}}/auth/certificate HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        
+        {"certificate_validation":"bypass","ct_logs":"ignore"}
+      
+      # Test 5: Check for weak certificate validation
+      - |
+        GET {{BaseURL}}/secure/admin HTTP/1.1
+        Host: {{Hostname}}
+        X-Forwarded-Proto: https
+        X-SSL-Client-Verify: SUCCESS
+
+    cookie-reuse: true
+    redirects: true
+    max-redirects: 3
+
+    matchers-condition: or
+    matchers:
+      # Detect missing or weak CT enforcement
+      - type: word
+        part: header
+        words:
+          - "Expect-CT"
+        negative: true
+        name: "missing-ct-header"
+
+      # Detect successful bypass of certificate validation
+      - type: status
+        status:
+          - 200
+          - 302
+        name: "successful-connection"
+
+      # Check for weak certificate transparency implementation
+      - type: word
+        part: body
+        words:
+          - "certificate validation disabled"
+          - "ct logs bypassed"
+          - "certificate transparency ignored"
+          - "ssl verification disabled"
+        condition: or
+        name: "ct-bypass-indicators"
+
+      # Detect missing SCT in response
+      - type: word
+        part: header
+        words:
+          - "ct-sct"
+          - "sct-list"
+        negative: true
+        name: "missing-sct"
+
+      # Check for certificate pinning bypass success
+      - type: word
+        part: header
+        words:
+          - "Public-Key-Pins-Report-Only"
+          - "pin-sha256"
+        negative: true
+        name: "pinning-bypass"
+
+    extractors:
+      - type: kval
+        part: header
+        name: "security-headers"
+        kval:
+          - expect_ct
+          - public_key_pins
+          - strict_transport_security
+
+      - type: regex
+        part: header
+        name: "ct-headers"
+        regex:
+          - '(?i)(Expect-CT|CT-SCT|SCT-List)[\s]*:[\s]*(.+)'
+
+      - type: regex
+        part: body
+        name: "certificate-info"
+        regex:
+          - '(?i)(certificate|cert)[\s]*(fingerprint|hash|serial)[\s]*:[\s]*([a-fA-F0-9:]+)'
+          - '(?i)(issuer|subject)[\s]*:[\s]*(.+)'
+
+      - type: regex
+        part: header
+        name: "ssl-info"
+        regex:
+          - '(?i)(X-SSL-|SSL-|TLS-)([^:]+)[\s]*:[\s]*(.+)'
+
+      - type: regex
+        part: body
+        name: "ct-log-info"
+        regex:
+          - '(?i)(ct[\s]*log|certificate[\s]*transparency)[\s]*:[\s]*(.+)'
+          - '(?i)(sct|signed[\s]*certificate[\s]*timestamp)[\s]*:[\s]*(.+)'

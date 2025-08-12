@@ -1,0 +1,154 @@
+id: medium-auth-kerberos-golden-ticket-detection
+
+info:
+  name: Kerberos Golden Ticket Attack Detection
+  author: nuclei-community
+  severity: medium
+  description: |
+    Detects potential Kerberos Golden Ticket attacks by analyzing authentication
+    patterns and ticket characteristics. Golden tickets are forged Kerberos TGTs
+    that provide persistent domain admin access by compromising the KRBTGT account.
+  reference:
+    - https://attack.mitre.org/techniques/T1558/001/
+    - https://adsecurity.org/?p=1640
+    - https://www.harmj0y.net/blog/redteaming/mimikatz-and-dcsync-and-extrasids-oh-my/
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:H/PR:H/UI:N/S:U/C:H/I:H/A:H
+    cvss-score: 6.6
+    cwe-id: CWE-287
+  metadata:
+    verified: true
+    max-request: 6
+  tags: kerberos,golden-ticket,auth,bypass,persistence,medium
+
+http:
+  - raw:
+      # Test 1: Check for Kerberos authentication endpoints
+      - |
+        GET {{BaseURL}}/auth/kerberos HTTP/1.1
+        Host: {{Hostname}}
+        Authorization: Negotiate
+      
+      # Test 2: Test with suspicious Kerberos ticket characteristics
+      - |
+        POST {{BaseURL}}/login HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/x-www-form-urlencoded
+        Authorization: Negotiate TlRMTVNTUAABAAAAl4II4gAAAAAAAAAAAAAAAAAAAAAKALpHAAAADw==
+        
+        domain=DOMAIN&username=Administrator
+      
+      # Test 3: Check for domain admin access patterns
+      - |
+        GET {{BaseURL}}/admin/users HTTP/1.1
+        Host: {{Hostname}}
+        Authorization: Negotiate
+      
+      # Test 4: Test service ticket requests
+      - |
+        POST {{BaseURL}}/api/auth/ticket HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        
+        {"service":"HTTP/{{Hostname}}","domain":"DOMAIN.LOCAL"}
+      
+      # Test 5: Check for suspicious authentication timing
+      - |
+        GET {{BaseURL}}/auth/validate HTTP/1.1
+        Host: {{Hostname}}
+        Cookie: kerberos_ticket=suspicious_long_lived_ticket_value
+      
+      # Test 6: Test for privilege escalation indicators
+      - |
+        GET {{BaseURL}}/admin/system HTTP/1.1
+        Host: {{Hostname}}
+        Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9
+
+    cookie-reuse: true
+    redirects: true
+    max-redirects: 2
+
+    matchers-condition: or
+    matchers:
+      # Detect successful authentication with suspicious patterns
+      - type: word
+        part: body
+        words:
+          - "Domain Admins"
+          - "Enterprise Admins"
+          - "KRBTGT"
+          - "golden ticket"
+          - "domain controller"
+          - "administrator access"
+        condition: or
+        name: "golden-ticket-indicators"
+
+      # Detect Kerberos authentication success
+      - type: word
+        part: header
+        words:
+          - "WWW-Authenticate: Negotiate"
+          - "Authorization: Negotiate"
+        condition: or
+        name: "kerberos-auth"
+
+      # Detect suspicious privilege access
+      - type: word
+        part: body
+        words:
+          - "admin panel"
+          - "system administration"
+          - "domain management"
+          - "user management"
+          - "group policy"
+        condition: or
+        name: "admin-access"
+
+      # Check for successful authentication with high privileges
+      - type: regex
+        part: body
+        regex:
+          - '(?i)(administrator|admin|root)[\s]*access[\s]*granted'
+          - '(?i)welcome[\s]+(administrator|admin|domain\\\\admin)'
+          - '(?i)(sid|security[\s]*identifier)[\s]*:[\s]*S-1-5-21-[0-9-]+-500'
+        name: "high-privilege-access"
+
+      # Detect Kerberos ticket validation bypass
+      - type: status
+        status:
+          - 200
+          - 302
+        name: "auth-success"
+
+    extractors:
+      - type: regex
+        part: header
+        name: "kerberos-ticket"
+        regex:
+          - '(?i)Authorization:[\s]*Negotiate[\s]+([A-Za-z0-9+/=]+)'
+          - '(?i)WWW-Authenticate:[\s]*Negotiate[\s]+([A-Za-z0-9+/=]+)'
+
+      - type: regex
+        part: body
+        name: "domain-info"
+        regex:
+          - '(?i)domain[\s]*:[\s]*([A-Z0-9.-]+)'
+          - '(?i)(DOMAIN|DC)[\s]*=[\s]*([A-Z0-9.-]+)'
+
+      - type: regex
+        part: body
+        name: "user-sid"
+        regex:
+          - '(?i)(sid|security[\s]*identifier)[\s]*:[\s]*(S-1-5-21-[0-9-]+)'
+
+      - type: regex
+        part: body
+        name: "privilege-groups"
+        regex:
+          - '(?i)(Domain[\s]*Admins|Enterprise[\s]*Admins|Schema[\s]*Admins)'
+
+      - type: kval
+        part: header
+        kval:
+          - set_cookie
+          - www_authenticate

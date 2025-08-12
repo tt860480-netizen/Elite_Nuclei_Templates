@@ -1,0 +1,132 @@
+id: medium-info-prometheus-metrics-exposure
+
+info:
+  name: Prometheus Metrics Exposure Detection
+  author: nuclei-community
+  severity: medium
+  description: |
+    Detects exposed Prometheus metrics endpoints that may reveal sensitive system
+    information, application metrics, infrastructure details, and internal
+    monitoring data that should not be publicly accessible.
+  reference:
+    - https://prometheus.io/docs/instrumenting/exposition_formats/
+    - https://prometheus.io/docs/concepts/metric_types/
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:M/I:N/A:N
+    cvss-score: 5.3
+    cwe-id: CWE-200
+  metadata:
+    verified: true
+    max-request: 8
+  tags: prometheus,metrics,exposure,monitoring,medium
+
+http:
+  - raw:
+      # Test 1: Standard Prometheus metrics endpoint
+      - |
+        GET {{BaseURL}}/metrics HTTP/1.1
+        Host: {{Hostname}}
+        Accept: text/plain
+      
+      # Test 2: Actuator Prometheus endpoint
+      - |
+        GET {{BaseURL}}/actuator/prometheus HTTP/1.1
+        Host: {{Hostname}}
+        Accept: text/plain
+      
+      # Test 3: Admin metrics endpoint
+      - |
+        GET {{BaseURL}}/admin/metrics HTTP/1.1
+        Host: {{Hostname}}
+        Accept: text/plain
+      
+      # Test 4: Stats endpoint
+      - |
+        GET {{BaseURL}}/stats HTTP/1.1
+        Host: {{Hostname}}
+        Accept: text/plain
+      
+      # Test 5: Health metrics endpoint
+      - |
+        GET {{BaseURL}}/health/metrics HTTP/1.1
+        Host: {{Hostname}}
+        Accept: text/plain
+      
+      # Test 6: Debug metrics endpoint
+      - |
+        GET {{BaseURL}}/debug/metrics HTTP/1.1
+        Host: {{Hostname}}
+        Accept: text/plain
+      
+      # Test 7: API metrics endpoint
+      - |
+        GET {{BaseURL}}/api/metrics HTTP/1.1
+        Host: {{Hostname}}
+        Accept: text/plain
+      
+      # Test 8: Monitoring endpoint
+      - |
+        GET {{BaseURL}}/monitoring HTTP/1.1
+        Host: {{Hostname}}
+        Accept: text/plain
+
+    cookie-reuse: true
+    redirects: true
+    max-redirects: 3
+
+    matchers-condition: and
+    matchers:
+      # Check for successful response
+      - type: status
+        status:
+          - 200
+
+      # Detect Prometheus metrics format
+      - type: regex
+        part: body
+        regex:
+          - '(?m)^[a-zA-Z_:][a-zA-Z0-9_:]*(\{[^}]*\})?\s+[0-9.-]+(\s+[0-9]+)?$'
+          - '(?m)^#\s+(HELP|TYPE)\s+[a-zA-Z_:][a-zA-Z0-9_:]*'
+        condition: or
+
+    extractors:
+      - type: regex
+        part: body
+        name: "metric-names"
+        regex:
+          - '(?m)^([a-zA-Z_:][a-zA-Z0-9_:]*)'
+
+      - type: regex
+        part: body
+        name: "sensitive-metrics"
+        regex:
+          - '(?i)(password|secret|key|token|credential|auth)_[a-zA-Z0-9_]*'
+          - '(?i)[a-zA-Z0-9_]*_(password|secret|key|token|credential|auth)'
+
+      - type: regex
+        part: body
+        name: "system-metrics"
+        regex:
+          - '(?i)(cpu|memory|disk|network|process)_[a-zA-Z0-9_]*'
+          - '(?i)go_[a-zA-Z0-9_]*'
+          - '(?i)node_[a-zA-Z0-9_]*'
+
+      - type: regex
+        part: body
+        name: "application-metrics"
+        regex:
+          - '(?i)(http|database|cache|queue)_[a-zA-Z0-9_]*'
+          - '(?i)[a-zA-Z0-9_]*_(requests|connections|errors|latency)'
+
+      - type: regex
+        part: body
+        name: "infrastructure-info"
+        regex:
+          - '(?i)instance="([^"]+)"'
+          - '(?i)job="([^"]+)"'
+          - '(?i)version="([^"]+)"'
+
+      - type: kval
+        part: header
+        kval:
+          - content_type

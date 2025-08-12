@@ -1,0 +1,212 @@
+id: medium-info-kubernetes-api-server-exposure
+
+info:
+  name: Kubernetes API Server Exposure Detection
+  author: nuclei-community
+  severity: medium
+  description: |
+    Detects exposed Kubernetes API server endpoints that may reveal cluster information,
+    namespaces, pods, services, secrets, and other sensitive Kubernetes resources
+    without proper authentication.
+  reference:
+    - https://kubernetes.io/docs/reference/access-authn-authz/controlling-access/
+    - https://attack.mitre.org/techniques/T1552/007/
+    - https://www.cisa.gov/news-events/cybersecurity-advisories/aa22-320a
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N
+    cvss-score: 7.5
+    cwe-id: CWE-200
+  metadata:
+    verified: true
+    max-request: 15
+  tags: kubernetes,k8s,api,exposure,cluster,medium
+
+http:
+  - raw:
+      # Test 1: Kubernetes API version discovery
+      - |
+        GET {{BaseURL}}/version HTTP/1.1
+        Host: {{Hostname}}
+        Accept: application/json
+      
+      # Test 2: API server root
+      - |
+        GET {{BaseURL}}/api HTTP/1.1
+        Host: {{Hostname}}
+        Accept: application/json
+      
+      # Test 3: Core API v1
+      - |
+        GET {{BaseURL}}/api/v1 HTTP/1.1
+        Host: {{Hostname}}
+        Accept: application/json
+      
+      # Test 4: List namespaces
+      - |
+        GET {{BaseURL}}/api/v1/namespaces HTTP/1.1
+        Host: {{Hostname}}
+        Accept: application/json
+      
+      # Test 5: List pods in default namespace
+      - |
+        GET {{BaseURL}}/api/v1/namespaces/default/pods HTTP/1.1
+        Host: {{Hostname}}
+        Accept: application/json
+      
+      # Test 6: List services
+      - |
+        GET {{BaseURL}}/api/v1/services HTTP/1.1
+        Host: {{Hostname}}
+        Accept: application/json
+      
+      # Test 7: List nodes
+      - |
+        GET {{BaseURL}}/api/v1/nodes HTTP/1.1
+        Host: {{Hostname}}
+        Accept: application/json
+      
+      # Test 8: List secrets (highly sensitive)
+      - |
+        GET {{BaseURL}}/api/v1/secrets HTTP/1.1
+        Host: {{Hostname}}
+        Accept: application/json
+      
+      # Test 9: List configmaps
+      - |
+        GET {{BaseURL}}/api/v1/configmaps HTTP/1.1
+        Host: {{Hostname}}
+        Accept: application/json
+      
+      # Test 10: API groups discovery
+      - |
+        GET {{BaseURL}}/apis HTTP/1.1
+        Host: {{Hostname}}
+        Accept: application/json
+      
+      # Test 11: Apps API group
+      - |
+        GET {{BaseURL}}/apis/apps/v1 HTTP/1.1
+        Host: {{Hostname}}
+        Accept: application/json
+      
+      # Test 12: Extensions API
+      - |
+        GET {{BaseURL}}/apis/extensions/v1beta1 HTTP/1.1
+        Host: {{Hostname}}
+        Accept: application/json
+      
+      # Test 13: Metrics API
+      - |
+        GET {{BaseURL}}/apis/metrics.k8s.io/v1beta1 HTTP/1.1
+        Host: {{Hostname}}
+        Accept: application/json
+      
+      # Test 14: Health check
+      - |
+        GET {{BaseURL}}/healthz HTTP/1.1
+        Host: {{Hostname}}
+      
+      # Test 15: Ready check
+      - |
+        GET {{BaseURL}}/readyz HTTP/1.1
+        Host: {{Hostname}}
+
+    cookie-reuse: true
+    redirects: true
+    max-redirects: 3
+
+    matchers-condition: and
+    matchers:
+      # Check for successful response
+      - type: status
+        status:
+          - 200
+
+      # Detect Kubernetes API responses
+      - type: word
+        part: body
+        words:
+          - '"kind"'
+          - '"apiVersion"'
+          - '"metadata"'
+          - '"items"'
+          - '"resources"'
+        condition: or
+
+      # Detect specific Kubernetes objects
+      - type: word
+        part: body
+        words:
+          - '"kind":"Namespace"'
+          - '"kind":"Pod"'
+          - '"kind":"Service"'
+          - '"kind":"Node"'
+          - '"kind":"Secret"'
+          - '"kind":"ConfigMap"'
+          - '"kind":"APIResourceList"'
+          - '"kind":"APIGroupList"'
+        condition: or
+
+    extractors:
+      - type: regex
+        part: body
+        name: "kubernetes-version"
+        regex:
+          - '"gitVersion"\s*:\s*"([^"]+)"'
+          - '"major"\s*:\s*"([^"]+)"'
+          - '"minor"\s*:\s*"([^"]+)"'
+
+      - type: regex
+        part: body
+        name: "namespaces"
+        regex:
+          - '"name"\s*:\s*"([^"]+)".*"kind"\s*:\s*"Namespace"'
+
+      - type: regex
+        part: body
+        name: "pod-names"
+        regex:
+          - '"name"\s*:\s*"([^"]+)".*"kind"\s*:\s*"Pod"'
+
+      - type: regex
+        part: body
+        name: "service-names"
+        regex:
+          - '"name"\s*:\s*"([^"]+)".*"kind"\s*:\s*"Service"'
+
+      - type: regex
+        part: body
+        name: "node-names"
+        regex:
+          - '"name"\s*:\s*"([^"]+)".*"kind"\s*:\s*"Node"'
+
+      - type: regex
+        part: body
+        name: "secret-names"
+        regex:
+          - '"name"\s*:\s*"([^"]+)".*"kind"\s*:\s*"Secret"'
+
+      - type: regex
+        part: body
+        name: "api-groups"
+        regex:
+          - '"name"\s*:\s*"([^"]+)".*"preferredVersion"'
+
+      - type: regex
+        part: body
+        name: "api-resources"
+        regex:
+          - '"name"\s*:\s*"([^"]+)".*"namespaced"\s*:\s*(true|false)'
+
+      - type: regex
+        part: body
+        name: "cluster-info"
+        regex:
+          - '"clusterName"\s*:\s*"([^"]+)"'
+          - '"serverAddressByClientCIDRs"'
+
+      - type: kval
+        part: header
+        kval:
+          - content_type
+          - server

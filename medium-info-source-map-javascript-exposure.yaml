@@ -1,0 +1,192 @@
+id: medium-info-source-map-javascript-exposure
+
+info:
+  name: JavaScript Source Map Exposure Detection
+  author: nuclei-community
+  severity: medium
+  description: |
+    Detects exposed JavaScript source map files that reveal original source code,
+    API endpoints, internal paths, comments, and sensitive information that should
+    not be accessible in production environments.
+  reference:
+    - https://blog.assetnote.io/2021/04/05/source-map-disclosure/
+    - https://portswigger.net/daily-swig/source-code-disclosure-via-exposed-source-maps
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:M/I:N/A:N
+    cvss-score: 5.3
+    cwe-id: CWE-200
+  metadata:
+    verified: true
+    max-request: 15
+  tags: javascript,sourcemap,exposure,source-code,medium
+
+http:
+  - raw:
+      # Test 1: Common source map files
+      - |
+        GET {{BaseURL}}/main.js.map HTTP/1.1
+        Host: {{Hostname}}
+      
+      # Test 2: App bundle source map
+      - |
+        GET {{BaseURL}}/app.js.map HTTP/1.1
+        Host: {{Hostname}}
+      
+      # Test 3: Bundle source map
+      - |
+        GET {{BaseURL}}/bundle.js.map HTTP/1.1
+        Host: {{Hostname}}
+      
+      # Test 4: Vendor source map
+      - |
+        GET {{BaseURL}}/vendor.js.map HTTP/1.1
+        Host: {{Hostname}}
+      
+      # Test 5: Index source map
+      - |
+        GET {{BaseURL}}/index.js.map HTTP/1.1
+        Host: {{Hostname}}
+      
+      # Test 6: Static assets source map
+      - |
+        GET {{BaseURL}}/static/js/main.js.map HTTP/1.1
+        Host: {{Hostname}}
+      
+      # Test 7: Assets source map
+      - |
+        GET {{BaseURL}}/assets/js/app.js.map HTTP/1.1
+        Host: {{Hostname}}
+      
+      # Test 8: Build source map
+      - |
+        GET {{BaseURL}}/build/main.js.map HTTP/1.1
+        Host: {{Hostname}}
+      
+      # Test 9: Dist source map
+      - |
+        GET {{BaseURL}}/dist/app.js.map HTTP/1.1
+        Host: {{Hostname}}
+      
+      # Test 10: Public source map
+      - |
+        GET {{BaseURL}}/public/js/bundle.js.map HTTP/1.1
+        Host: {{Hostname}}
+      
+      # Test 11: Webpack source map
+      - |
+        GET {{BaseURL}}/webpack.js.map HTTP/1.1
+        Host: {{Hostname}}
+      
+      # Test 12: React source map
+      - |
+        GET {{BaseURL}}/react.js.map HTTP/1.1
+        Host: {{Hostname}}
+      
+      # Test 13: Angular source map
+      - |
+        GET {{BaseURL}}/angular.js.map HTTP/1.1
+        Host: {{Hostname}}
+      
+      # Test 14: Vue source map
+      - |
+        GET {{BaseURL}}/vue.js.map HTTP/1.1
+        Host: {{Hostname}}
+      
+      # Test 15: CSS source map
+      - |
+        GET {{BaseURL}}/main.css.map HTTP/1.1
+        Host: {{Hostname}}
+
+    cookie-reuse: true
+    redirects: true
+    max-redirects: 3
+
+    matchers-condition: and
+    matchers:
+      # Check for successful response
+      - type: status
+        status:
+          - 200
+
+      # Detect source map content
+      - type: regex
+        part: body
+        regex:
+          # Source map version and structure
+          - '(?i)"version"\s*:\s*["\']?3["\']?'
+          - '(?i)"sources"\s*:\s*\['
+          - '(?i)"mappings"\s*:\s*["\']'
+          - '(?i)"sourcesContent"\s*:\s*\['
+          - '(?i)"names"\s*:\s*\['
+          # Source map file indicators
+          - '(?i)"file"\s*:\s*["\'][^"\']*\.js["\']'
+          - '(?i)"sourceRoot"\s*:\s*["\']'
+        condition: or
+
+    extractors:
+      - type: regex
+        part: body
+        name: "source-files"
+        regex:
+          - '(?i)"sources"\s*:\s*\[([^\]]+)\]'
+
+      - type: regex
+        part: body
+        name: "api-endpoints"
+        regex:
+          - '(?i)(https?://[^"\'\\s]+/api/[^"\'\\s]*)'
+          - '(?i)(/api/[^"\'\\s]*)'
+          - '(?i)(/v\d+/[^"\'\\s]*)'
+
+      - type: regex
+        part: body
+        name: "internal-paths"
+        regex:
+          - '(?i)"([^"]*/(src|components|utils|services|config)/[^"]*)"'
+          - '(?i)"([^"]*\.(ts|tsx|jsx|vue|scss|sass))"'
+
+      - type: regex
+        part: body
+        name: "sensitive-comments"
+        regex:
+          - '(?i)(TODO|FIXME|HACK|BUG)[\s]*:?[\s]*([^\\n\\r]*)'
+          - '(?i)(password|secret|key|token|api)[\s]*[=:][\s]*([^\\n\\r\\s"\']+)'
+
+      - type: regex
+        part: body
+        name: "environment-variables"
+        regex:
+          - '(?i)process\.env\.([A-Z_][A-Z0-9_]*)'
+          - '(?i)NODE_ENV'
+          - '(?i)REACT_APP_[A-Z_][A-Z0-9_]*'
+
+      - type: regex
+        part: body
+        name: "function-names"
+        regex:
+          - '(?i)"names"\s*:\s*\[([^\]]+)\]'
+
+      - type: regex
+        part: body
+        name: "webpack-info"
+        regex:
+          - '(?i)webpack://[^"\'\\s]*'
+          - '(?i)"sourceRoot"\s*:\s*["\']([^"\']*)["\']'
+
+      - type: regex
+        part: body
+        name: "build-paths"
+        regex:
+          - '(?i)"([^"]*/(build|dist|public|static)/[^"]*)"'
+
+      - type: regex
+        part: body
+        name: "source-content-snippets"
+        regex:
+          - '(?i)"sourcesContent"\s*:\s*\[\s*"([^"]{0,100})'
+
+      - type: kval
+        part: header
+        kval:
+          - content_type
+          - content_length
