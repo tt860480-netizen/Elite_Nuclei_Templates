@@ -1,0 +1,169 @@
+id: medium-cors-null-origin-bypass
+
+info:
+  name: CORS Null Origin Bypass Attack - Elite
+  author: redteam-elite
+  severity: medium
+  description: |
+    Detects CORS misconfiguration where server allows 'null' origin value.
+    Attackers can exploit this by creating sandboxed iframe or data URI to bypass CORS policy.
+    Elite template with advanced null origin exploitation techniques.
+  reference:
+    - https://portswigger.net/web-security/cors/lab-null-origin-whitelisted-attack
+    - https://owasp.org/www-community/attacks/CORS_OriginHeaderScrutiny
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:H/I:N/A:N
+    cvss-score: 6.5
+    cwe-id: CWE-346
+  metadata:
+    verified: true
+    max-request: 4
+  tags: cors,misconfiguration,null-origin,bypass,elite,redteam
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+      - "{{BaseURL}}/api"
+      - "{{BaseURL}}/admin"
+      - "{{BaseURL}}/dashboard"
+
+    headers:
+      Origin: "null"
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Origin: null"
+        condition: and
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Credentials: true"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+          - 201
+          - 202
+
+    extractors:
+      - type: kval
+        kval:
+          - access_control_allow_origin
+          - access_control_allow_credentials
+          - access_control_allow_methods
+        part: header
+
+  - method: OPTIONS
+    path:
+      - "{{BaseURL}}/api/sensitive"
+      - "{{BaseURL}}/user/data"
+
+    headers:
+      Origin: "null"
+      Access-Control-Request-Method: "POST"
+      Access-Control-Request-Headers: "Content-Type,Authorization"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Origin: null"
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Credentials: true"
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Methods"
+
+      - type: status
+        status:
+          - 200
+          - 204
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/user"
+      - "{{BaseURL}}/api/profile"
+
+    headers:
+      Origin: "null"
+      Content-Type: "application/json"
+      Cookie: "sessionid=test; csrftoken=test"
+
+    body: |
+      {"action":"get_sensitive_data","user_id":"1"}
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Origin: null"
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Credentials: true"
+
+      - type: word
+        part: body
+        words:
+          - "success"
+          - "data"
+          - "user"
+          - "profile"
+          - "email"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/admin"
+      - "{{BaseURL}}/internal"
+
+    headers:
+      Origin: "null"
+      Authorization: "Bearer test-token"
+      X-Requested-With: "XMLHttpRequest"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Origin: null"
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Credentials: true"
+
+      - type: word
+        part: body
+        words:
+          - "admin"
+          - "internal"
+          - "sensitive"
+          - "confidential"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+# Advanced null origin exploitation with multiple attack vectors

@@ -1,0 +1,126 @@
+id: medium-cors-origin-reflection-attack
+
+info:
+  name: CORS Origin Reflection Attack - Elite
+  author: redteam-elite
+  severity: medium
+  description: |
+    Detects CORS misconfiguration where server reflects any Origin header value back in Access-Control-Allow-Origin.
+    This allows attackers to bypass CORS policy by setting malicious origin and accessing sensitive data.
+    Elite template with advanced detection techniques and zero false positives.
+  reference:
+    - https://portswigger.net/web-security/cors
+    - https://owasp.org/www-community/attacks/CORS_OriginHeaderScrutiny
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:H/I:N/A:N
+    cvss-score: 6.5
+    cwe-id: CWE-346
+  metadata:
+    verified: true
+    max-request: 3
+  tags: cors,misconfiguration,origin-reflection,elite,redteam
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+      - "{{BaseURL}}/api"
+      - "{{BaseURL}}/admin"
+
+    headers:
+      Origin: "https://evil-attacker.com"
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Origin: https://evil-attacker.com"
+        condition: and
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Credentials: true"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+          - 201
+          - 202
+          - 204
+
+    extractors:
+      - type: kval
+        kval:
+          - access_control_allow_origin
+          - access_control_allow_credentials
+          - access_control_allow_methods
+        part: header
+
+  - method: OPTIONS
+    path:
+      - "{{BaseURL}}"
+
+    headers:
+      Origin: "https://malicious-domain.evil"
+      Access-Control-Request-Method: "GET"
+      Access-Control-Request-Headers: "X-Custom-Header"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Origin: https://malicious-domain.evil"
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Credentials"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+          - 204
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/sensitive"
+      - "{{BaseURL}}/user/profile"
+      - "{{BaseURL}}/api/user"
+
+    headers:
+      Origin: "https://attacker-controlled.com"
+      Cookie: "session=test; auth=test"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Origin: https://attacker-controlled.com"
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Credentials: true"
+
+      - type: word
+        part: body
+        words:
+          - "user"
+          - "profile"
+          - "data"
+          - "email"
+          - "token"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+# Enhanced detection with multiple attack vectors

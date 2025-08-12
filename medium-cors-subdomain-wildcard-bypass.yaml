@@ -1,0 +1,206 @@
+id: medium-cors-subdomain-wildcard-bypass
+
+info:
+  name: CORS Subdomain Wildcard Bypass Attack - Elite
+  author: redteam-elite
+  severity: medium
+  description: |
+    Detects CORS misconfiguration where server allows wildcard subdomains (*.domain.com).
+    Attackers can register malicious subdomains or exploit subdomain takeover to bypass CORS policy.
+    Elite template with advanced subdomain exploitation techniques and multiple bypass vectors.
+  reference:
+    - https://portswigger.net/web-security/cors/lab-breaking-https-attack
+    - https://owasp.org/www-community/attacks/CORS_OriginHeaderScrutiny
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:H/I:L/A:N
+    cvss-score: 7.1
+    cwe-id: CWE-346
+  metadata:
+    verified: true
+    max-request: 5
+  tags: cors,misconfiguration,subdomain,wildcard,bypass,elite,redteam
+
+variables:
+  target_domain: "{{Hostname}}"
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+      - "{{BaseURL}}/api"
+      - "{{BaseURL}}/admin"
+
+    headers:
+      Origin: "https://evil.{{target_domain}}"
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+
+    matchers-condition: and
+    matchers:
+      - type: regex
+        part: header
+        regex:
+          - "Access-Control-Allow-Origin: https://evil\..*"
+          - "Access-Control-Allow-Origin: https://.*\.{{target_domain}}"
+        condition: or
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Credentials: true"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+          - 201
+          - 202
+
+    extractors:
+      - type: kval
+        kval:
+          - access_control_allow_origin
+          - access_control_allow_credentials
+        part: header
+
+  - method: OPTIONS
+    path:
+      - "{{BaseURL}}/api/sensitive"
+      - "{{BaseURL}}/user/profile"
+
+    headers:
+      Origin: "https://attacker.{{target_domain}}"
+      Access-Control-Request-Method: "GET"
+      Access-Control-Request-Headers: "Authorization,X-API-Key"
+
+    matchers-condition: and
+    matchers:
+      - type: regex
+        part: header
+        regex:
+          - "Access-Control-Allow-Origin: https://attacker\..*"
+          - "Access-Control-Allow-Origin: https://.*\.{{target_domain}}"
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Credentials: true"
+
+      - type: status
+        status:
+          - 200
+          - 204
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/user/data"
+      - "{{BaseURL}}/internal/admin"
+
+    headers:
+      Origin: "https://malicious-sub.{{target_domain}}"
+      Cookie: "session=test; auth=valid"
+      Authorization: "Bearer test-token"
+
+    matchers-condition: and
+    matchers:
+      - type: regex
+        part: header
+        regex:
+          - "Access-Control-Allow-Origin: https://malicious-sub\..*"
+          - "Access-Control-Allow-Origin: https://.*\.{{target_domain}}"
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Credentials: true"
+
+      - type: word
+        part: body
+        words:
+          - "user"
+          - "admin"
+          - "data"
+          - "profile"
+          - "sensitive"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/admin/users"
+      - "{{BaseURL}}/api/sensitive/data"
+
+    headers:
+      Origin: "https://takeover.{{target_domain}}"
+      Content-Type: "application/json"
+      X-Requested-With: "XMLHttpRequest"
+
+    body: |
+      {"action":"extract_data","target":"all_users"}
+
+    matchers-condition: and
+    matchers:
+      - type: regex
+        part: header
+        regex:
+          - "Access-Control-Allow-Origin: https://takeover\..*"
+          - "Access-Control-Allow-Origin: https://.*\.{{target_domain}}"
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Credentials: true"
+
+      - type: word
+        part: body
+        words:
+          - "success"
+          - "users"
+          - "data"
+          - "extracted"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/config"
+      - "{{BaseURL}}/admin/settings"
+
+    headers:
+      Origin: "https://xss.{{target_domain}}"
+      Referer: "https://xss.{{target_domain}}/exploit"
+      X-Forwarded-For: "127.0.0.1"
+
+    matchers-condition: and
+    matchers:
+      - type: regex
+        part: header
+        regex:
+          - "Access-Control-Allow-Origin: https://xss\..*"
+          - "Access-Control-Allow-Origin: https://.*\.{{target_domain}}"
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Credentials: true"
+
+      - type: word
+        part: body
+        words:
+          - "config"
+          - "settings"
+          - "api_key"
+          - "secret"
+          - "token"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+# Advanced subdomain wildcard exploitation with multiple attack scenarios

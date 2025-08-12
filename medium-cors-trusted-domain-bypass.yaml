@@ -1,0 +1,247 @@
+id: medium-cors-trusted-domain-bypass
+
+info:
+  name: CORS Trusted Domain Bypass Attack - Elite
+  author: redteam-elite
+  severity: medium
+  description: |
+    Detects CORS misconfiguration where server trusts specific domains that can be compromised.
+    Attackers can exploit trusted domains through XSS, subdomain takeover, or domain hijacking.
+    Elite template with advanced trusted domain exploitation and compromise detection techniques.
+  reference:
+    - https://portswigger.net/web-security/cors
+    - https://owasp.org/www-community/attacks/CORS_OriginHeaderScrutiny
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:H/I:L/A:N
+    cvss-score: 7.1
+    cwe-id: CWE-346
+  metadata:
+    verified: true
+    max-request: 6
+  tags: cors,misconfiguration,trusted-domain,bypass,compromise,elite,redteam
+
+variables:
+  target_domain: "{{Hostname}}"
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+      - "{{BaseURL}}/api"
+      - "{{BaseURL}}/admin"
+
+    headers:
+      Origin: "https://trusted-partner.com"
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Origin: https://trusted-partner.com"
+        condition: and
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Credentials: true"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+          - 201
+          - 202
+
+    extractors:
+      - type: kval
+        kval:
+          - access_control_allow_origin
+          - access_control_allow_credentials
+        part: header
+
+  - method: OPTIONS
+    path:
+      - "{{BaseURL}}/api/sensitive"
+      - "{{BaseURL}}/user/profile"
+
+    headers:
+      Origin: "https://api.trusted-service.net"
+      Access-Control-Request-Method: "POST"
+      Access-Control-Request-Headers: "Content-Type,Authorization"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Origin: https://api.trusted-service.net"
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Credentials: true"
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Methods"
+
+      - type: status
+        status:
+          - 200
+          - 204
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/user/data"
+      - "{{BaseURL}}/internal/admin"
+
+    headers:
+      Origin: "https://cdn.trusted-cdn.com"
+      Cookie: "session=valid; auth=true"
+      Authorization: "Bearer test-token"
+      Referer: "https://cdn.trusted-cdn.com/compromised"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Origin: https://cdn.trusted-cdn.com"
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Credentials: true"
+
+      - type: word
+        part: body
+        words:
+          - "user"
+          - "admin"
+          - "data"
+          - "profile"
+          - "sensitive"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/admin/users"
+      - "{{BaseURL}}/api/sensitive/extract"
+
+    headers:
+      Origin: "https://analytics.trusted-analytics.io"
+      Content-Type: "application/json"
+      X-Requested-With: "XMLHttpRequest"
+      X-Forwarded-For: "trusted-analytics.io"
+
+    body: |
+      {"action":"trusted_extract","source":"analytics","target":"user_data"}
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Origin: https://analytics.trusted-analytics.io"
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Credentials: true"
+
+      - type: word
+        part: body
+        words:
+          - "success"
+          - "extracted"
+          - "users"
+          - "data"
+          - "analytics"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/config"
+      - "{{BaseURL}}/admin/secrets"
+
+    headers:
+      Origin: "https://widgets.trusted-widgets.org"
+      Cookie: "admin=true; trusted=yes"
+      X-Widget-Key: "trusted-key"
+      X-Trusted-Source: "widgets.trusted-widgets.org"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Origin: https://widgets.trusted-widgets.org"
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Credentials: true"
+
+      - type: word
+        part: body
+        words:
+          - "config"
+          - "secret"
+          - "api_key"
+          - "token"
+          - "widget"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/partner-data"
+      - "{{BaseURL}}/trusted/endpoint"
+
+    headers:
+      Origin: "https://integration.trusted-integration.biz"
+      Authorization: "Bearer partner-token"
+      X-Partner-ID: "trusted-partner"
+      X-Integration-Key: "bypass-key"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Origin: https://integration.trusted-integration.biz"
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Credentials: true"
+
+      - type: word
+        part: body
+        words:
+          - "partner"
+          - "integration"
+          - "trusted"
+          - "data"
+          - "endpoint"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+# Advanced trusted domain exploitation with compromise simulation techniques

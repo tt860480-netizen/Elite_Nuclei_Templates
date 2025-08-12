@@ -1,0 +1,254 @@
+id: medium-cors-preflight-bypass-simple-request
+
+info:
+  name: CORS Preflight Bypass Simple Request Attack - Elite
+  author: redteam-elite
+  severity: medium
+  description: |
+    Detects CORS misconfiguration where preflight checks can be bypassed using simple requests.
+    Attackers can exploit simple request criteria to avoid OPTIONS preflight and access sensitive data.
+    Elite template with advanced preflight bypass techniques and simple request exploitation.
+  reference:
+    - https://portswigger.net/web-security/cors/lab-breaking-https-attack
+    - https://owasp.org/www-community/attacks/CORS_OriginHeaderScrutiny
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:H/I:L/A:N
+    cvss-score: 7.1
+    cwe-id: CWE-346
+  metadata:
+    verified: true
+    max-request: 6
+  tags: cors,misconfiguration,preflight,bypass,simple-request,elite,redteam
+
+variables:
+  target_domain: "{{Hostname}}"
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+      - "{{BaseURL}}/api"
+      - "{{BaseURL}}/admin"
+
+    headers:
+      Origin: "https://evil-attacker.com"
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Origin: https://evil-attacker.com"
+        condition: and
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Credentials: true"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+          - 201
+          - 202
+
+    extractors:
+      - type: kval
+        kval:
+          - access_control_allow_origin
+          - access_control_allow_credentials
+        part: header
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/user/data"
+      - "{{BaseURL}}/api/sensitive"
+
+    headers:
+      Origin: "https://preflight-bypass.evil"
+      Content-Type: "text/plain"
+
+    body: |
+      {"action":"extract_data","bypass":"preflight","method":"simple_request"}
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Origin: https://preflight-bypass.evil"
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Credentials: true"
+
+      - type: word
+        part: body
+        words:
+          - "success"
+          - "data"
+          - "extracted"
+          - "user"
+          - "sensitive"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/admin/action"
+      - "{{BaseURL}}/api/user/update"
+
+    headers:
+      Origin: "https://simple-request.attacker"
+      Content-Type: "application/x-www-form-urlencoded"
+
+    body: "action=get_admin_data&user_id=1&extract=all"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Origin: https://simple-request.attacker"
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Credentials: true"
+
+      - type: word
+        part: body
+        words:
+          - "admin"
+          - "success"
+          - "updated"
+          - "data"
+          - "action"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/user/profile"
+      - "{{BaseURL}}/api/config"
+
+    headers:
+      Origin: "https://no-preflight.hacker"
+      Cookie: "session=valid; auth=true"
+      Accept: "text/html,application/xhtml+xml,application/xml"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Origin: https://no-preflight.hacker"
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Credentials: true"
+
+      - type: word
+        part: body
+        words:
+          - "profile"
+          - "config"
+          - "user"
+          - "data"
+          - "sensitive"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/simple/extract"
+      - "{{BaseURL}}/api/bypass/preflight"
+
+    headers:
+      Origin: "https://bypass-cors.evil"
+      Content-Type: "multipart/form-data; boundary=----WebKitFormBoundary7MA4YWxkTrZu0gW"
+
+    body: |
+      ------WebKitFormBoundary7MA4YWxkTrZu0gW
+      Content-Disposition: form-data; name="action"
+      
+      extract_sensitive_data
+      ------WebKitFormBoundary7MA4YWxkTrZu0gW
+      Content-Disposition: form-data; name="bypass"
+      
+      preflight_simple_request
+      ------WebKitFormBoundary7MA4YWxkTrZu0gW--
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Origin: https://bypass-cors.evil"
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Credentials: true"
+
+      - type: word
+        part: body
+        words:
+          - "success"
+          - "extracted"
+          - "sensitive"
+          - "bypass"
+          - "simple"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+  - method: HEAD
+    path:
+      - "{{BaseURL}}/api/admin/secrets"
+      - "{{BaseURL}}/api/sensitive/data"
+
+    headers:
+      Origin: "https://head-bypass.attacker"
+      Cookie: "admin=true; role=superuser"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Origin: https://head-bypass.attacker"
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Credentials: true"
+
+      - type: word
+        part: header
+        words:
+          - "Content-Length"
+          - "Content-Type"
+          - "X-Admin"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+# Advanced preflight bypass exploitation using simple request techniques

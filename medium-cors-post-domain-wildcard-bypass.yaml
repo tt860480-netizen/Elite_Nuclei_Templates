@@ -1,0 +1,212 @@
+id: medium-cors-post-domain-wildcard-bypass
+
+info:
+  name: CORS Post-Domain Wildcard Bypass Attack - Elite
+  author: redteam-elite
+  severity: medium
+  description: |
+    Detects CORS misconfiguration where server allows post-domain wildcards (domain.com*.evil).
+    Attackers can register domains with matching suffixes to bypass CORS policy.
+    Elite template with advanced post-domain exploitation techniques and suffix bypass methods.
+  reference:
+    - https://portswigger.net/web-security/cors
+    - https://owasp.org/www-community/attacks/CORS_OriginHeaderScrutiny
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:H/I:L/A:N
+    cvss-score: 7.1
+    cwe-id: CWE-346
+  metadata:
+    verified: true
+    max-request: 5
+  tags: cors,misconfiguration,post-domain,wildcard,bypass,elite,redteam
+
+variables:
+  target_domain: "{{Hostname}}"
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+      - "{{BaseURL}}/api"
+      - "{{BaseURL}}/admin"
+
+    headers:
+      Origin: "https://{{target_domain}}.evil.com"
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+
+    matchers-condition: and
+    matchers:
+      - type: regex
+        part: header
+        regex:
+          - "Access-Control-Allow-Origin: https://{{target_domain}}\..*"
+          - "Access-Control-Allow-Origin: https://.*\.evil\.com"
+        condition: or
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Credentials: true"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+          - 201
+          - 202
+
+    extractors:
+      - type: kval
+        kval:
+          - access_control_allow_origin
+          - access_control_allow_credentials
+        part: header
+
+  - method: OPTIONS
+    path:
+      - "{{BaseURL}}/api/sensitive"
+      - "{{BaseURL}}/user/profile"
+
+    headers:
+      Origin: "https://{{target_domain}}.attacker.net"
+      Access-Control-Request-Method: "GET"
+      Access-Control-Request-Headers: "Authorization,X-API-Key"
+
+    matchers-condition: and
+    matchers:
+      - type: regex
+        part: header
+        regex:
+          - "Access-Control-Allow-Origin: https://{{target_domain}}\.attacker\.net"
+          - "Access-Control-Allow-Origin: https://{{target_domain}}\..*"
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Credentials: true"
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Methods"
+
+      - type: status
+        status:
+          - 200
+          - 204
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/user/data"
+      - "{{BaseURL}}/internal/admin"
+
+    headers:
+      Origin: "https://{{target_domain}}.malicious.org"
+      Cookie: "session=test; auth=valid"
+      Authorization: "Bearer test-token"
+
+    matchers-condition: and
+    matchers:
+      - type: regex
+        part: header
+        regex:
+          - "Access-Control-Allow-Origin: https://{{target_domain}}\.malicious\.org"
+          - "Access-Control-Allow-Origin: https://{{target_domain}}\..*"
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Credentials: true"
+
+      - type: word
+        part: body
+        words:
+          - "user"
+          - "admin"
+          - "data"
+          - "profile"
+          - "sensitive"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/admin/users"
+      - "{{BaseURL}}/api/sensitive/extract"
+
+    headers:
+      Origin: "https://{{target_domain}}.bypass.io"
+      Content-Type: "application/json"
+      X-Requested-With: "XMLHttpRequest"
+
+    body: |
+      {"action":"extract_sensitive","target":"all_data"}
+
+    matchers-condition: and
+    matchers:
+      - type: regex
+        part: header
+        regex:
+          - "Access-Control-Allow-Origin: https://{{target_domain}}\.bypass\.io"
+          - "Access-Control-Allow-Origin: https://{{target_domain}}\..*"
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Credentials: true"
+
+      - type: word
+        part: body
+        words:
+          - "success"
+          - "extracted"
+          - "users"
+          - "data"
+          - "sensitive"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/config"
+      - "{{BaseURL}}/admin/secrets"
+
+    headers:
+      Origin: "https://{{target_domain}}.exploit.hacker"
+      Referer: "https://{{target_domain}}.exploit.hacker/payload"
+      X-Forwarded-For: "127.0.0.1"
+
+    matchers-condition: and
+    matchers:
+      - type: regex
+        part: header
+        regex:
+          - "Access-Control-Allow-Origin: https://{{target_domain}}\.exploit\.hacker"
+          - "Access-Control-Allow-Origin: https://{{target_domain}}\..*"
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Credentials: true"
+
+      - type: word
+        part: body
+        words:
+          - "config"
+          - "secret"
+          - "api_key"
+          - "token"
+          - "password"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+# Advanced post-domain wildcard exploitation with multiple suffix bypass techniques

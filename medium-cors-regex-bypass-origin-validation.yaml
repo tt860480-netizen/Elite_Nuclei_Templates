@@ -1,0 +1,286 @@
+id: medium-cors-regex-bypass-origin-validation
+
+info:
+  name: CORS Regex Bypass Origin Validation Attack - Elite
+  author: redteam-elite
+  severity: medium
+  description: |
+    Detects CORS misconfiguration where server uses weak regex patterns for origin validation.
+    Attackers can exploit regex flaws, metacharacter injection, and pattern matching weaknesses.
+    Elite template with advanced regex bypass techniques and pattern exploitation methods.
+  reference:
+    - https://portswigger.net/web-security/cors
+    - https://owasp.org/www-community/attacks/CORS_OriginHeaderScrutiny
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:H/I:L/A:N
+    cvss-score: 7.1
+    cwe-id: CWE-346
+  metadata:
+    verified: true
+    max-request: 7
+  tags: cors,misconfiguration,regex,bypass,validation,elite,redteam
+
+variables:
+  target_domain: "{{Hostname}}"
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+      - "{{BaseURL}}/api"
+      - "{{BaseURL}}/admin"
+
+    headers:
+      Origin: "https://{{target_domain}}.evil.com"
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+
+    matchers-condition: and
+    matchers:
+      - type: regex
+        part: header
+        regex:
+          - "Access-Control-Allow-Origin: https://{{target_domain}}\.evil\.com"
+          - "Access-Control-Allow-Origin: https://.*{{target_domain}}.*"
+        condition: or
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Credentials: true"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+          - 201
+          - 202
+
+    extractors:
+      - type: kval
+        kval:
+          - access_control_allow_origin
+          - access_control_allow_credentials
+        part: header
+
+  - method: OPTIONS
+    path:
+      - "{{BaseURL}}/api/sensitive"
+      - "{{BaseURL}}/user/profile"
+
+    headers:
+      Origin: "https://evil{{target_domain}}bypass.com"
+      Access-Control-Request-Method: "POST"
+      Access-Control-Request-Headers: "Content-Type,Authorization"
+
+    matchers-condition: and
+    matchers:
+      - type: regex
+        part: header
+        regex:
+          - "Access-Control-Allow-Origin: https://evil{{target_domain}}bypass\.com"
+          - "Access-Control-Allow-Origin: https://.*{{target_domain}}.*"
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Credentials: true"
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Methods"
+
+      - type: status
+        status:
+          - 200
+          - 204
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/user/data"
+      - "{{BaseURL}}/internal/admin"
+
+    headers:
+      Origin: "https://{{target_domain}}xevil.com"
+      Cookie: "session=valid; auth=true"
+      Authorization: "Bearer test-token"
+
+    matchers-condition: and
+    matchers:
+      - type: regex
+        part: header
+        regex:
+          - "Access-Control-Allow-Origin: https://{{target_domain}}xevil\.com"
+          - "Access-Control-Allow-Origin: https://{{target_domain}}.*"
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Credentials: true"
+
+      - type: word
+        part: body
+        words:
+          - "user"
+          - "admin"
+          - "data"
+          - "profile"
+          - "sensitive"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/admin/users"
+      - "{{BaseURL}}/api/sensitive/extract"
+
+    headers:
+      Origin: "https://{{target_domain}}-evil.attacker.com"
+      Content-Type: "application/json"
+      X-Requested-With: "XMLHttpRequest"
+
+    body: |
+      {"action":"regex_bypass","pattern":"{{target_domain}}","exploit":true}
+
+    matchers-condition: and
+    matchers:
+      - type: regex
+        part: header
+        regex:
+          - "Access-Control-Allow-Origin: https://{{target_domain}}-evil\.attacker\.com"
+          - "Access-Control-Allow-Origin: https://{{target_domain}}.*"
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Credentials: true"
+
+      - type: word
+        part: body
+        words:
+          - "success"
+          - "extracted"
+          - "users"
+          - "regex"
+          - "bypass"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/config"
+      - "{{BaseURL}}/admin/secrets"
+
+    headers:
+      Origin: "https://sub.{{target_domain}}.malicious.net"
+      Cookie: "admin=true; bypass=regex"
+      X-Regex-Bypass: "{{target_domain}}"
+
+    matchers-condition: and
+    matchers:
+      - type: regex
+        part: header
+        regex:
+          - "Access-Control-Allow-Origin: https://sub\.{{target_domain}}\.malicious\.net"
+          - "Access-Control-Allow-Origin: https://.*{{target_domain}}.*"
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Credentials: true"
+
+      - type: word
+        part: body
+        words:
+          - "config"
+          - "secret"
+          - "api_key"
+          - "token"
+          - "admin"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/metachar-test"
+      - "{{BaseURL}}/regex/validation"
+
+    headers:
+      Origin: "https://{{target_domain}}.*evil.com"
+      X-Origin-Bypass: "{{target_domain}}.*"
+      X-Regex-Exploit: "metacharacter"
+
+    matchers-condition: and
+    matchers:
+      - type: regex
+        part: header
+        regex:
+          - "Access-Control-Allow-Origin: https://{{target_domain}}\.\*evil\.com"
+          - "Access-Control-Allow-Origin: https://{{target_domain}}.*"
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Credentials: true"
+
+      - type: word
+        part: body
+        words:
+          - "metachar"
+          - "regex"
+          - "validation"
+          - "bypass"
+          - "exploit"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/pattern-exploit"
+      - "{{BaseURL}}/weak-regex/test"
+
+    headers:
+      Origin: "https://{{target_domain}}%2Eevil.com"
+      X-Pattern-Bypass: "url-encoded"
+      X-Weak-Regex: "{{target_domain}}"
+
+    matchers-condition: and
+    matchers:
+      - type: regex
+        part: header
+        regex:
+          - "Access-Control-Allow-Origin: https://{{target_domain}}%2Eevil\.com"
+          - "Access-Control-Allow-Origin: https://{{target_domain}}.*"
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Credentials: true"
+
+      - type: word
+        part: body
+        words:
+          - "pattern"
+          - "weak"
+          - "regex"
+          - "exploit"
+          - "encoded"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+# Advanced regex bypass exploitation with multiple pattern manipulation techniques

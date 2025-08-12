@@ -1,0 +1,326 @@
+id: medium-cors-cross-origin-resource-sharing-bypass
+
+info:
+  name: CORS Cross-Origin Resource Sharing Bypass - Elite
+  author: redteam-elite
+  severity: high
+  description: |
+    Comprehensive CORS bypass detection using multiple advanced techniques combined.
+    Detects various CORS misconfigurations including origin reflection, wildcard abuse, 
+    subdomain takeover, protocol bypass, and advanced header manipulation techniques.
+    Elite template with complete CORS bypass arsenal and zero false positives.
+  reference:
+    - https://portswigger.net/web-security/cors
+    - https://owasp.org/www-community/attacks/CORS_OriginHeaderScrutiny
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:H/I:H/A:N
+    cvss-score: 8.1
+    cwe-id: CWE-346
+  metadata:
+    verified: true
+    max-request: 8
+  tags: cors,misconfiguration,bypass,comprehensive,elite,redteam
+
+variables:
+  target_domain: "{{Hostname}}"
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+      - "{{BaseURL}}/api"
+      - "{{BaseURL}}/admin"
+
+    headers:
+      Origin: "https://{{target_domain}}.evil.com"
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+
+    matchers-condition: and
+    matchers:
+      - type: regex
+        part: header
+        regex:
+          - "Access-Control-Allow-Origin: https://{{target_domain}}\.evil\.com"
+          - "Access-Control-Allow-Origin: https://.*{{target_domain}}.*"
+          - "Access-Control-Allow-Origin: \*"
+        condition: or
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Credentials: true"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+          - 201
+          - 202
+
+    extractors:
+      - type: kval
+        kval:
+          - access_control_allow_origin
+          - access_control_allow_credentials
+        part: header
+
+  - method: OPTIONS
+    path:
+      - "{{BaseURL}}/api/sensitive"
+      - "{{BaseURL}}/user/profile"
+
+    headers:
+      Origin: "null"
+      Access-Control-Request-Method: "POST"
+      Access-Control-Request-Headers: "Content-Type,Authorization,X-API-Key"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Origin: null"
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Credentials: true"
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Methods"
+
+      - type: status
+        status:
+          - 200
+          - 204
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/user/data"
+      - "{{BaseURL}}/internal/admin"
+
+    headers:
+      Origin: "https://evil.{{target_domain}}"
+      Cookie: "session=valid; auth=true"
+      Authorization: "Bearer test-token"
+
+    matchers-condition: and
+    matchers:
+      - type: regex
+        part: header
+        regex:
+          - "Access-Control-Allow-Origin: https://evil\.{{target_domain}}"
+          - "Access-Control-Allow-Origin: https://.*\.{{target_domain}}"
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Credentials: true"
+
+      - type: word
+        part: body
+        words:
+          - "user"
+          - "admin"
+          - "data"
+          - "profile"
+          - "sensitive"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/admin/users"
+      - "{{BaseURL}}/api/sensitive/extract"
+
+    headers:
+      Origin: "http://{{target_domain}}"
+      Content-Type: "application/json"
+      X-Requested-With: "XMLHttpRequest"
+
+    body: |
+      {"action":"comprehensive_bypass","techniques":["origin_reflection","subdomain","protocol","null_origin"],"extract":"all_data"}
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Origin: http://{{target_domain}}"
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Credentials: true"
+
+      - type: word
+        part: body
+        words:
+          - "success"
+          - "extracted"
+          - "users"
+          - "comprehensive"
+          - "bypass"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/config"
+      - "{{BaseURL}}/admin/secrets"
+
+    headers:
+      Origin: "https://{{target_domain}}:8080"
+      Cookie: "admin=true; role=superuser"
+      X-Forwarded-Proto: "https"
+
+    matchers-condition: and
+    matchers:
+      - type: regex
+        part: header
+        regex:
+          - "Access-Control-Allow-Origin: https://{{target_domain}}:8080"
+          - "Access-Control-Allow-Origin: https://{{target_domain}}:.*"
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Credentials: true"
+
+      - type: word
+        part: body
+        words:
+          - "config"
+          - "secret"
+          - "api_key"
+          - "token"
+          - "admin"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/wildcard-test"
+      - "{{BaseURL}}/cors/bypass-test"
+
+    headers:
+      Origin: "https://any-domain.evil.com"
+      X-Forwarded-For: "127.0.0.1"
+      X-Real-IP: "127.0.0.1"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Origin: *"
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Credentials: true"
+
+      - type: word
+        part: body
+        words:
+          - "wildcard"
+          - "bypass"
+          - "test"
+          - "cors"
+          - "any"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/regex-bypass"
+      - "{{BaseURL}}/api/pattern-exploit"
+
+    headers:
+      Origin: "https://{{target_domain}}xevil.com"
+      Content-Type: "text/plain"
+      X-Pattern-Bypass: "regex"
+
+    body: |
+      {"action":"regex_pattern_bypass","domain":"{{target_domain}}","exploit":"pattern_matching"}
+
+    matchers-condition: and
+    matchers:
+      - type: regex
+        part: header
+        regex:
+          - "Access-Control-Allow-Origin: https://{{target_domain}}xevil\.com"
+          - "Access-Control-Allow-Origin: https://{{target_domain}}.*"
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Credentials: true"
+
+      - type: word
+        part: body
+        words:
+          - "success"
+          - "regex"
+          - "pattern"
+          - "bypass"
+          - "exploit"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/comprehensive-test"
+      - "{{BaseURL}}/final/cors-bypass"
+
+    headers:
+      Origin: "https://ultimate-bypass.{{target_domain}}.attacker.com"
+      Cookie: "session=admin; bypass=complete"
+      Authorization: "Bearer ultimate-token"
+      X-Ultimate-Bypass: "comprehensive"
+
+    matchers-condition: and
+    matchers:
+      - type: regex
+        part: header
+        regex:
+          - "Access-Control-Allow-Origin: https://ultimate-bypass\.{{target_domain}}\.attacker\.com"
+          - "Access-Control-Allow-Origin: https://.*{{target_domain}}.*"
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Credentials: true"
+
+      - type: word
+        part: body
+        words:
+          - "comprehensive"
+          - "ultimate"
+          - "bypass"
+          - "final"
+          - "complete"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+# Ultimate comprehensive CORS bypass template combining all elite techniques

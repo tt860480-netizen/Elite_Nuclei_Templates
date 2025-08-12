@@ -1,0 +1,212 @@
+id: medium-cors-pre-domain-wildcard-bypass
+
+info:
+  name: CORS Pre-Domain Wildcard Bypass Attack - Elite
+  author: redteam-elite
+  severity: medium
+  description: |
+    Detects CORS misconfiguration where server allows pre-domain wildcards (evil*.domain.com).
+    Attackers can register domains with matching prefixes to bypass CORS policy.
+    Elite template with advanced pre-domain exploitation techniques and regex bypass methods.
+  reference:
+    - https://portswigger.net/web-security/cors
+    - https://owasp.org/www-community/attacks/CORS_OriginHeaderScrutiny
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:H/I:L/A:N
+    cvss-score: 7.1
+    cwe-id: CWE-346
+  metadata:
+    verified: true
+    max-request: 5
+  tags: cors,misconfiguration,pre-domain,wildcard,bypass,elite,redteam
+
+variables:
+  target_domain: "{{Hostname}}"
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+      - "{{BaseURL}}/api"
+      - "{{BaseURL}}/admin"
+
+    headers:
+      Origin: "https://evil{{target_domain}}"
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+
+    matchers-condition: and
+    matchers:
+      - type: regex
+        part: header
+        regex:
+          - "Access-Control-Allow-Origin: https://evil.*"
+          - "Access-Control-Allow-Origin: https://.*{{target_domain}}"
+        condition: or
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Credentials: true"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+          - 201
+          - 202
+
+    extractors:
+      - type: kval
+        kval:
+          - access_control_allow_origin
+          - access_control_allow_credentials
+        part: header
+
+  - method: OPTIONS
+    path:
+      - "{{BaseURL}}/api/sensitive"
+      - "{{BaseURL}}/user/profile"
+
+    headers:
+      Origin: "https://malicious{{target_domain}}"
+      Access-Control-Request-Method: "POST"
+      Access-Control-Request-Headers: "Content-Type,Authorization"
+
+    matchers-condition: and
+    matchers:
+      - type: regex
+        part: header
+        regex:
+          - "Access-Control-Allow-Origin: https://malicious.*"
+          - "Access-Control-Allow-Origin: https://.*{{target_domain}}"
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Credentials: true"
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Methods"
+
+      - type: status
+        status:
+          - 200
+          - 204
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/user/data"
+      - "{{BaseURL}}/internal/config"
+
+    headers:
+      Origin: "https://attacker{{target_domain}}.evil.com"
+      Cookie: "session=valid; auth=true"
+      X-Requested-With: "XMLHttpRequest"
+
+    matchers-condition: and
+    matchers:
+      - type: regex
+        part: header
+        regex:
+          - "Access-Control-Allow-Origin: https://attacker.*"
+          - "Access-Control-Allow-Origin: https://.*{{target_domain}}.*"
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Credentials: true"
+
+      - type: word
+        part: body
+        words:
+          - "user"
+          - "config"
+          - "data"
+          - "sensitive"
+          - "internal"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/admin/action"
+      - "{{BaseURL}}/api/user/update"
+
+    headers:
+      Origin: "https://bypass{{target_domain}}"
+      Content-Type: "application/json"
+      Authorization: "Bearer test-token"
+
+    body: |
+      {"command":"get_all_users","include_sensitive":true}
+
+    matchers-condition: and
+    matchers:
+      - type: regex
+        part: header
+        regex:
+          - "Access-Control-Allow-Origin: https://bypass.*"
+          - "Access-Control-Allow-Origin: https://.*{{target_domain}}"
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Credentials: true"
+
+      - type: word
+        part: body
+        words:
+          - "success"
+          - "users"
+          - "admin"
+          - "updated"
+          - "sensitive"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/secrets"
+      - "{{BaseURL}}/admin/keys"
+
+    headers:
+      Origin: "https://exploit{{target_domain}}.attacker.com"
+      Referer: "https://exploit{{target_domain}}.attacker.com/payload"
+      X-Forwarded-Host: "{{target_domain}}"
+
+    matchers-condition: and
+    matchers:
+      - type: regex
+        part: header
+        regex:
+          - "Access-Control-Allow-Origin: https://exploit.*"
+          - "Access-Control-Allow-Origin: https://.*{{target_domain}}.*"
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Credentials: true"
+
+      - type: word
+        part: body
+        words:
+          - "secret"
+          - "key"
+          - "token"
+          - "api_key"
+          - "password"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+# Advanced pre-domain wildcard exploitation with multiple bypass techniques

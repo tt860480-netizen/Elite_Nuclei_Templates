@@ -1,0 +1,249 @@
+id: medium-cors-port-bypass-different-ports
+
+info:
+  name: CORS Port Bypass Different Ports Attack - Elite
+  author: redteam-elite
+  severity: medium
+  description: |
+    Detects CORS misconfiguration where server allows requests from different ports on same domain.
+    Attackers can exploit port-based origin validation to bypass CORS policy using alternative ports.
+    Elite template with advanced port manipulation techniques and multi-port exploitation.
+  reference:
+    - https://portswigger.net/web-security/cors
+    - https://owasp.org/www-community/attacks/CORS_OriginHeaderScrutiny
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:H/I:L/A:N
+    cvss-score: 7.1
+    cwe-id: CWE-346
+  metadata:
+    verified: true
+    max-request: 6
+  tags: cors,misconfiguration,port,bypass,different-ports,elite,redteam
+
+variables:
+  target_domain: "{{Hostname}}"
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+      - "{{BaseURL}}/api"
+      - "{{BaseURL}}/admin"
+
+    headers:
+      Origin: "https://{{target_domain}}:8080"
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+
+    matchers-condition: and
+    matchers:
+      - type: regex
+        part: header
+        regex:
+          - "Access-Control-Allow-Origin: https://{{target_domain}}:8080"
+          - "Access-Control-Allow-Origin: https://{{target_domain}}:.*"
+        condition: or
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Credentials: true"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+          - 201
+          - 202
+
+    extractors:
+      - type: kval
+        kval:
+          - access_control_allow_origin
+          - access_control_allow_credentials
+        part: header
+
+  - method: OPTIONS
+    path:
+      - "{{BaseURL}}/api/sensitive"
+      - "{{BaseURL}}/user/profile"
+
+    headers:
+      Origin: "https://{{target_domain}}:3000"
+      Access-Control-Request-Method: "POST"
+      Access-Control-Request-Headers: "Content-Type,Authorization"
+
+    matchers-condition: and
+    matchers:
+      - type: regex
+        part: header
+        regex:
+          - "Access-Control-Allow-Origin: https://{{target_domain}}:3000"
+          - "Access-Control-Allow-Origin: https://{{target_domain}}:.*"
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Credentials: true"
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Methods"
+
+      - type: status
+        status:
+          - 200
+          - 204
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/user/data"
+      - "{{BaseURL}}/internal/admin"
+
+    headers:
+      Origin: "https://{{target_domain}}:4000"
+      Cookie: "session=valid; auth=true"
+      Authorization: "Bearer test-token"
+
+    matchers-condition: and
+    matchers:
+      - type: regex
+        part: header
+        regex:
+          - "Access-Control-Allow-Origin: https://{{target_domain}}:4000"
+          - "Access-Control-Allow-Origin: https://{{target_domain}}:.*"
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Credentials: true"
+
+      - type: word
+        part: body
+        words:
+          - "user"
+          - "admin"
+          - "data"
+          - "profile"
+          - "sensitive"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/admin/users"
+      - "{{BaseURL}}/api/sensitive/extract"
+
+    headers:
+      Origin: "https://{{target_domain}}:5000"
+      Content-Type: "application/json"
+      X-Requested-With: "XMLHttpRequest"
+
+    body: |
+      {"action":"port_bypass","target_port":"5000","extract":"sensitive_data"}
+
+    matchers-condition: and
+    matchers:
+      - type: regex
+        part: header
+        regex:
+          - "Access-Control-Allow-Origin: https://{{target_domain}}:5000"
+          - "Access-Control-Allow-Origin: https://{{target_domain}}:.*"
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Credentials: true"
+
+      - type: word
+        part: body
+        words:
+          - "success"
+          - "extracted"
+          - "users"
+          - "data"
+          - "sensitive"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/config"
+      - "{{BaseURL}}/admin/secrets"
+
+    headers:
+      Origin: "http://{{target_domain}}:8000"
+      Referer: "http://{{target_domain}}:8000/exploit"
+      X-Forwarded-Port: "8000"
+
+    matchers-condition: and
+    matchers:
+      - type: regex
+        part: header
+        regex:
+          - "Access-Control-Allow-Origin: http://{{target_domain}}:8000"
+          - "Access-Control-Allow-Origin: http://{{target_domain}}:.*"
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Credentials: true"
+
+      - type: word
+        part: body
+        words:
+          - "config"
+          - "secret"
+          - "api_key"
+          - "token"
+          - "password"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/port-test"
+      - "{{BaseURL}}/debug/ports"
+
+    headers:
+      Origin: "https://{{target_domain}}:9999"
+      X-Original-Port: "9999"
+      X-Forwarded-Host: "{{target_domain}}:9999"
+
+    matchers-condition: and
+    matchers:
+      - type: regex
+        part: header
+        regex:
+          - "Access-Control-Allow-Origin: https://{{target_domain}}:9999"
+          - "Access-Control-Allow-Origin: https://{{target_domain}}:.*"
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Credentials: true"
+
+      - type: word
+        part: body
+        words:
+          - "port"
+          - "debug"
+          - "test"
+          - "bypass"
+          - "access"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+# Advanced port bypass exploitation with multiple port manipulation techniques

@@ -1,0 +1,295 @@
+id: medium-cors-vary-header-missing-attack
+
+info:
+  name: CORS Vary Header Missing Attack - Elite
+  author: redteam-elite
+  severity: medium
+  description: |
+    Detects CORS misconfiguration where server missing Vary: Origin header in responses.
+    This allows cache poisoning attacks and origin-based bypass through cache manipulation.
+    Elite template with advanced Vary header exploitation and cache poisoning techniques.
+  reference:
+    - https://portswigger.net/web-security/cors
+    - https://owasp.org/www-community/attacks/CORS_OriginHeaderScrutiny
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:H/I:L/A:N
+    cvss-score: 7.1
+    cwe-id: CWE-346
+  metadata:
+    verified: true
+    max-request: 6
+  tags: cors,misconfiguration,vary-header,missing,cache-poison,elite,redteam
+
+variables:
+  target_domain: "{{Hostname}}"
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+      - "{{BaseURL}}/api"
+      - "{{BaseURL}}/admin"
+
+    headers:
+      Origin: "https://evil-attacker.com"
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Origin: https://evil-attacker.com"
+        condition: and
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Credentials: true"
+        condition: or
+
+      - type: word
+        part: header
+        words:
+          - "Vary: Origin"
+        negative: true
+
+      - type: status
+        status:
+          - 200
+          - 201
+          - 202
+
+    extractors:
+      - type: kval
+        kval:
+          - access_control_allow_origin
+          - access_control_allow_credentials
+          - vary
+        part: header
+
+  - method: OPTIONS
+    path:
+      - "{{BaseURL}}/api/sensitive"
+      - "{{BaseURL}}/user/profile"
+
+    headers:
+      Origin: "https://vary-missing.evil"
+      Access-Control-Request-Method: "GET"
+      Access-Control-Request-Headers: "Authorization"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Origin: https://vary-missing.evil"
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Credentials: true"
+
+      - type: word
+        part: header
+        words:
+          - "Vary: Origin"
+        negative: true
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Methods"
+
+      - type: status
+        status:
+          - 200
+          - 204
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/user/data"
+      - "{{BaseURL}}/api/cached"
+
+    headers:
+      Origin: "https://cache-exploit.attacker"
+      Cookie: "session=valid; auth=true"
+      X-Cache-Exploit: "vary-missing"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Origin: https://cache-exploit.attacker"
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Credentials: true"
+
+      - type: word
+        part: header
+        words:
+          - "Vary: Origin"
+        negative: true
+
+      - type: word
+        part: header
+        words:
+          - "Cache-Control"
+          - "ETag"
+          - "Last-Modified"
+        condition: or
+
+      - type: word
+        part: body
+        words:
+          - "user"
+          - "data"
+          - "cached"
+          - "sensitive"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/admin/action"
+      - "{{BaseURL}}/api/vary/exploit"
+
+    headers:
+      Origin: "https://poison-cache.hacker"
+      Content-Type: "application/json"
+      X-Vary-Missing: "exploit"
+
+    body: |
+      {"action":"vary_exploit","cache_poison":true,"missing_vary":"origin"}
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Origin: https://poison-cache.hacker"
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Credentials: true"
+
+      - type: word
+        part: header
+        words:
+          - "Vary: Origin"
+        negative: true
+
+      - type: word
+        part: body
+        words:
+          - "success"
+          - "exploited"
+          - "vary"
+          - "poison"
+          - "admin"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/config"
+      - "{{BaseURL}}/admin/settings"
+
+    headers:
+      Origin: "https://missing-vary.evil"
+      Authorization: "Bearer admin-token"
+      X-Missing-Vary: "cache-bypass"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Origin: https://missing-vary.evil"
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Credentials: true"
+
+      - type: word
+        part: header
+        words:
+          - "Vary: Origin"
+        negative: true
+
+      - type: word
+        part: body
+        words:
+          - "config"
+          - "settings"
+          - "admin"
+          - "secret"
+          - "api_key"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/vary-test"
+      - "{{BaseURL}}/cache/origin-test"
+
+    headers:
+      Origin: "https://origin-cache.bypass"
+      X-Forwarded-For: "127.0.0.1"
+      X-Cache-Test: "vary-missing"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Origin: https://origin-cache.bypass"
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Credentials: true"
+
+      - type: word
+        part: header
+        words:
+          - "Vary: Origin"
+        negative: true
+
+      - type: word
+        part: header
+        words:
+          - "Cache-Control: public"
+          - "X-Cache: HIT"
+          - "CF-Cache-Status"
+        condition: or
+
+      - type: word
+        part: body
+        words:
+          - "vary"
+          - "cache"
+          - "origin"
+          - "test"
+          - "bypass"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+# Advanced Vary header missing exploitation with cache poisoning techniques

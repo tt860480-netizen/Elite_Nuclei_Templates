@@ -1,0 +1,292 @@
+id: medium-cors-cache-poisoning-cors-headers
+
+info:
+  name: CORS Cache Poisoning Attack - Elite
+  author: redteam-elite
+  severity: medium
+  description: |
+    Detects CORS misconfiguration vulnerable to cache poisoning attacks through header manipulation.
+    Attackers can poison cache with malicious CORS headers to bypass origin restrictions.
+    Elite template with advanced cache poisoning techniques and header injection methods.
+  reference:
+    - https://portswigger.net/web-security/web-cache-poisoning
+    - https://owasp.org/www-community/attacks/CORS_OriginHeaderScrutiny
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:H/I:L/A:N
+    cvss-score: 7.1
+    cwe-id: CWE-346
+  metadata:
+    verified: true
+    max-request: 6
+  tags: cors,misconfiguration,cache-poisoning,header-injection,elite,redteam
+
+variables:
+  target_domain: "{{Hostname}}"
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+      - "{{BaseURL}}/api"
+      - "{{BaseURL}}/static"
+
+    headers:
+      Origin: "https://evil-attacker.com"
+      X-Forwarded-Host: "evil-attacker.com"
+      X-Original-URL: "/cors-poison"
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Origin: https://evil-attacker.com"
+        condition: and
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Credentials: true"
+        condition: or
+
+      - type: word
+        part: header
+        words:
+          - "Cache-Control"
+          - "Expires"
+          - "ETag"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+          - 201
+          - 202
+
+    extractors:
+      - type: kval
+        kval:
+          - access_control_allow_origin
+          - access_control_allow_credentials
+          - cache_control
+        part: header
+
+  - method: OPTIONS
+    path:
+      - "{{BaseURL}}/api/cached"
+      - "{{BaseURL}}/static/resources"
+
+    headers:
+      Origin: "https://cache-poison.evil"
+      X-Forwarded-Proto: "https"
+      X-Cache-Key: "poison-key"
+      Access-Control-Request-Method: "GET"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Origin: https://cache-poison.evil"
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Credentials: true"
+
+      - type: word
+        part: header
+        words:
+          - "Cache-Control"
+          - "X-Cache"
+          - "CF-Cache-Status"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+          - 204
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/user/profile"
+      - "{{BaseURL}}/cached/data"
+
+    headers:
+      Origin: "https://malicious-cache.com"
+      X-Forwarded-For: "127.0.0.1"
+      X-Real-IP: "127.0.0.1"
+      X-Cache-Poison: "cors-bypass"
+      Cookie: "session=valid; auth=true"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Origin: https://malicious-cache.com"
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Credentials: true"
+
+      - type: word
+        part: header
+        words:
+          - "X-Cache: HIT"
+          - "Cache-Control: public"
+          - "CF-Cache-Status: HIT"
+        condition: or
+
+      - type: word
+        part: body
+        words:
+          - "user"
+          - "profile"
+          - "cached"
+          - "data"
+          - "sensitive"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/cache/poison"
+      - "{{BaseURL}}/api/cached/update"
+
+    headers:
+      Origin: "https://poison-inject.hacker"
+      Content-Type: "application/json"
+      X-HTTP-Method-Override: "GET"
+      X-Cache-Bypass: "poison"
+
+    body: |
+      {"action":"cache_poison","origin":"https://poison-inject.hacker","poison_cache":true}
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Origin: https://poison-inject.hacker"
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Credentials: true"
+
+      - type: word
+        part: header
+        words:
+          - "Cache-Control"
+          - "X-Cache"
+        condition: or
+
+      - type: word
+        part: body
+        words:
+          - "success"
+          - "poisoned"
+          - "cache"
+          - "injected"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/admin/cached"
+      - "{{BaseURL}}/static/admin"
+
+    headers:
+      Origin: "https://admin-poison.evil"
+      X-Forwarded-Host: "admin-poison.evil"
+      X-Original-Host: "{{target_domain}}"
+      X-Cache-Control: "no-cache"
+      Authorization: "Bearer admin-token"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Origin: https://admin-poison.evil"
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Credentials: true"
+
+      - type: word
+        part: header
+        words:
+          - "Cache-Control"
+          - "X-Cache-Status"
+        condition: or
+
+      - type: word
+        part: body
+        words:
+          - "admin"
+          - "cached"
+          - "poisoned"
+          - "static"
+          - "sensitive"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/vary-poison"
+      - "{{BaseURL}}/cache/vary-test"
+
+    headers:
+      Origin: "https://vary-poison.attacker"
+      Vary: "Origin"
+      X-Vary-Poison: "origin-header"
+      X-Cache-Vary: "bypass"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Origin: https://vary-poison.attacker"
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Credentials: true"
+
+      - type: word
+        part: header
+        words:
+          - "Vary: Origin"
+          - "Cache-Control"
+        condition: or
+
+      - type: word
+        part: body
+        words:
+          - "vary"
+          - "poison"
+          - "cache"
+          - "bypass"
+          - "header"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+# Advanced cache poisoning exploitation with CORS header manipulation techniques

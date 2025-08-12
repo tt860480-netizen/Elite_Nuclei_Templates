@@ -1,0 +1,256 @@
+id: medium-cors-access-control-max-age-abuse
+
+info:
+  name: CORS Access-Control-Max-Age Abuse Attack - Elite
+  author: redteam-elite
+  severity: medium
+  description: |
+    Detects CORS misconfiguration where server sets excessive Access-Control-Max-Age values.
+    Attackers can exploit long-lived preflight cache to maintain persistent access and bypass security updates.
+    Elite template with advanced Max-Age exploitation and persistent access techniques.
+  reference:
+    - https://portswigger.net/web-security/cors
+    - https://owasp.org/www-community/attacks/CORS_OriginHeaderScrutiny
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:H/I:L/A:N
+    cvss-score: 7.1
+    cwe-id: CWE-346
+  metadata:
+    verified: true
+    max-request: 6
+  tags: cors,misconfiguration,max-age,abuse,persistent,elite,redteam
+
+variables:
+  target_domain: "{{Hostname}}"
+
+http:
+  - method: OPTIONS
+    path:
+      - "{{BaseURL}}"
+      - "{{BaseURL}}/api"
+      - "{{BaseURL}}/admin"
+
+    headers:
+      Origin: "https://evil-attacker.com"
+      Access-Control-Request-Method: "GET"
+      Access-Control-Request-Headers: "Authorization,X-API-Key"
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Origin: https://evil-attacker.com"
+        condition: and
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Credentials: true"
+        condition: or
+
+      - type: regex
+        part: header
+        regex:
+          - "Access-Control-Max-Age: ([3-9][0-9]{4,}|[1-9][0-9]{5,})"
+
+      - type: status
+        status:
+          - 200
+          - 204
+
+    extractors:
+      - type: kval
+        kval:
+          - access_control_allow_origin
+          - access_control_allow_credentials
+          - access_control_max_age
+        part: header
+
+  - method: OPTIONS
+    path:
+      - "{{BaseURL}}/api/sensitive"
+      - "{{BaseURL}}/user/profile"
+
+    headers:
+      Origin: "https://max-age-abuse.evil"
+      Access-Control-Request-Method: "POST"
+      Access-Control-Request-Headers: "Content-Type,Authorization"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Origin: https://max-age-abuse.evil"
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Credentials: true"
+
+      - type: regex
+        part: header
+        regex:
+          - "Access-Control-Max-Age: (86400|604800|2592000|31536000|[1-9][0-9]{6,})"
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Methods"
+
+      - type: status
+        status:
+          - 200
+          - 204
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/user/data"
+      - "{{BaseURL}}/api/admin/info"
+
+    headers:
+      Origin: "https://persistent-access.attacker"
+      Cookie: "session=valid; auth=true"
+      Authorization: "Bearer test-token"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Origin: https://persistent-access.attacker"
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Credentials: true"
+
+      - type: word
+        part: body
+        words:
+          - "user"
+          - "admin"
+          - "data"
+          - "info"
+          - "sensitive"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/admin/action"
+      - "{{BaseURL}}/api/max-age/exploit"
+
+    headers:
+      Origin: "https://long-lived.hacker"
+      Content-Type: "application/json"
+      X-Max-Age-Exploit: "persistent"
+
+    body: |
+      {"action":"max_age_abuse","persistent":true,"duration":"long_term"}
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Origin: https://long-lived.hacker"
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Credentials: true"
+
+      - type: word
+        part: body
+        words:
+          - "success"
+          - "persistent"
+          - "max_age"
+          - "abuse"
+          - "admin"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+  - method: OPTIONS
+    path:
+      - "{{BaseURL}}/api/config"
+      - "{{BaseURL}}/admin/settings"
+
+    headers:
+      Origin: "https://cache-forever.evil"
+      Access-Control-Request-Method: "DELETE"
+      Access-Control-Request-Headers: "X-Admin-Key"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Origin: https://cache-forever.evil"
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Credentials: true"
+
+      - type: regex
+        part: header
+        regex:
+          - "Access-Control-Max-Age: (31536000|[4-9][0-9]{7,}|[1-9][0-9]{8,})"
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Methods.*DELETE"
+
+      - type: status
+        status:
+          - 200
+          - 204
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/preflight-cached"
+      - "{{BaseURL}}/long-cache/test"
+
+    headers:
+      Origin: "https://exploit-cache.bypass"
+      X-Preflight-Cached: "max-age-abuse"
+      X-Long-Cache: "exploit"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Origin: https://exploit-cache.bypass"
+
+      - type: word
+        part: header
+        words:
+          - "Access-Control-Allow-Credentials: true"
+
+      - type: word
+        part: body
+        words:
+          - "preflight"
+          - "cached"
+          - "long"
+          - "cache"
+          - "exploit"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+# Advanced Max-Age abuse exploitation with persistent access techniques
