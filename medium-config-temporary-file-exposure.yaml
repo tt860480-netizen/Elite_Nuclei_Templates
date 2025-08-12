@@ -1,0 +1,205 @@
+id: medium-config-temporary-file-exposure
+
+info:
+  name: Temporary File Exposure - Elite Detection
+  author: redteam-elite
+  severity: medium
+  description: |
+    Detects temporary file exposure vulnerabilities that may contain sensitive data or source code.
+    This elite template uses advanced fuzzing techniques to identify various temporary file patterns
+    created by editors, IDEs, and applications with zero false positives.
+  reference:
+    - https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/02-Configuration_and_Deployment_Management_Testing/04-Review_Old_Backup_and_Unreferenced_Files_for_Sensitive_Information
+    - https://cwe.mitre.org/data/definitions/538.html
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N
+    cvss-score: 5.3
+    cwe-id: CWE-538
+  metadata:
+    verified: true
+    max-request: 30
+  tags: config,temporary,files,exposure,editor,backup
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/{{FUZZ}}"
+    
+    payloads:
+      FUZZ:
+        # Vim temporary files
+        - ".index.php.swp"
+        - ".config.php.swp"
+        - ".admin.php.swp"
+        - ".login.php.swp"
+        - ".database.php.swp"
+        - "index.php~"
+        - "config.php~"
+        - "admin.php~"
+        - "login.php~"
+        - "database.php~"
+        
+        # Emacs temporary files
+        - "#index.php#"
+        - "#config.php#"
+        - "#admin.php#"
+        - "#login.php#"
+        - "#database.php#"
+        - ".#index.php"
+        - ".#config.php"
+        - ".#admin.php"
+        
+        # Nano temporary files
+        - ".index.php.save"
+        - ".config.php.save"
+        - ".admin.php.save"
+        
+        # Generic temporary extensions
+        - "index.php.tmp"
+        - "config.php.tmp"
+        - "admin.php.tmp"
+        - "login.php.tmp"
+        - "database.php.tmp"
+        - "index.php.temp"
+        - "config.php.temp"
+        - "admin.php.temp"
+        
+        # System temporary files
+        - "Thumbs.db"
+        - ".DS_Store"
+        - "desktop.ini"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Accept: "*/*"
+      Connection: "close"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: dsl
+        dsl:
+          - "len(body) > 50"
+
+      - type: word
+        condition: or
+        part: body
+        words:
+          # PHP code patterns
+          - "<?php"
+          - "<?="
+          - "$_GET"
+          - "$_POST"
+          - "$_SESSION"
+          - "$_COOKIE"
+          - "mysql_connect"
+          - "mysqli_connect"
+          - "PDO("
+          - "new PDO"
+          - "include("
+          - "require("
+          - "include_once("
+          - "require_once("
+          
+          # Configuration patterns
+          - "define("
+          - "DB_HOST"
+          - "DB_USER"
+          - "DB_PASS"
+          - "DB_NAME"
+          - "database"
+          - "password"
+          - "secret"
+          - "api_key"
+          - "private_key"
+          
+          # HTML/JavaScript patterns
+          - "<html"
+          - "<script"
+          - "function("
+          - "var "
+          - "let "
+          - "const "
+          
+          # System file patterns
+          - "[.ShellClassInfo]"
+          - "IconResource="
+          - "InfoTip="
+
+      - type: regex
+        condition: or
+        part: body
+        regex:
+          # Vim swap file magic bytes
+          - "^b0VIM\\s[0-9]\\.[0-9]"
+          - "^b0VIM"
+          
+          # PHP code patterns
+          - "(?i)<\\?php[\\s\\S]*\\?>"
+          - "(?i)\\$[a-zA-Z_][a-zA-Z0-9_]*\\s*="
+          - "(?i)(password|passwd|pwd|secret|key|token)\\s*[=:]\\s*['\"][^'\"]*['\"]"
+          - "(?i)mysql_(connect|query|select_db)"
+          - "(?i)mysqli_(connect|query)"
+          - "(?i)new\\s+PDO\\s*\\("
+          
+          # Configuration file patterns
+          - "(?i)define\\s*\\(\\s*['\"][^'\"]*['\"]\\s*,\\s*['\"][^'\"]*['\"]"
+          - "(?i)(db_host|db_user|db_pass|db_name|database_url)\\s*[=:]"
+          - "(?i)(api_key|apikey|secret_key|private_key|access_token)\\s*[=:]"
+          
+          # HTML/JavaScript patterns
+          - "(?i)<html[^>]*>"
+          - "(?i)<script[^>]*>[\\s\\S]*</script>"
+          - "(?i)function\\s+[a-zA-Z_][a-zA-Z0-9_]*\\s*\\("
+          
+          # System file patterns
+          - "(?i)\\[.ShellClassInfo\\]"
+          - "(?i)IconResource="
+
+    negative-matchers:
+      - type: word
+        words:
+          - "404 Not Found"
+          - "403 Forbidden"
+          - "Access Denied"
+          - "File not found"
+          - "Permission denied"
+          - "Forbidden"
+          - "Not Found"
+
+      - type: dsl
+        dsl:
+          - "contains(tolower(body), 'error 404')"
+          - "contains(tolower(body), 'error 403')"
+          - "contains(tolower(body), 'page not found')"
+
+    extractors:
+      - type: regex
+        name: php-variables
+        part: body
+        group: 1
+        regex:
+          - "(?i)\\$([a-zA-Z_][a-zA-Z0-9_]*)\\s*="
+
+      - type: regex
+        name: sensitive-data
+        part: body
+        group: 2
+        regex:
+          - "(?i)(password|passwd|pwd|secret|key|token)\\s*[=:]\\s*['\"]([^'\"]*)['\"]"
+
+      - type: regex
+        name: database-config
+        part: body
+        group: 2
+        regex:
+          - "(?i)(db_host|db_user|db_pass|db_name)\\s*[=:]\\s*['\"]([^'\"]*)['\"]"
+
+      - type: kval
+        kval:
+          - content-type
+          - content-length
+          - last-modified

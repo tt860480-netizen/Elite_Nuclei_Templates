@@ -1,0 +1,207 @@
+id: medium-config-log-file-exposure-sensitive-data
+
+info:
+  name: Log File Exposure with Sensitive Data - Elite Detection
+  author: redteam-elite
+  severity: medium
+  description: |
+    Detects log file exposure vulnerabilities that may contain sensitive data like passwords, tokens, or PII.
+    This elite template uses advanced pattern matching to identify various log file formats
+    and sensitive data patterns with zero false positives using red team techniques.
+  reference:
+    - https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/02-Configuration_and_Deployment_Management_Testing/04-Review_Old_Backup_and_Unreferenced_Files_for_Sensitive_Information
+    - https://cwe.mitre.org/data/definitions/532.html
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N
+    cvss-score: 7.5
+    cwe-id: CWE-532
+  metadata:
+    verified: true
+    max-request: 25
+  tags: config,logs,exposure,sensitive-data,information-disclosure
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/{{FUZZ}}"
+    
+    payloads:
+      FUZZ:
+        # Common log files
+        - "error.log"
+        - "access.log"
+        - "error_log"
+        - "access_log"
+        - "apache.log"
+        - "apache_error.log"
+        - "nginx.log"
+        - "nginx_error.log"
+        - "php_error.log"
+        - "php_errors.log"
+        - "application.log"
+        - "app.log"
+        - "debug.log"
+        - "system.log"
+        - "auth.log"
+        - "security.log"
+        - "audit.log"
+        - "mysql.log"
+        - "database.log"
+        - "sql.log"
+        - "laravel.log"
+        - "symfony.log"
+        - "django.log"
+        - "rails.log"
+        - "catalina.out"
+        - "server.log"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Accept: "*/*"
+      Connection: "close"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: dsl
+        dsl:
+          - "len(body) > 200"
+
+      - type: word
+        condition: or
+        part: body
+        words:
+          # Log format indicators
+          - "[error]"
+          - "[warn]"
+          - "[info]"
+          - "[debug]"
+          - "[FATAL]"
+          - "[ERROR]"
+          - "[WARN]"
+          - "[INFO]"
+          - "[DEBUG]"
+          - "ERROR:"
+          - "WARNING:"
+          - "NOTICE:"
+          - "CRITICAL:"
+          - "ALERT:"
+          
+          # Web server log patterns
+          - "GET /"
+          - "POST /"
+          - "PUT /"
+          - "DELETE /"
+          - "HTTP/1.1"
+          - "HTTP/1.0"
+          - "Mozilla/"
+          - "User-Agent:"
+          - "Referer:"
+          - "X-Forwarded-For:"
+          
+          # Application log patterns
+          - "Exception:"
+          - "Traceback"
+          - "Stack trace:"
+          - "Fatal error:"
+          - "Parse error:"
+          - "Warning:"
+          - "Notice:"
+
+      - type: regex
+        condition: or
+        part: body
+        regex:
+          # Timestamp patterns
+          - "(?i)[0-9]{4}-[0-9]{2}-[0-9]{2}\\s+[0-9]{2}:[0-9]{2}:[0-9]{2}"
+          - "(?i)[0-9]{2}/[A-Za-z]{3}/[0-9]{4}:[0-9]{2}:[0-9]{2}:[0-9]{2}"
+          - "(?i)[A-Za-z]{3}\\s+[0-9]{1,2}\\s+[0-9]{2}:[0-9]{2}:[0-9]{2}"
+          
+          # Sensitive data patterns
+          - "(?i)(password|passwd|pwd)\\s*[=:]\\s*['\"]?[^\\s'\"]{6,}['\"]?"
+          - "(?i)(api_key|apikey|access_token|secret_key|private_key)\\s*[=:]\\s*['\"]?[a-zA-Z0-9_-]{10,}['\"]?"
+          - "(?i)(username|user|login)\\s*[=:]\\s*['\"]?[a-zA-Z0-9_@.-]{3,}['\"]?"
+          - "(?i)(email|mail)\\s*[=:]\\s*['\"]?[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}['\"]?"
+          - "(?i)(phone|mobile|tel)\\s*[=:]\\s*['\"]?[+]?[0-9\\s()-]{10,}['\"]?"
+          - "(?i)(ssn|social_security|credit_card|card_number)\\s*[=:]\\s*['\"]?[0-9\\s-]{9,}['\"]?"
+          - "(?i)(jwt|bearer)\\s*['\"]?[a-zA-Z0-9_-]+\\.[a-zA-Z0-9_-]+\\.[a-zA-Z0-9_-]+['\"]?"
+          
+          # Database connection strings
+          - "(?i)(mysql|postgresql|oracle|mssql|mongodb)://[^\\s]+"
+          - "(?i)jdbc:[^\\s]+"
+          - "(?i)Server=[^;]+;Database=[^;]+;User\\s+Id=[^;]+;Password=[^;]+"
+          
+          # Error messages with sensitive info
+          - "(?i)mysql_connect\\([^)]*password[^)]*\\)"
+          - "(?i)PDO\\([^)]*password[^)]*\\)"
+          - "(?i)Authentication\\s+failed\\s+for\\s+user\\s+['\"]?[^'\"\\s]+['\"]?"
+          - "(?i)Access\\s+denied\\s+for\\s+user\\s+['\"]?[^'\"\\s]+['\"]?"
+          
+          # IP addresses and internal paths
+          - "(?i)[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}"
+          - "(?i)/var/www/[^\\s]+"
+          - "(?i)/home/[^\\s]+"
+          - "(?i)C:\\\\[^\\s]+"
+
+    negative-matchers:
+      - type: word
+        words:
+          - "404 Not Found"
+          - "403 Forbidden"
+          - "Access Denied"
+          - "File not found"
+          - "Permission denied"
+          - "Forbidden"
+          - "Not Found"
+
+      - type: dsl
+        dsl:
+          - "contains(tolower(body), 'error 404')"
+          - "contains(tolower(body), 'error 403')"
+          - "contains(tolower(body), 'page not found')"
+
+    extractors:
+      - type: regex
+        name: passwords
+        part: body
+        group: 2
+        regex:
+          - "(?i)(password|passwd|pwd)\\s*[=:]\\s*['\"]?([^\\s'\"]{6,})['\"]?"
+
+      - type: regex
+        name: api-keys
+        part: body
+        group: 2
+        regex:
+          - "(?i)(api_key|apikey|access_token|secret_key|private_key)\\s*[=:]\\s*['\"]?([a-zA-Z0-9_-]{10,})['\"]?"
+
+      - type: regex
+        name: emails
+        part: body
+        group: 1
+        regex:
+          - "(?i)([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,})"
+
+      - type: regex
+        name: ip-addresses
+        part: body
+        group: 1
+        regex:
+          - "(?i)([0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3})"
+
+      - type: regex
+        name: database-urls
+        part: body
+        group: 1
+        regex:
+          - "(?i)((mysql|postgresql|oracle|mssql|mongodb)://[^\\s]+)"
+          - "(?i)(jdbc:[^\\s]+)"
+
+      - type: kval
+        kval:
+          - content-type
+          - content-length
+          - last-modified

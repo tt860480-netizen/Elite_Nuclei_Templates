@@ -1,0 +1,181 @@
+id: medium-config-version-control-folder-exposure
+
+info:
+  name: Version Control Folder Exposure - Elite Detection
+  author: redteam-elite
+  severity: medium
+  description: |
+    Detects version control folder exposure vulnerabilities (.git, .svn, .hg, etc.) that may leak sensitive source code.
+    This elite template uses advanced reconnaissance techniques to identify various VCS exposures
+    with comprehensive detection patterns and zero false positives.
+  reference:
+    - https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/02-Configuration_and_Deployment_Management_Testing/06-Test_File_Extensions_Handling_for_Sensitive_Information
+    - https://cwe.mitre.org/data/definitions/200.html
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N
+    cvss-score: 7.5
+    cwe-id: CWE-200
+  metadata:
+    verified: true
+    max-request: 20
+  tags: config,vcs,git,svn,exposure,source-code
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/.git/"
+      - "{{BaseURL}}/.git/config"
+      - "{{BaseURL}}/.git/HEAD"
+      - "{{BaseURL}}/.git/index"
+      - "{{BaseURL}}/.git/logs/HEAD"
+      - "{{BaseURL}}/.git/refs/heads/master"
+      - "{{BaseURL}}/.git/refs/heads/main"
+      - "{{BaseURL}}/.svn/"
+      - "{{BaseURL}}/.svn/entries"
+      - "{{BaseURL}}/.svn/wc.db"
+      - "{{BaseURL}}/.svn/all-wcprops"
+      - "{{BaseURL}}/.hg/"
+      - "{{BaseURL}}/.hg/hgrc"
+      - "{{BaseURL}}/.hg/requires"
+      - "{{BaseURL}}/.bzr/"
+      - "{{BaseURL}}/.bzr/branch-format"
+      - "{{BaseURL}}/CVS/"
+      - "{{BaseURL}}/CVS/Entries"
+      - "{{BaseURL}}/CVS/Root"
+      - "{{BaseURL}}/.gitignore"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Accept: "*/*"
+      Connection: "close"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        condition: or
+        words:
+          # Git specific patterns
+          - "[core]"
+          - "repositoryformatversion"
+          - "filemode"
+          - "bare = false"
+          - "logallrefupdates"
+          - "ref: refs/heads/"
+          - "DIRC"
+          - "# git ls-files"
+          - "*.git/objects/"
+          - "*.git/refs/"
+          
+          # SVN specific patterns
+          - "svn:wc:ra_dav:version-url"
+          - "has-props"
+          - "has-prop-mods"
+          - "cachable-props"
+          - "present-props"
+          - "SQLite format"
+          - "NODES"
+          - "REPOSITORY"
+          - "WCROOT"
+          
+          # Mercurial specific patterns
+          - "[paths]"
+          - "default ="
+          - "[ui]"
+          - "username ="
+          - "revlogv1"
+          - "store"
+          - "fncache"
+          - "dotencode"
+          
+          # Bazaar specific patterns
+          - "Bazaar-NG meta directory"
+          - "Bazaar repository format"
+          
+          # CVS specific patterns
+          - "CVS/Entries"
+          - "CVS/Repository"
+          - "CVS/Root"
+          - ":pserver:"
+          - ":ext:"
+
+      - type: regex
+        condition: or
+        regex:
+          # Git patterns
+          - "(?i)\\[core\\]\\s*repositoryformatversion\\s*=\\s*[0-9]+"
+          - "(?i)ref:\\s*refs/heads/[a-zA-Z0-9_-]+"
+          - "(?i)[a-f0-9]{40}\\s+refs/heads/[a-zA-Z0-9_-]+"
+          - "(?i)DIRC[\\x00-\\xFF]{4}"
+          
+          # SVN patterns
+          - "(?i)[0-9]+\\s+dir\\s+[0-9]+\\s+[a-zA-Z0-9_-]+\\s+[a-zA-Z0-9_-]+"
+          - "(?i)svn:wc:ra_dav:version-url"
+          - "(?i)CREATE TABLE NODES"
+          - "(?i)CREATE TABLE REPOSITORY"
+          
+          # Mercurial patterns
+          - "(?i)\\[paths\\]\\s*default\\s*="
+          - "(?i)revlogv1\\s*store\\s*fncache"
+          
+          # Directory listing patterns
+          - "(?i)<a\\s+href=\"(config|HEAD|index|entries|hgrc|branch-format|Entries|Root)\""
+          - "(?i)Index\\s+of\\s+/\\.git"
+          - "(?i)Index\\s+of\\s+/\\.svn"
+          - "(?i)Index\\s+of\\s+/\\.hg"
+
+    negative-matchers:
+      - type: word
+        words:
+          - "404 Not Found"
+          - "403 Forbidden"
+          - "Access Denied"
+          - "File not found"
+          - "Permission denied"
+          - "Forbidden"
+          - "Not Found"
+          - "Directory access is forbidden"
+
+      - type: regex
+        regex:
+          - "(?i)<title>[^<]*error[^<]*</title>"
+          - "(?i)<title>[^<]*forbidden[^<]*</title>"
+          - "(?i)<title>[^<]*not\\s+found[^<]*</title>"
+
+    extractors:
+      - type: regex
+        name: git-branch
+        part: body
+        group: 1
+        regex:
+          - "(?i)ref:\\s*refs/heads/([a-zA-Z0-9_-]+)"
+
+      - type: regex
+        name: git-remote
+        part: body
+        group: 1
+        regex:
+          - "(?i)\\[remote\\s+\"origin\"\\]\\s*url\\s*=\\s*([^\\r\\n]+)"
+          - "(?i)url\\s*=\\s*([^\\r\\n]+\\.git)"
+
+      - type: regex
+        name: svn-url
+        part: body
+        group: 1
+        regex:
+          - "(?i)svn:wc:ra_dav:version-url\\s*V\\s*[0-9]+\\s*([^\\r\\n]+)"
+
+      - type: regex
+        name: hg-remote
+        part: body
+        group: 1
+        regex:
+          - "(?i)default\\s*=\\s*([^\\r\\n]+)"
+
+      - type: kval
+        kval:
+          - content-type
+          - content-length

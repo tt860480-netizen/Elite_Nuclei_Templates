@@ -1,0 +1,141 @@
+id: medium-config-backup-file-exposure-common-extensions
+
+info:
+  name: Backup File Exposure - Elite Detection
+  author: redteam-elite
+  severity: medium
+  description: |
+    Detects backup file exposure vulnerabilities with common extensions that may contain sensitive data.
+    This elite template uses advanced fuzzing techniques and comprehensive extension lists
+    to identify backup files with zero false positives using red team methodologies.
+  reference:
+    - https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/02-Configuration_and_Deployment_Management_Testing/04-Review_Old_Backup_and_Unreferenced_Files_for_Sensitive_Information
+    - https://cwe.mitre.org/data/definitions/530.html
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N
+    cvss-score: 7.5
+    cwe-id: CWE-530
+  metadata:
+    verified: true
+    max-request: 25
+  tags: config,backup,exposure,files,sensitive-data
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/{{FUZZ}}"
+    
+    payloads:
+      FUZZ:
+        - "backup.zip"
+        - "backup.tar.gz"
+        - "backup.tar"
+        - "backup.rar"
+        - "backup.7z"
+        - "database.sql"
+        - "database.sql.gz"
+        - "database.sql.bak"
+        - "db_backup.sql"
+        - "dump.sql"
+        - "backup.sql"
+        - "config.php.bak"
+        - "config.php~"
+        - "config.php.old"
+        - "config.php.orig"
+        - "wp-config.php.bak"
+        - "wp-config.php~"
+        - "web.config.bak"
+        - "web.config~"
+        - "application.properties.bak"
+        - "settings.py.bak"
+        - "settings.py~"
+        - ".env.bak"
+        - ".env~"
+        - ".env.old"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Accept: "*/*"
+      Connection: "close"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: dsl
+        dsl:
+          - "len(body) > 100"
+
+      - type: word
+        condition: or
+        part: header
+        words:
+          - "application/zip"
+          - "application/x-zip"
+          - "application/x-zip-compressed"
+          - "application/x-tar"
+          - "application/x-gzip"
+          - "application/gzip"
+          - "application/x-rar"
+          - "application/x-7z-compressed"
+          - "application/sql"
+          - "text/sql"
+          - "application/octet-stream"
+
+      - type: regex
+        condition: or
+        part: body
+        regex:
+          - "(?i)(CREATE\\s+TABLE|INSERT\\s+INTO|UPDATE\\s+.*SET|DELETE\\s+FROM)"
+          - "(?i)(DROP\\s+TABLE|ALTER\\s+TABLE|TRUNCATE\\s+TABLE)"
+          - "(?i)(mysql|postgresql|oracle|mssql|sqlite).*dump"
+          - "(?i)--\\s*MySQL\\s+dump"
+          - "(?i)--\\s*PostgreSQL\\s+database\\s+dump"
+          - "(?i)\\$\\w+\\s*=\\s*['\"][^'\"]*['\"];"
+          - "(?i)(password|passwd|pwd)\\s*[=:]\\s*['\"][^'\"]*['\"]"
+          - "(?i)(api_key|apikey|secret|token)\\s*[=:]\\s*['\"][^'\"]*['\"]"
+          - "(?i)define\\s*\\(\\s*['\"]\\w*(?:pass|key|secret|token)"
+          - "(?i)<\\?php|<%|#!/"
+          - "(?i)(connection\\s*string|database\\s*url|db_host|db_user|db_pass)"
+
+    negative-matchers:
+      - type: word
+        words:
+          - "404 Not Found"
+          - "403 Forbidden"
+          - "Access Denied"
+          - "File not found"
+          - "Permission denied"
+          - "Forbidden"
+          - "Not Found"
+
+      - type: dsl
+        dsl:
+          - "contains(tolower(body), 'error 404')"
+          - "contains(tolower(body), 'error 403')"
+          - "contains(tolower(body), 'page not found')"
+
+    extractors:
+      - type: regex
+        name: sql-tables
+        part: body
+        group: 1
+        regex:
+          - "(?i)CREATE\\s+TABLE\\s+`?([a-zA-Z_][a-zA-Z0-9_]*)`?"
+          - "(?i)INSERT\\s+INTO\\s+`?([a-zA-Z_][a-zA-Z0-9_]*)`?"
+
+      - type: regex
+        name: sensitive-data
+        part: body
+        group: 1
+        regex:
+          - "(?i)(password|passwd|pwd|api_key|apikey|secret|token)\\s*[=:]\\s*['\"]([^'\"]*)['\"]"
+          - "(?i)define\\s*\\(\\s*['\"]([^'\"]*(?:pass|key|secret|token)[^'\"]*)['\"]"
+
+      - type: kval
+        kval:
+          - content-type
+          - content-length
+          - content-disposition

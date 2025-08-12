@@ -1,0 +1,116 @@
+id: medium-config-server-banner-information-disclosure
+
+info:
+  name: Server Banner Information Disclosure - Elite Detection
+  author: redteam-elite
+  severity: medium
+  description: |
+    Detects server banner information disclosure vulnerabilities that expose sensitive server details.
+    This elite template uses advanced techniques to identify various server banners and version information
+    that could aid attackers in reconnaissance and targeted attacks.
+  reference:
+    - https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/01-Information_Gathering/08-Fingerprint_Web_Application_Framework
+    - https://cwe.mitre.org/data/definitions/200.html
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N
+    cvss-score: 5.3
+    cwe-id: CWE-200
+  metadata:
+    verified: true
+    max-request: 3
+  tags: config,disclosure,banner,information-leakage,recon
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+      - "{{BaseURL}}/robots.txt"
+      - "{{BaseURL}}/sitemap.xml"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Accept: "*/*"
+      Connection: "close"
+
+    matchers-condition: or
+    matchers:
+      - type: regex
+        name: apache-version
+        part: header
+        regex:
+          - "(?i)server:\\s*apache[/\\s]([0-9]+\\.[0-9]+\\.[0-9]+)"
+          - "(?i)server:\\s*apache[/\\s]([0-9]+\\.[0-9]+)"
+
+      - type: regex
+        name: nginx-version
+        part: header
+        regex:
+          - "(?i)server:\\s*nginx[/\\s]([0-9]+\\.[0-9]+\\.[0-9]+)"
+          - "(?i)server:\\s*nginx[/\\s]([0-9]+\\.[0-9]+)"
+
+      - type: regex
+        name: iis-version
+        part: header
+        regex:
+          - "(?i)server:\\s*microsoft-iis[/\\s]([0-9]+\\.[0-9]+)"
+          - "(?i)server:\\s*iis[/\\s]([0-9]+\\.[0-9]+)"
+
+      - type: regex
+        name: tomcat-version
+        part: header
+        regex:
+          - "(?i)server:\\s*apache-tomcat[/\\s]([0-9]+\\.[0-9]+\\.[0-9]+)"
+          - "(?i)server:\\s*tomcat[/\\s]([0-9]+\\.[0-9]+)"
+
+      - type: regex
+        name: jetty-version
+        part: header
+        regex:
+          - "(?i)server:\\s*jetty\\(([0-9]+\\.[0-9]+\\.[0-9]+)"
+          - "(?i)server:\\s*jetty[/\\s]([0-9]+\\.[0-9]+)"
+
+      - type: regex
+        name: express-version
+        part: header
+        regex:
+          - "(?i)x-powered-by:\\s*express[/\\s]?([0-9]+\\.[0-9]+\\.[0-9]+)?"
+
+      - type: regex
+        name: php-version
+        part: header
+        regex:
+          - "(?i)x-powered-by:\\s*php[/\\s]([0-9]+\\.[0-9]+\\.[0-9]+)"
+          - "(?i)server:\\s*php[/\\s]([0-9]+\\.[0-9]+)"
+
+      - type: regex
+        name: aspnet-version
+        part: header
+        regex:
+          - "(?i)x-aspnet-version:\\s*([0-9]+\\.[0-9]+\\.[0-9]+)"
+          - "(?i)x-powered-by:\\s*asp\\.net"
+
+      - type: regex
+        name: detailed-server-info
+        part: header
+        regex:
+          - "(?i)server:\\s*[a-zA-Z-]+[/\\s][0-9]+\\.[0-9]+[^\\r\\n]*\\([^)]+\\)"
+          - "(?i)server:\\s*[a-zA-Z-]+[/\\s][0-9]+\\.[0-9]+[^\\r\\n]*\\s+\\([^)]+\\)"
+
+    extractors:
+      - type: regex
+        name: server-banner
+        part: header
+        group: 1
+        regex:
+          - "(?i)server:\\s*(.+)"
+          - "(?i)x-powered-by:\\s*(.+)"
+          - "(?i)x-aspnet-version:\\s*(.+)"
+
+      - type: kval
+        kval:
+          - server
+          - x-powered-by
+          - x-aspnet-version
+          - x-generator
+          - x-drupal-cache
+          - x-varnish

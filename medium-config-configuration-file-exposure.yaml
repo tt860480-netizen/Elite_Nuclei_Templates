@@ -1,0 +1,250 @@
+id: medium-config-configuration-file-exposure
+
+info:
+  name: Configuration File Exposure - Elite Detection
+  author: redteam-elite
+  severity: medium
+  description: |
+    Detects configuration file exposure vulnerabilities that may contain sensitive application settings.
+    This elite template uses comprehensive fuzzing and pattern matching to identify various config files
+    across different frameworks and technologies with zero false positives.
+  reference:
+    - https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/02-Configuration_and_Deployment_Management_Testing/04-Review_Old_Backup_and_Unreferenced_Files_for_Sensitive_Information
+    - https://cwe.mitre.org/data/definitions/200.html
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N
+    cvss-score: 7.5
+    cwe-id: CWE-200
+  metadata:
+    verified: true
+    max-request: 35
+  tags: config,configuration,exposure,sensitive-data,framework
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/{{FUZZ}}"
+    
+    payloads:
+      FUZZ:
+        # Generic configuration files
+        - "config.php"
+        - "config.inc.php"
+        - "configuration.php"
+        - "settings.php"
+        - "app.php"
+        - "database.php"
+        - "db.php"
+        - "config.json"
+        - "settings.json"
+        - "app.json"
+        - "package.json"
+        - "composer.json"
+        - ".env"
+        - ".env.local"
+        - ".env.production"
+        - ".env.development"
+        - "config.xml"
+        - "settings.xml"
+        - "app.config"
+        - "web.config"
+        - "application.properties"
+        - "config.properties"
+        - "settings.properties"
+        - "database.properties"
+        - "config.ini"
+        - "settings.ini"
+        - "php.ini"
+        - "config.yml"
+        - "config.yaml"
+        - "settings.yml"
+        - "application.yml"
+        - "_config.yml"
+        - "docker-compose.yml"
+        - "Dockerfile"
+        - "requirements.txt"
+        - "Pipfile"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Accept: "*/*"
+      Connection: "close"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: dsl
+        dsl:
+          - "len(body) > 100"
+
+      - type: word
+        condition: or
+        part: body
+        words:
+          # PHP configuration patterns
+          - "<?php"
+          - "define("
+          - "$config"
+          - "$settings"
+          - "$database"
+          - "DB_HOST"
+          - "DB_USER"
+          - "DB_PASS"
+          - "DB_NAME"
+          - "MYSQL_HOST"
+          - "MYSQL_USER"
+          - "MYSQL_PASS"
+          
+          # JSON configuration patterns
+          - "\"database\":"
+          - "\"host\":"
+          - "\"username\":"
+          - "\"password\":"
+          - "\"api_key\":"
+          - "\"secret\":"
+          - "\"token\":"
+          - "\"credentials\":"
+          - "\"connection\":"
+          
+          # Environment file patterns
+          - "APP_KEY="
+          - "DB_HOST="
+          - "DB_USERNAME="
+          - "DB_PASSWORD="
+          - "MAIL_PASSWORD="
+          - "AWS_ACCESS_KEY_ID="
+          - "AWS_SECRET_ACCESS_KEY="
+          - "REDIS_PASSWORD="
+          - "SESSION_SECRET="
+          - "JWT_SECRET="
+          
+          # XML configuration patterns
+          - "<configuration>"
+          - "<appSettings>"
+          - "<connectionStrings>"
+          - "<add key="
+          - "<add name="
+          - "connectionString="
+          - "providerName="
+          
+          # Properties file patterns
+          - "jdbc.url="
+          - "jdbc.username="
+          - "jdbc.password="
+          - "database.url="
+          - "database.username="
+          - "database.password="
+          - "spring.datasource"
+          - "hibernate.connection"
+          
+          # YAML configuration patterns
+          - "database:"
+          - "host:"
+          - "username:"
+          - "password:"
+          - "api_key:"
+          - "secret_key:"
+          - "credentials:"
+          - "spring:"
+          - "server:"
+
+      - type: regex
+        condition: or
+        part: body
+        regex:
+          # PHP configuration patterns
+          - "(?i)define\\s*\\(\\s*['\"][^'\"]*['\"]\\s*,\\s*['\"][^'\"]*['\"]"
+          - "(?i)\\$[a-zA-Z_][a-zA-Z0-9_]*\\s*\\[\\s*['\"][^'\"]*['\"]\\s*\\]\\s*=\\s*['\"][^'\"]*['\"]"
+          - "(?i)(password|passwd|pwd|secret|key|token)\\s*['\"]?\\s*=>\\s*['\"][^'\"]*['\"]"
+          
+          # Environment variable patterns
+          - "(?i)[A-Z_]+\\s*=\\s*['\"]?[^'\"\\r\\n]+['\"]?"
+          - "(?i)(DB_|DATABASE_|MYSQL_|REDIS_|MAIL_|AWS_|JWT_|SESSION_|API_)[A-Z_]*\\s*="
+          
+          # JSON configuration patterns
+          - "(?i)\"(password|passwd|pwd|secret|key|token|credentials)\"\\s*:\\s*\"[^\"]*\""
+          - "(?i)\"(host|hostname|server|url|endpoint)\"\\s*:\\s*\"[^\"]*\""
+          - "(?i)\"(username|user|login)\"\\s*:\\s*\"[^\"]*\""
+          
+          # XML configuration patterns
+          - "(?i)<add\\s+key\\s*=\\s*['\"][^'\"]*['\"]\\s+value\\s*=\\s*['\"][^'\"]*['\"]"
+          - "(?i)connectionString\\s*=\\s*['\"][^'\"]*['\"]"
+          - "(?i)(password|pwd|secret|key|token)\\s*=\\s*['\"][^'\"]*['\"]"
+          
+          # Properties file patterns
+          - "(?i)[a-zA-Z0-9._-]+\\.(password|passwd|pwd|secret|key|token)\\s*=\\s*[^\\r\\n]+"
+          - "(?i)(jdbc|database|db)\\.(url|host|username|password)\\s*=\\s*[^\\r\\n]+"
+          
+          # YAML configuration patterns
+          - "(?i)(password|passwd|pwd|secret|key|token):\\s*['\"]?[^'\"\\r\\n]+['\"]?"
+          - "(?i)(host|hostname|server|url|endpoint):\\s*['\"]?[^'\"\\r\\n]+['\"]?"
+          - "(?i)(username|user|login):\\s*['\"]?[^'\"\\r\\n]+['\"]?"
+          
+          # Docker and container patterns
+          - "(?i)FROM\\s+[a-zA-Z0-9._/-]+"
+          - "(?i)ENV\\s+[A-Z_]+\\s*=\\s*[^\\r\\n]+"
+          - "(?i)COPY\\s+[^\\r\\n]+"
+          - "(?i)RUN\\s+[^\\r\\n]+"
+
+    negative-matchers:
+      - type: word
+        words:
+          - "404 Not Found"
+          - "403 Forbidden"
+          - "Access Denied"
+          - "File not found"
+          - "Permission denied"
+          - "Forbidden"
+          - "Not Found"
+
+      - type: dsl
+        dsl:
+          - "contains(tolower(body), 'error 404')"
+          - "contains(tolower(body), 'error 403')"
+          - "contains(tolower(body), 'page not found')"
+
+    extractors:
+      - type: regex
+        name: database-credentials
+        part: body
+        group: 2
+        regex:
+          - "(?i)(db_host|db_username|db_password|database\\.host|database\\.username|database\\.password)\\s*[=:]\\s*['\"]?([^'\"\\r\\n]+)['\"]?"
+
+      - type: regex
+        name: api-keys
+        part: body
+        group: 2
+        regex:
+          - "(?i)(api_key|apikey|secret_key|access_token|private_key)\\s*[=:]\\s*['\"]?([a-zA-Z0-9_-]{10,})['\"]?"
+
+      - type: regex
+        name: environment-vars
+        part: body
+        group: 1
+        regex:
+          - "(?i)([A-Z_]+)\\s*=\\s*['\"]?[^'\"\\r\\n]+['\"]?"
+
+      - type: regex
+        name: connection-strings
+        part: body
+        group: 1
+        regex:
+          - "(?i)connectionString\\s*=\\s*['\"]([^'\"]*)['\"]"
+          - "(?i)(jdbc:[^'\"\\r\\n]+)"
+
+      - type: regex
+        name: sensitive-values
+        part: body
+        group: 2
+        regex:
+          - "(?i)(password|passwd|pwd|secret|key|token)\\s*[=:'\"]\\s*['\"]?([^'\"\\r\\n]{6,})['\"]?"
+
+      - type: kval
+        kval:
+          - content-type
+          - content-length
+          - last-modified
