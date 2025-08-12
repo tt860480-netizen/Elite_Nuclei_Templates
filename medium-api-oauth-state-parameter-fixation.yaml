@@ -1,0 +1,104 @@
+id: medium-api-oauth-state-parameter-fixation
+
+info:
+  name: OAuth State Parameter Fixation
+  author: redteam-elite
+  severity: medium
+  description: |
+    Detects OAuth state parameter fixation vulnerabilities where applications fail to
+    properly validate or generate unique state parameters, allowing CSRF attacks
+    and session fixation through predictable or reusable state values.
+  reference:
+    - https://tools.ietf.org/html/rfc6749#section-10.12
+    - https://portswigger.net/web-security/oauth/grant-types
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:H/I:L/A:N
+    cvss-score: 6.1
+    cwe-id: CWE-352
+  tags: oauth,state,fixation,csrf,authentication,api,medium
+
+http:
+  - raw:
+      - |
+        GET /oauth/authorize?response_type=code&client_id={{client_id}}&redirect_uri={{redirect_uri}}&scope=read&state={{fixed_state}} HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+      - |
+        GET /oauth/authorize?response_type=code&client_id={{client_id}}&redirect_uri={{redirect_uri}}&scope=read&state={{predictable_state}} HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+      - |
+        GET /oauth/authorize?response_type=code&client_id={{client_id}}&redirect_uri={{redirect_uri}}&scope=read&state={{empty_state}} HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+      - |
+        GET /oauth/authorize?response_type=code&client_id={{client_id}}&redirect_uri={{redirect_uri}}&scope=read HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+      - |
+        GET /oauth/callback?code={{auth_code}}&state={{fixed_state}} HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        Referer: https://evil.com/csrf-attack
+
+    variables:
+      client_id: "test_client_id"
+      redirect_uri: "https://example.com/callback"
+      fixed_state: "fixed_state_123"
+      predictable_state: "12345"
+      empty_state: ""
+      auth_code: "sample_auth_code"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 302
+          - 301
+
+      - type: regex
+        part: header
+        regex:
+          - 'Location:.*state=fixed_state_123'
+          - 'Location:.*state=12345'
+          - 'Location:.*state=$'
+          - 'Location:.*code=[^&]*(?!.*state=)'
+        condition: or
+
+      - type: regex
+        part: body
+        regex:
+          - 'state.*fixed_state_123'
+          - 'state.*12345'
+          - '"state":\s*""'
+          - 'authorization.*successful'
+        condition: or
+
+      - type: regex
+        part: body
+        negative: true
+        regex:
+          - 'state.*mismatch'
+          - 'invalid.*state'
+          - 'state.*required'
+          - 'csrf.*protection'
+
+      - type: word
+        part: header
+        negative: true
+        words:
+          - "X-State-Validation: enabled"
+          - "X-CSRF-Protection: active"
+
+      - type: regex
+        part: response
+        negative: true
+        regex:
+          - 'Set-Cookie:.*state=[a-zA-Z0-9]{32,}'
+
+    stop-at-first-match: true

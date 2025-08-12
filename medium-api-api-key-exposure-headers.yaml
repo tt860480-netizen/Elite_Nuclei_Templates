@@ -1,0 +1,133 @@
+id: medium-api-api-key-exposure-headers
+
+info:
+  name: API Key Exposure in Headers
+  author: redteam-elite
+  severity: medium
+  description: |
+    Detects API key exposure vulnerabilities where sensitive API keys, tokens,
+    or credentials are leaked through HTTP response headers, debug headers,
+    or error messages that could be exploited by attackers.
+  reference:
+    - https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/02-Configuration_and_Deployment_Management_Testing/05-Test_Network_Infrastructure_Configuration
+    - https://portswigger.net/kb/issues/00600300_cleartext-transmission-of-sensitive-information
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N
+    cvss-score: 7.5
+    cwe-id: CWE-200
+  tags: api,key,exposure,headers,information-disclosure,medium
+
+http:
+  - raw:
+      - |
+        GET /api/status HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+      - |
+        GET /api/health HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+      - |
+        GET /api/debug HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+      - |
+        GET /api/config HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+      - |
+        GET /api/version HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+      - |
+        POST /api/auth/login HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+        {"username":"invalid","password":"invalid"}
+
+      - |
+        GET /api/users/999999 HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 400
+          - 401
+          - 403
+          - 404
+          - 500
+
+      - type: regex
+        part: header
+        regex:
+          - 'X-API-Key:\s*[a-zA-Z0-9_-]{20,}'
+          - 'X-Auth-Token:\s*[a-zA-Z0-9_-]{20,}'
+          - 'X-Secret-Key:\s*[a-zA-Z0-9_-]{20,}'
+          - 'X-Access-Token:\s*[a-zA-Z0-9_.-]{20,}'
+          - 'X-Debug-Token:\s*[a-zA-Z0-9_-]{20,}'
+          - 'Authorization:\s*Bearer\s+[a-zA-Z0-9_.-]{20,}'
+          - 'X-JWT-Secret:\s*[a-zA-Z0-9_-]{20,}'
+          - 'X-Database-Key:\s*[a-zA-Z0-9_-]{20,}'
+          - 'X-Encryption-Key:\s*[a-zA-Z0-9_-]{20,}'
+          - 'X-Service-Key:\s*[a-zA-Z0-9_-]{20,}'
+        condition: or
+
+      - type: regex
+        part: body
+        regex:
+          - '"api_key":\s*"[a-zA-Z0-9_-]{20,}"'
+          - '"secret_key":\s*"[a-zA-Z0-9_-]{20,}"'
+          - '"access_token":\s*"[a-zA-Z0-9_.-]{20,}"'
+          - '"auth_token":\s*"[a-zA-Z0-9_-]{20,}"'
+          - '"jwt_secret":\s*"[a-zA-Z0-9_-]{20,}"'
+          - '"database_url":\s*"[^"]*://[^"]*:[^"]*@[^"]*"'
+          - '"aws_access_key":\s*"AKIA[A-Z0-9]{16}"'
+          - '"aws_secret_key":\s*"[a-zA-Z0-9/+=]{40}"'
+          - 'API_KEY=[a-zA-Z0-9_-]{20,}'
+          - 'SECRET_KEY=[a-zA-Z0-9_-]{20,}'
+        condition: or
+
+      - type: regex
+        part: response
+        regex:
+          - 'sk-[a-zA-Z0-9]{48}'
+          - 'pk_live_[a-zA-Z0-9]{24}'
+          - 'pk_test_[a-zA-Z0-9]{24}'
+          - 'sk_live_[a-zA-Z0-9]{24}'
+          - 'sk_test_[a-zA-Z0-9]{24}'
+          - 'ghp_[a-zA-Z0-9]{36}'
+          - 'gho_[a-zA-Z0-9]{36}'
+          - 'ghu_[a-zA-Z0-9]{36}'
+          - 'ghs_[a-zA-Z0-9]{36}'
+          - 'ghr_[a-zA-Z0-9]{36}'
+        condition: or
+
+      - type: word
+        part: header
+        negative: true
+        words:
+          - "X-Key-Masking: enabled"
+          - "X-Sensitive-Data-Filter: active"
+
+    extractors:
+      - type: regex
+        name: exposed_keys
+        group: 1
+        regex:
+          - 'X-API-Key:\s*([a-zA-Z0-9_-]{20,})'
+          - '"api_key":\s*"([a-zA-Z0-9_-]{20,})"'
+          - 'API_KEY=([a-zA-Z0-9_-]{20,})'
+        part: response
+
+    stop-at-first-match: true

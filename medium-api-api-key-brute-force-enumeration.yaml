@@ -1,0 +1,140 @@
+id: medium-api-api-key-brute-force-enumeration
+
+info:
+  name: API Key Brute Force Enumeration
+  author: redteam-elite
+  severity: medium
+  description: |
+    Detects API key brute force enumeration vulnerabilities where weak or
+    predictable API keys can be discovered through systematic enumeration,
+    pattern-based attacks, or insufficient rate limiting on key validation.
+  reference:
+    - https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/04-Authentication_Testing/04-Testing_for_Brute_Force
+    - https://portswigger.net/web-security/authentication/password-based
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:L/A:N
+    cvss-score: 7.2
+    cwe-id: CWE-307
+  tags: api,key,brute-force,enumeration,authentication,medium
+
+http:
+  - raw:
+      - |
+        GET /api/user/profile HTTP/1.1
+        Host: {{Hostname}}
+        Authorization: Bearer {{api_key_1}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+      - |
+        GET /api/user/profile HTTP/1.1
+        Host: {{Hostname}}
+        Authorization: Bearer {{api_key_2}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+      - |
+        GET /api/user/profile HTTP/1.1
+        Host: {{Hostname}}
+        Authorization: Bearer {{api_key_3}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+      - |
+        GET /api/user/profile HTTP/1.1
+        Host: {{Hostname}}
+        X-API-Key: {{x_api_key_1}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+      - |
+        GET /api/user/profile HTTP/1.1
+        Host: {{Hostname}}
+        X-API-Key: {{x_api_key_2}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+      - |
+        GET /api/user/profile HTTP/1.1
+        Host: {{Hostname}}
+        X-API-Key: {{x_api_key_3}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+      - |
+        GET /api/user/profile?api_key={{query_api_key_1}} HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+      - |
+        GET /api/user/profile?api_key={{query_api_key_2}} HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+      - |
+        GET /api/user/profile?key={{query_key_1}} HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+      - |
+        GET /api/user/profile?token={{query_token_1}} HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+    variables:
+      # Common weak API key patterns
+      api_key_1: "12345678901234567890"
+      api_key_2: "abcdefghijklmnopqrst"
+      api_key_3: "test_api_key_123456"
+      x_api_key_1: "admin_key_123"
+      x_api_key_2: "dev_api_key"
+      x_api_key_3: "demo_key_2023"
+      query_api_key_1: "guest_access_key"
+      query_api_key_2: "public_api_key"
+      query_key_1: "default_key"
+      query_token_1: "sample_token_123"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 201
+
+      - type: regex
+        part: body
+        regex:
+          - '"id":\s*\d+'
+          - '"username":\s*"[^"]+"'
+          - '"email":\s*"[^"]+"'
+          - '"profile":\s*\{'
+          - '"user_data":\s*\{'
+          - '"account":\s*\{'
+        condition: or
+
+      - type: regex
+        part: body
+        negative: true
+        regex:
+          - '"error":\s*"invalid.*api.*key"'
+          - '"error":\s*"unauthorized"'
+          - '"error":\s*"access.*denied"'
+          - '"error":\s*"authentication.*required"'
+          - 'api.*key.*invalid'
+
+      - type: word
+        part: header
+        negative: true
+        words:
+          - "WWW-Authenticate"
+          - "X-API-Key-Required: true"
+
+      - type: dsl
+        dsl:
+          - 'status_code != 401'
+          - 'status_code != 403'
+        condition: and
+
+      - type: word
+        part: response
+        negative: true
+        words:
+          - "rate limit exceeded"
+          - "too many requests"
+          - "brute force detected"
+
+    stop-at-first-match: true

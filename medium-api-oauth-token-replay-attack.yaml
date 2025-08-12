@@ -1,0 +1,105 @@
+id: medium-api-oauth-token-replay-attack
+
+info:
+  name: OAuth Token Replay Attack
+  author: redteam-elite
+  severity: medium
+  description: |
+    Detects OAuth token replay vulnerabilities where access tokens can be reused multiple times
+    without proper validation of token freshness, nonce, or one-time usage restrictions.
+    This allows attackers to replay captured tokens for unauthorized access.
+  reference:
+    - https://tools.ietf.org/html/rfc6749#section-10.3
+    - https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/05-Authorization_Testing/05.1-Testing_Directory_Traversal_File_Include
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:L/A:N
+    cvss-score: 6.5
+    cwe-id: CWE-294
+  tags: oauth,token,replay,authentication,api,medium
+
+http:
+  - raw:
+      - |
+        POST /oauth/token HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/x-www-form-urlencoded
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+        grant_type=authorization_code&client_id={{client_id}}&client_secret={{client_secret}}&code={{auth_code}}&redirect_uri={{redirect_uri}}
+
+      - |
+        GET /api/user/profile HTTP/1.1
+        Host: {{Hostname}}
+        Authorization: Bearer {{access_token}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+      - |
+        GET /api/user/profile HTTP/1.1
+        Host: {{Hostname}}
+        Authorization: Bearer {{access_token}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+        X-Replay-Test: true
+
+      - |
+        POST /api/user/update HTTP/1.1
+        Host: {{Hostname}}
+        Authorization: Bearer {{access_token}}
+        Content-Type: application/json
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+        {"name":"replay_test_user","email":"replay@test.com"}
+
+    variables:
+      client_id: "test_client_id"
+      client_secret: "test_client_secret"
+      auth_code: "sample_auth_code"
+      redirect_uri: "https://example.com/callback"
+
+    extractors:
+      - type: regex
+        name: access_token
+        group: 1
+        regex:
+          - '"access_token":\s*"([^"]+)"'
+        internal: true
+
+      - type: regex
+        name: token_type
+        group: 1
+        regex:
+          - '"token_type":\s*"([^"]+)"'
+        internal: true
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 201
+
+      - type: regex
+        part: body
+        regex:
+          - '"id":\s*\d+'
+          - '"username":\s*"[^"]+"'
+          - '"email":\s*"[^"]+"'
+          - '"name":\s*"replay_test_user"'
+        condition: or
+
+      - type: regex
+        part: body
+        negative: true
+        regex:
+          - '"error":\s*"invalid_token"'
+          - '"error":\s*"token_expired"'
+          - 'token.*replay.*detected'
+          - 'nonce.*validation.*failed'
+
+      - type: word
+        part: header
+        negative: true
+        words:
+          - "X-Token-Used-Once"
+          - "X-Replay-Protection"
+
+    stop-at-first-match: true

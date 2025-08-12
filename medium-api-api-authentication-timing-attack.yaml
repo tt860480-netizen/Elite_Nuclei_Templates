@@ -1,0 +1,108 @@
+id: medium-api-api-authentication-timing-attack
+
+info:
+  name: API Authentication Timing Attack
+  author: redteam-elite
+  severity: medium
+  description: |
+    Detects API authentication timing attack vulnerabilities where response times
+    differ significantly between valid and invalid usernames/credentials, allowing
+    attackers to enumerate valid accounts through timing analysis.
+  reference:
+    - https://owasp.org/www-community/attacks/Timing_Attacks
+    - https://portswigger.net/web-security/authentication/password-based
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:L/I:N/A:N
+    cvss-score: 3.7
+    cwe-id: CWE-208
+  tags: api,authentication,timing,attack,enumeration,medium
+
+http:
+  - raw:
+      - |
+        POST /api/auth/login HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+        {"username":"admin","password":"invalid_password_123456789"}
+
+      - |
+        POST /api/auth/login HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+        {"username":"nonexistent_user_12345","password":"invalid_password_123456789"}
+
+      - |
+        POST /api/auth/login HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+        {"username":"administrator","password":"invalid_password_123456789"}
+
+      - |
+        POST /api/auth/login HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+        {"username":"random_nonexistent_user_xyz","password":"invalid_password_123456789"}
+
+      - |
+        POST /api/auth/login HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+        {"username":"user","password":"invalid_password_123456789"}
+
+    extractors:
+      - type: regex
+        name: response_time_1
+        group: 1
+        regex:
+          - '.*'
+        internal: true
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 400
+          - 401
+          - 422
+
+      - type: regex
+        part: body
+        regex:
+          - '"error":\s*"invalid.*credentials"'
+          - '"error":\s*"authentication.*failed"'
+          - '"error":\s*"login.*failed"'
+          - '"message":\s*"invalid.*username.*password"'
+        condition: or
+
+      - type: regex
+        part: body
+        negative: true
+        regex:
+          - 'timing.*protection.*enabled'
+          - 'constant.*time.*validation'
+          - 'rate.*limit.*exceeded'
+
+      - type: dsl
+        dsl:
+          - 'duration >= 500'
+        condition: or
+
+      - type: word
+        part: header
+        negative: true
+        words:
+          - "X-Timing-Safe-Compare: enabled"
+          - "X-Constant-Time-Auth: true"
+
+    stop-at-first-match: true

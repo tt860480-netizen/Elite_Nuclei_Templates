@@ -1,0 +1,145 @@
+id: medium-api-graphql-field-suggestion-information-disclosure
+
+info:
+  name: GraphQL Field Suggestion Information Disclosure
+  author: redteam-elite
+  severity: medium
+  description: |
+    Detects GraphQL field suggestion information disclosure vulnerabilities where
+    GraphQL error messages reveal sensitive field names, schema structure, or
+    internal API details through field suggestion mechanisms.
+  reference:
+    - https://graphql.org/learn/validation/
+    - https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/12-API_Testing/01-Testing_GraphQL
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N
+    cvss-score: 5.3
+    cwe-id: CWE-200
+  tags: graphql,field-suggestion,information-disclosure,schema,api,medium
+
+http:
+  - raw:
+      - |
+        POST /graphql HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+        {"query":"{ user { invalidField } }"}
+
+      - |
+        POST /graphql HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+        {"query":"{ users { secretData } }"}
+
+      - |
+        POST /graphql HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+        {"query":"{ admin { hiddenField } }"}
+
+      - |
+        POST /graphql HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+        {"query":"{ profile { privateInfo } }"}
+
+      - |
+        POST /graphql HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+        {"query":"{ account { internalData } }"}
+
+      - |
+        POST /graphql HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+        {"query":"{ system { debugInfo } }"}
+
+      - |
+        POST /graphql HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+        {"query":"{ database { connectionString } }"}
+
+      - |
+        POST /graphql HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+        {"query":"{ config { apiKeys } }"}
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 400
+
+      - type: regex
+        part: body
+        regex:
+          - '"errors":\s*\['
+          - '"message":\s*"[^"]*field[^"]*"'
+        condition: and
+
+      - type: regex
+        part: body
+        regex:
+          - 'Did you mean.*"[^"]*password[^"]*"'
+          - 'Did you mean.*"[^"]*secret[^"]*"'
+          - 'Did you mean.*"[^"]*token[^"]*"'
+          - 'Did you mean.*"[^"]*key[^"]*"'
+          - 'Did you mean.*"[^"]*admin[^"]*"'
+          - 'Did you mean.*"[^"]*private[^"]*"'
+          - 'Did you mean.*"[^"]*internal[^"]*"'
+          - 'Did you mean.*"[^"]*debug[^"]*"'
+          - 'Did you mean.*"[^"]*config[^"]*"'
+          - 'Did you mean.*"[^"]*database[^"]*"'
+          - 'available fields.*"[^"]*password[^"]*"'
+          - 'available fields.*"[^"]*secret[^"]*"'
+          - 'available fields.*"[^"]*token[^"]*"'
+          - 'available fields.*"[^"]*admin[^"]*"'
+          - 'similar field.*"[^"]*private[^"]*"'
+          - 'similar field.*"[^"]*internal[^"]*"'
+        condition: or
+
+      - type: regex
+        part: body
+        regex:
+          - '"[^"]*Field[^"]*not.*found[^"]*"'
+          - '"[^"]*Cannot.*query.*field[^"]*"'
+        condition: or
+
+      - type: word
+        part: header
+        negative: true
+        words:
+          - "X-GraphQL-Field-Suggestions: disabled"
+          - "X-Schema-Introspection: disabled"
+
+    extractors:
+      - type: regex
+        name: suggested_fields
+        group: 1
+        regex:
+          - 'Did you mean.*"([^"]*)"'
+          - 'available fields.*"([^"]*)"'
+          - 'similar field.*"([^"]*)"'
+        part: body
+
+    stop-at-first-match: true

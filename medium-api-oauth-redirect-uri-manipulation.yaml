@@ -1,0 +1,96 @@
+id: medium-api-oauth-redirect-uri-manipulation
+
+info:
+  name: OAuth Redirect URI Manipulation
+  author: redteam-elite
+  severity: medium
+  description: |
+    Detects OAuth redirect URI manipulation vulnerabilities where authorization servers
+    fail to properly validate redirect_uri parameters, allowing attackers to redirect
+    authorization codes to malicious endpoints for token theft.
+  reference:
+    - https://tools.ietf.org/html/rfc6749#section-3.1.2
+    - https://portswigger.net/web-security/oauth/grant-types
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:H/I:L/A:N
+    cvss-score: 7.1
+    cwe-id: CWE-601
+  tags: oauth,redirect,uri,manipulation,authentication,api,medium
+
+http:
+  - raw:
+      - |
+        GET /oauth/authorize?response_type=code&client_id={{client_id}}&redirect_uri={{malicious_redirect}}&scope=read&state={{state}} HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+      - |
+        GET /oauth/authorize?response_type=code&client_id={{client_id}}&redirect_uri={{subdomain_redirect}}&scope=read&state={{state}} HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+      - |
+        GET /oauth/authorize?response_type=code&client_id={{client_id}}&redirect_uri={{path_traversal_redirect}}&scope=read&state={{state}} HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+      - |
+        GET /oauth/authorize?response_type=code&client_id={{client_id}}&redirect_uri={{protocol_redirect}}&scope=read&state={{state}} HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+      - |
+        GET /oauth/authorize?response_type=code&client_id={{client_id}}&redirect_uri={{encoded_redirect}}&scope=read&state={{state}} HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+    variables:
+      client_id: "test_client_id"
+      state: "random_state_123"
+      malicious_redirect: "https://evil.com/callback"
+      subdomain_redirect: "https://evil.example.com/callback"
+      path_traversal_redirect: "https://example.com/../../../evil.com/callback"
+      protocol_redirect: "javascript:alert('XSS')"
+      encoded_redirect: "https%3A%2F%2Fevil.com%2Fcallback"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 302
+          - 301
+
+      - type: regex
+        part: header
+        regex:
+          - 'Location:\s*https?://evil\.com'
+          - 'Location:\s*https?://[^/]*evil[^/]*\.com'
+          - 'Location:\s*javascript:'
+        condition: or
+
+      - type: regex
+        part: body
+        regex:
+          - 'redirect.*evil\.com'
+          - 'window\.location.*evil\.com'
+          - 'href.*evil\.com'
+        condition: or
+
+      - type: regex
+        part: body
+        negative: true
+        regex:
+          - 'redirect_uri.*invalid'
+          - 'redirect_uri.*not.*allowed'
+          - 'invalid.*redirect'
+          - 'unauthorized.*redirect'
+
+      - type: word
+        part: header
+        negative: true
+        words:
+          - "X-Redirect-Validation: strict"
+          - "X-URI-Whitelist-Check: enabled"
+
+    stop-at-first-match: true

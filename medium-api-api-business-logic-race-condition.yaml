@@ -1,0 +1,157 @@
+id: medium-api-api-business-logic-race-condition
+
+info:
+  name: API Business Logic Race Condition
+  author: redteam-elite
+  severity: medium
+  description: |
+    Detects business logic race condition vulnerabilities in APIs where concurrent
+    requests can bypass validation checks, manipulate account balances, duplicate
+    transactions, or exploit timing-sensitive operations.
+  reference:
+    - https://owasp.org/www-community/vulnerabilities/Race_condition
+    - https://portswigger.net/web-security/race-conditions
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:H/PR:L/UI:N/S:U/C:H/I:H/A:L
+    cvss-score: 7.0
+    cwe-id: CWE-362
+  tags: api,race-condition,business-logic,concurrency,medium
+
+http:
+  - raw:
+      - |
+        POST /api/auth/login HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+        {"username":"testuser","password":"password123"}
+
+      - |
+        POST /api/wallet/transfer HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        Authorization: Bearer {{access_token}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+        {"to_account":"target_account","amount":100,"currency":"USD"}
+
+      - |
+        POST /api/wallet/transfer HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        Authorization: Bearer {{access_token}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+        {"to_account":"target_account","amount":100,"currency":"USD"}
+
+      - |
+        POST /api/coupon/redeem HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        Authorization: Bearer {{access_token}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+        {"coupon_code":"DISCOUNT50","user_id":"123"}
+
+      - |
+        POST /api/coupon/redeem HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        Authorization: Bearer {{access_token}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+        {"coupon_code":"DISCOUNT50","user_id":"123"}
+
+      - |
+        POST /api/inventory/purchase HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        Authorization: Bearer {{access_token}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+        {"product_id":"limited_item_001","quantity":1}
+
+      - |
+        POST /api/inventory/purchase HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        Authorization: Bearer {{access_token}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+        {"product_id":"limited_item_001","quantity":1}
+
+      - |
+        POST /api/account/withdraw HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        Authorization: Bearer {{access_token}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+        {"amount":500,"account":"withdrawal_account"}
+
+      - |
+        POST /api/account/withdraw HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        Authorization: Bearer {{access_token}}
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+        {"amount":500,"account":"withdrawal_account"}
+
+    variables:
+      access_token: "sample_access_token"
+
+    extractors:
+      - type: regex
+        name: access_token
+        group: 1
+        regex:
+          - '"access_token":\s*"([^"]+)"'
+          - '"token":\s*"([^"]+)"'
+        internal: true
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 201
+          - 202
+
+      - type: regex
+        part: body
+        regex:
+          - '"transaction_id":\s*"[^"]+"'
+          - '"transfer_successful":\s*true'
+          - '"coupon_redeemed":\s*true'
+          - '"purchase_successful":\s*true'
+          - '"withdrawal_successful":\s*true'
+          - '"balance":\s*\d+'
+          - '"quantity_purchased":\s*\d+'
+        condition: or
+
+      - type: regex
+        part: body
+        negative: true
+        regex:
+          - '"error":\s*"insufficient.*funds"'
+          - '"error":\s*"coupon.*already.*used"'
+          - '"error":\s*"item.*out.*of.*stock"'
+          - '"error":\s*"concurrent.*request.*detected"'
+          - 'race.*condition.*protection'
+          - 'transaction.*locked'
+
+      - type: word
+        part: header
+        negative: true
+        words:
+          - "X-Race-Condition-Protection: enabled"
+          - "X-Transaction-Lock: active"
+
+      - type: dsl
+        dsl:
+          - 'duration < 1000'
+        condition: or
+
+    stop-at-first-match: true

