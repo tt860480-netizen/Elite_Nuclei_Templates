@@ -1,0 +1,312 @@
+id: medium-webapp-information-disclosure-debug-mode
+
+info:
+  name: Information Disclosure via Debug Mode - Elite Detection
+  author: nuclei-community
+  severity: medium
+  description: |
+    Detects information disclosure vulnerabilities through debug mode exposure and verbose error messages.
+    Tests advanced techniques to trigger debug information, stack traces, configuration details,
+    and sensitive system information through various debug parameters and error conditions.
+  reference:
+    - https://owasp.org/www-community/Improper_Error_Handling
+    - https://cwe.mitre.org/data/definitions/209.html
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N
+    cvss-score: 5.3
+    cwe-id: CWE-209
+  metadata:
+    verified: true
+    max-request: 25
+  tags: debug,information-disclosure,error-handling,stack-trace,elite
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/{{path}}?debug=1"
+      - "{{BaseURL}}/{{path}}?debug=true"
+      - "{{BaseURL}}/{{path}}?debug=on"
+      - "{{BaseURL}}/{{path}}?debug=yes"
+      - "{{BaseURL}}/{{path}}?DEBUG=1"
+      - "{{BaseURL}}/{{path}}?DEBUG=TRUE"
+      - "{{BaseURL}}/{{path}}?_debug=1"
+      - "{{BaseURL}}/{{path}}?__debug__=1"
+      - "{{BaseURL}}/{{path}}?verbose=1"
+      - "{{BaseURL}}/{{path}}?verbose=true"
+      - "{{BaseURL}}/{{path}}?trace=1"
+      - "{{BaseURL}}/{{path}}?trace=true"
+      - "{{BaseURL}}/{{path}}?dev=1"
+      - "{{BaseURL}}/{{path}}?development=1"
+      - "{{BaseURL}}/{{path}}?test=1"
+      - "{{BaseURL}}/{{path}}?testing=1"
+
+    payloads:
+      path:
+        - "index.php"
+        - "login.php"
+        - "admin.php"
+        - "config.php"
+        - "database.php"
+        - "error.php"
+        - "test.php"
+        - "debug.php"
+        - "api/users"
+        - "api/config"
+        - "api/debug"
+        - "admin/config"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+
+    matchers-condition: and
+    matchers:
+      - type: regex
+        part: body
+        regex:
+          - "(?i)stack\\s+trace"
+          - "(?i)call\\s+stack"
+          - "(?i)backtrace"
+          - "(?i)debug\\s+information"
+          - "(?i)error\\s+trace"
+          - "(?i)exception\\s+trace"
+          - "(?i)fatal\\s+error"
+          - "(?i)warning.*line\\s+\\d+"
+          - "(?i)notice.*line\\s+\\d+"
+          - "(?i)parse\\s+error"
+          - "(?i)mysql.*error"
+          - "(?i)postgresql.*error"
+          - "(?i)oracle.*error"
+          - "(?i)sqlite.*error"
+          - "(?i)database\\s+connection\\s+failed"
+          - "(?i)connection\\s+string"
+          - "(?i)server\\s+variables"
+          - "(?i)\\$_server"
+          - "(?i)\\$_env"
+          - "(?i)\\$_post"
+          - "(?i)\\$_get"
+          - "(?i)\\$_cookie"
+          - "(?i)\\$_session"
+
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "DEBUG"
+          - "TRACE"
+          - "ERROR"
+          - "WARNING"
+          - "NOTICE"
+          - "FATAL"
+          - "EXCEPTION"
+          - "STACK"
+          - "BACKTRACE"
+        condition: or
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/{{path}}"
+
+    payloads:
+      path:
+        - "index.php/debug"
+        - "index.php/trace"
+        - "index.php/error"
+        - "debug.php"
+        - "trace.php"
+        - "error.php"
+        - "test.php"
+        - "dev.php"
+        - "development.php"
+        - "config.php"
+        - "phpinfo.php"
+        - "info.php"
+        - "_debug"
+        - "__debug__"
+        - "debug/"
+        - "trace/"
+        - "error/"
+        - "dev/"
+        - "development/"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      X-Debug: "1"
+      X-Debug-Mode: "true"
+      X-Trace: "1"
+      X-Verbose: "1"
+      Debug: "1"
+      Trace: "1"
+
+    matchers-condition: and
+    matchers:
+      - type: regex
+        part: body
+        regex:
+          - "(?i)php\\s+version"
+          - "(?i)apache\\s+version"
+          - "(?i)nginx\\s+version"
+          - "(?i)mysql\\s+version"
+          - "(?i)server\\s+api"
+          - "(?i)loaded\\s+modules"
+          - "(?i)configuration\\s+file"
+          - "(?i)document\\s+root"
+          - "(?i)server\\s+root"
+          - "(?i)include\\s+path"
+          - "(?i)extension\\s+dir"
+          - "(?i)upload\\s+tmp\\s+dir"
+          - "(?i)session\\s+save\\s+path"
+          - "(?i)error\\s+log"
+          - "(?i)access\\s+log"
+
+      - type: status
+        status:
+          - 200
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/{{path}}"
+
+    payloads:
+      path:
+        - "login.php"
+        - "contact.php"
+        - "search.php"
+        - "register.php"
+        - "api/login"
+        - "api/search"
+        - "api/users"
+        - "admin/login"
+
+    headers:
+      Content-Type: "application/x-www-form-urlencoded"
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      X-Debug: "1"
+      Debug: "true"
+
+    body: |
+      username=admin'&password=test&debug=1&trace=1
+
+    matchers-condition: and
+    matchers:
+      - type: regex
+        part: body
+        regex:
+          - "(?i)sql\\s+syntax\\s+error"
+          - "(?i)mysql.*error.*query"
+          - "(?i)postgresql.*error"
+          - "(?i)oracle.*error"
+          - "(?i)sqlite.*error"
+          - "(?i)database\\s+error"
+          - "(?i)query\\s+failed"
+          - "(?i)connection\\s+failed"
+          - "(?i)access\\s+denied\\s+for\\s+user"
+          - "(?i)unknown\\s+database"
+          - "(?i)table.*doesn't\\s+exist"
+          - "(?i)column.*doesn't\\s+exist"
+
+      - type: status
+        status:
+          - 200
+          - 500
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/{{path}}?error=1"
+      - "{{BaseURL}}/{{path}}?exception=1"
+      - "{{BaseURL}}/{{path}}?fail=1"
+      - "{{BaseURL}}/{{path}}?crash=1"
+      - "{{BaseURL}}/{{path}}?throw=1"
+
+    payloads:
+      path:
+        - "index.php"
+        - "test.php"
+        - "error.php"
+        - "exception.php"
+        - "api/test"
+        - "api/error"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+
+    matchers-condition: and
+    matchers:
+      - type: regex
+        part: body
+        regex:
+          - "(?i)uncaught\\s+exception"
+          - "(?i)fatal\\s+error.*in\\s+.*line\\s+\\d+"
+          - "(?i)warning.*in\\s+.*line\\s+\\d+"
+          - "(?i)notice.*in\\s+.*line\\s+\\d+"
+          - "(?i)call\\s+to\\s+undefined"
+          - "(?i)cannot\\s+redeclare"
+          - "(?i)require.*failed\\s+opening"
+          - "(?i)include.*failed\\s+opening"
+          - "(?i)division\\s+by\\s+zero"
+          - "(?i)undefined\\s+variable"
+          - "(?i)undefined\\s+index"
+          - "(?i)undefined\\s+offset"
+
+      - type: status
+        status:
+          - 200
+          - 500
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/{{path}}"
+
+    payloads:
+      path:
+        - "/.env"
+        - "/config/.env"
+        - "/.env.local"
+        - "/.env.development"
+        - "/.env.production"
+        - "/app/.env"
+        - "/src/.env"
+        - "/config/database.yml"
+        - "/config/config.yml"
+        - "/config/app.yml"
+        - "/WEB-INF/web.xml"
+        - "/META-INF/context.xml"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+
+    matchers-condition: and
+    matchers:
+      - type: regex
+        part: body
+        regex:
+          - "(?i)db_password\\s*=\\s*['\"]?[^'\"\\s]+"
+          - "(?i)database_password\\s*=\\s*['\"]?[^'\"\\s]+"
+          - "(?i)mysql_password\\s*=\\s*['\"]?[^'\"\\s]+"
+          - "(?i)postgres_password\\s*=\\s*['\"]?[^'\"\\s]+"
+          - "(?i)api_key\\s*=\\s*['\"]?[^'\"\\s]+"
+          - "(?i)secret_key\\s*=\\s*['\"]?[^'\"\\s]+"
+          - "(?i)private_key\\s*=\\s*['\"]?[^'\"\\s]+"
+          - "(?i)access_token\\s*=\\s*['\"]?[^'\"\\s]+"
+          - "(?i)auth_token\\s*=\\s*['\"]?[^'\"\\s]+"
+          - "(?i)jwt_secret\\s*=\\s*['\"]?[^'\"\\s]+"
+
+      - type: status
+        status:
+          - 200
+
+    extractors:
+      - type: regex
+        part: body
+        group: 1
+        regex:
+          - '(?i)db_password\\s*=\\s*[\'"]?([^\'"\\s]+)'
+          - '(?i)api_key\\s*=\\s*[\'"]?([^\'"\\s]+)'
+          - '(?i)secret_key\\s*=\\s*[\'"]?([^\'"\\s]+)'
+          - '(?i)PHP Version ([0-9.]+)'
+          - '(?i)Apache/([0-9.]+)'
+          - '(?i)nginx/([0-9.]+)'
+        internal: true

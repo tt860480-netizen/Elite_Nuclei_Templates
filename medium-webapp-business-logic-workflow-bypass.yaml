@@ -1,0 +1,441 @@
+id: medium-webapp-business-logic-workflow-bypass
+
+info:
+  name: Business Logic Workflow Bypass - Elite Detection
+  author: nuclei-community
+  severity: high
+  description: |
+    Detects business logic vulnerabilities where application workflows can be bypassed or manipulated.
+    Tests advanced techniques including step skipping, state manipulation, race conditions,
+    and parameter tampering to circumvent intended business processes and security controls.
+  reference:
+    - https://owasp.org/www-community/vulnerabilities/Business_logic_vulnerability
+    - https://portswigger.net/web-security/logic-flaws
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:H
+    cvss-score: 8.8
+    cwe-id: CWE-840
+  metadata:
+    verified: true
+    max-request: 35
+  tags: business-logic,workflow-bypass,state-manipulation,elite
+
+http:
+  - method: POST
+    path:
+      - "{{BaseURL}}/{{path}}"
+
+    payloads:
+      path:
+        - "checkout/process"
+        - "order/complete"
+        - "payment/process"
+        - "purchase/finalize"
+        - "transaction/complete"
+        - "cart/checkout"
+        - "buy/process"
+        - "order/submit"
+        - "api/checkout"
+        - "api/order/complete"
+        - "api/payment/process"
+
+    headers:
+      Content-Type: "application/x-www-form-urlencoded"
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+
+    body: |
+      product_id=1&quantity=1&price=0.01&total=0.01&discount=99&coupon=ADMIN99&step=4&status=completed&paid=true&verified=true&approved=true
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "order completed"
+          - "payment successful"
+          - "purchase confirmed"
+          - "transaction approved"
+          - "checkout successful"
+          - "order placed"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+          - 302
+
+      - type: regex
+        part: body
+        regex:
+          - "(?i)total[^0-9]*0\\.01"
+          - "(?i)price[^0-9]*0\\.01"
+          - "(?i)amount[^0-9]*0\\.01"
+          - "(?i)discount[^0-9]*99"
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/{{path}}"
+
+    payloads:
+      path:
+        - "user/upgrade"
+        - "account/upgrade"
+        - "subscription/upgrade"
+        - "plan/upgrade"
+        - "membership/upgrade"
+        - "premium/activate"
+        - "pro/activate"
+        - "api/user/upgrade"
+        - "api/account/upgrade"
+        - "api/subscription/upgrade"
+
+    headers:
+      Content-Type: "application/json"
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+
+    body: |
+      {
+        "plan": "premium",
+        "duration": "lifetime",
+        "price": 0,
+        "payment_status": "completed",
+        "verified": true,
+        "approved": true,
+        "activated": true,
+        "step": "final",
+        "bypass_payment": true,
+        "admin_override": true
+      }
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "upgrade successful"
+          - "plan activated"
+          - "subscription upgraded"
+          - "premium activated"
+          - "account upgraded"
+          - "membership upgraded"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+          - 201
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/{{path}}?step={{step}}&status={{status}}&bypass={{bypass}}"
+
+    payloads:
+      path:
+        - "checkout/step"
+        - "order/step"
+        - "payment/step"
+        - "process/step"
+        - "workflow/step"
+        - "wizard/step"
+        - "form/step"
+        - "registration/step"
+      step:
+        - "5"
+        - "10"
+        - "final"
+        - "complete"
+        - "finish"
+        - "end"
+        - "success"
+        - "done"
+      status:
+        - "completed"
+        - "approved"
+        - "verified"
+        - "confirmed"
+        - "processed"
+        - "finalized"
+        - "success"
+        - "done"
+      bypass:
+        - "true"
+        - "1"
+        - "yes"
+        - "admin"
+        - "override"
+        - "skip"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "step completed"
+          - "process finished"
+          - "workflow completed"
+          - "final step"
+          - "success"
+          - "completed"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/{{path}}"
+
+    payloads:
+      path:
+        - "transfer/funds"
+        - "money/transfer"
+        - "payment/transfer"
+        - "wallet/transfer"
+        - "account/transfer"
+        - "balance/transfer"
+        - "api/transfer"
+        - "api/funds/transfer"
+        - "api/money/transfer"
+
+    headers:
+      Content-Type: "application/x-www-form-urlencoded"
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+
+    body: |
+      from_account=1&to_account=2&amount=1000000&currency=USD&verified=true&approved=true&authorized=true&step=final&bypass_limit=true&admin_transfer=true
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "transfer successful"
+          - "funds transferred"
+          - "money sent"
+          - "transfer completed"
+          - "transaction successful"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+          - 302
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/{{path}}"
+
+    payloads:
+      path:
+        - "vote/submit"
+        - "poll/vote"
+        - "survey/submit"
+        - "rating/submit"
+        - "review/submit"
+        - "feedback/submit"
+        - "api/vote"
+        - "api/poll/vote"
+        - "api/survey/submit"
+
+    headers:
+      Content-Type: "application/json"
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+
+    body: |
+      {
+        "poll_id": 1,
+        "votes": 1000,
+        "multiple_votes": true,
+        "user_id": [1, 2, 3, 4, 5],
+        "bypass_limit": true,
+        "admin_vote": true,
+        "weight": 100,
+        "verified": true
+      }
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "vote submitted"
+          - "votes recorded"
+          - "poll updated"
+          - "survey submitted"
+          - "feedback recorded"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+          - 201
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/{{path}}"
+
+    payloads:
+      path:
+        - "coupon/apply"
+        - "discount/apply"
+        - "promo/apply"
+        - "voucher/apply"
+        - "code/apply"
+        - "offer/apply"
+        - "api/coupon/apply"
+        - "api/discount/apply"
+
+    headers:
+      Content-Type: "application/x-www-form-urlencoded"
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+
+    body: |
+      coupon_code=ADMIN100&discount=100&percentage=100&amount=999999&max_uses=999999&expired=false&valid=true&admin_coupon=true&bypass_limit=true
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "coupon applied"
+          - "discount applied"
+          - "promo code applied"
+          - "voucher applied"
+          - "offer applied"
+          - "100% discount"
+          - "free"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/{{path}}"
+
+    payloads:
+      path:
+        - "approval/process"
+        - "review/approve"
+        - "moderation/approve"
+        - "admin/approve"
+        - "verify/approve"
+        - "confirm/approve"
+        - "api/approval"
+        - "api/approve"
+
+    headers:
+      Content-Type: "application/json"
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+
+    body: |
+      {
+        "item_id": 1,
+        "approved": true,
+        "verified": true,
+        "status": "approved",
+        "auto_approve": true,
+        "bypass_review": true,
+        "admin_override": true,
+        "skip_moderation": true,
+        "instant_approval": true
+      }
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "approved successfully"
+          - "item approved"
+          - "approval granted"
+          - "verification successful"
+          - "status updated"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/{{path}}?user_id={{user_id}}&admin={{admin}}&bypass={{bypass}}"
+
+    payloads:
+      path:
+        - "admin/panel"
+        - "admin/dashboard"
+        - "admin/control"
+        - "management/panel"
+        - "control/panel"
+        - "admin/users"
+        - "admin/settings"
+        - "admin/config"
+      user_id:
+        - "1"
+        - "admin"
+        - "administrator"
+        - "root"
+        - "0"
+      admin:
+        - "true"
+        - "1"
+        - "yes"
+        - "admin"
+        - "administrator"
+      bypass:
+        - "true"
+        - "1"
+        - "yes"
+        - "admin"
+        - "override"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "admin panel"
+          - "administration"
+          - "control panel"
+          - "management"
+          - "dashboard"
+          - "users"
+          - "settings"
+          - "configuration"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "access denied"
+          - "unauthorized"
+          - "forbidden"
+          - "not authorized"
+          - "permission denied"
+        condition: and
+        negative: true
+
+    extractors:
+      - type: regex
+        part: body
+        group: 1
+        regex:
+          - '(?i)total[^0-9]*([0-9.]+)'
+          - '(?i)price[^0-9]*([0-9.]+)'
+          - '(?i)amount[^0-9]*([0-9.]+)'
+          - '(?i)discount[^0-9]*([0-9]+)%?'
+          - '(?i)balance[^0-9]*([0-9.]+)'
+        internal: true

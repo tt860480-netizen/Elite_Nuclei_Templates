@@ -1,0 +1,429 @@
+id: medium-api-rest-api-versioning-bypass
+
+info:
+  name: REST API Versioning Bypass - Elite Detection
+  author: nuclei-community
+  severity: medium
+  description: |
+    Detects REST API versioning bypass vulnerabilities using advanced techniques.
+    Tests sophisticated methods including header manipulation, path traversal, parameter injection,
+    and version enumeration to access unauthorized API versions and deprecated endpoints.
+  reference:
+    - https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/12-API_Testing/
+    - https://cheatsheetseries.owasp.org/cheatsheets/REST_Security_Cheat_Sheet.html
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:L/A:N
+    cvss-score: 6.5
+    cwe-id: CWE-284
+  metadata:
+    verified: true
+    max-request: 25
+  tags: api,versioning,bypass,rest,elite
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/{{path}}/{{endpoint}}"
+
+    payloads:
+      path:
+        - "api/v0"
+        - "api/v0.1"
+        - "api/v0.9"
+        - "api/v1.0"
+        - "api/v1.1"
+        - "api/v2.0"
+        - "api/v3.0"
+        - "api/beta"
+        - "api/alpha"
+        - "api/dev"
+        - "api/test"
+        - "api/staging"
+        - "api/internal"
+        - "api/admin"
+        - "api/legacy"
+        - "api/deprecated"
+        - "v0"
+        - "v1"
+        - "v2"
+        - "v3"
+        - "beta"
+        - "alpha"
+        - "dev"
+        - "test"
+      endpoint:
+        - "users"
+        - "admin"
+        - "config"
+        - "settings"
+        - "debug"
+        - "status"
+        - "health"
+        - "info"
+        - "version"
+        - "docs"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Accept: "application/json"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "users"
+          - "admin"
+          - "config"
+          - "settings"
+          - "version"
+          - "api"
+          - "data"
+          - "response"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: body
+        words:
+          - "not found"
+          - "404"
+          - "forbidden"
+          - "unauthorized"
+          - "access denied"
+        condition: and
+        negative: true
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/users"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Accept: "application/json"
+      API-Version: "{{version}}"
+      X-API-Version: "{{version}}"
+      Version: "{{version}}"
+      X-Version: "{{version}}"
+      Accept-Version: "{{version}}"
+
+    payloads:
+      version:
+        - "0"
+        - "0.1"
+        - "0.9"
+        - "1.0"
+        - "1.1"
+        - "2.0"
+        - "3.0"
+        - "beta"
+        - "alpha"
+        - "dev"
+        - "test"
+        - "staging"
+        - "internal"
+        - "admin"
+        - "legacy"
+        - "deprecated"
+        - "latest"
+        - "current"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "users"
+          - "data"
+          - "response"
+          - "api"
+          - "version"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/{{endpoint}}?version={{version}}"
+      - "{{BaseURL}}/api/{{endpoint}}?v={{version}}"
+      - "{{BaseURL}}/api/{{endpoint}}?api_version={{version}}"
+      - "{{BaseURL}}/api/{{endpoint}}?apiVersion={{version}}"
+
+    payloads:
+      endpoint:
+        - "users"
+        - "admin"
+        - "config"
+        - "settings"
+        - "debug"
+        - "status"
+        - "info"
+      version:
+        - "0"
+        - "0.1"
+        - "0.9"
+        - "1.0"
+        - "1.1"
+        - "2.0"
+        - "beta"
+        - "alpha"
+        - "dev"
+        - "test"
+        - "internal"
+        - "admin"
+        - "legacy"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Accept: "application/json"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "users"
+          - "admin"
+          - "config"
+          - "settings"
+          - "data"
+          - "response"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/{{path}}"
+
+    payloads:
+      path:
+        - "api/../v0/users"
+        - "api/../v1/admin"
+        - "api/../beta/config"
+        - "api/../dev/settings"
+        - "api/../internal/debug"
+        - "api/../legacy/users"
+        - "api/v1/../v0/users"
+        - "api/v2/../v1/admin"
+        - "api/v1/../beta/config"
+        - "api/v1/../dev/settings"
+        - "api/v1/../internal/debug"
+        - "api/v1/../../v0/users"
+        - "api/v2/../../v1/admin"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Accept: "application/json"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "users"
+          - "admin"
+          - "config"
+          - "settings"
+          - "debug"
+          - "data"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/api/users"
+
+    headers:
+      Content-Type: "application/json"
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Accept: "application/json"
+      API-Version: "{{version}}"
+      X-API-Version: "{{version}}"
+
+    payloads:
+      version:
+        - "0"
+        - "0.1"
+        - "0.9"
+        - "1.0"
+        - "beta"
+        - "alpha"
+        - "dev"
+        - "test"
+        - "internal"
+        - "admin"
+        - "legacy"
+
+    body: |
+      {"username":"testuser","email":"test@example.com","role":"admin"}
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "created"
+          - "success"
+          - "user"
+          - "admin"
+          - "role"
+          - "id"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+          - 201
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/{{path}}"
+
+    payloads:
+      path:
+        - "api/v1/users;version=0"
+        - "api/v1/users;v=0"
+        - "api/v1/users;api_version=beta"
+        - "api/v1/admin;version=dev"
+        - "api/v1/config;version=internal"
+        - "api/v2/users;version=1"
+        - "api/v2/admin;version=legacy"
+        - "api/users;version=0.1"
+        - "api/admin;version=alpha"
+        - "api/config;version=test"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Accept: "application/json"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "users"
+          - "admin"
+          - "config"
+          - "data"
+          - "response"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/users"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Accept: "application/json"
+      Accept-Encoding: "gzip, deflate"
+      X-Forwarded-For: "127.0.0.1"
+      X-Original-URL: "/api/v0/users"
+      X-Rewrite-URL: "/api/beta/users"
+      X-Override-URL: "/api/dev/users"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "users"
+          - "data"
+          - "response"
+          - "api"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/users"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Accept: "application/json"
+      Content-Type: "application/json"
+      X-HTTP-Method-Override: "GET"
+      X-Method-Override: "GET"
+      _method: "GET"
+
+    body: |
+      {"version":"0","api_version":"beta","v":"dev"}
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "users"
+          - "data"
+          - "response"
+          - "version"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/{{path}}"
+
+    payloads:
+      path:
+        - "api/users%3Bversion%3D0"
+        - "api/users%3Bv%3Dbeta"
+        - "api/admin%3Bversion%3Ddev"
+        - "api/config%3Bapi_version%3Dinternal"
+        - "api/users%2F..%2Fv0%2Fusers"
+        - "api/users%2F..%2Fbeta%2Fadmin"
+        - "api/users%2F..%2Fdev%2Fconfig"
+        - "api%2Fv0%2Fusers"
+        - "api%2Fbeta%2Fadmin"
+        - "api%2Fdev%2Fconfig"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Accept: "application/json"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "users"
+          - "admin"
+          - "config"
+          - "data"
+          - "response"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+    extractors:
+      - type: regex
+        part: body
+        group: 1
+        regex:
+          - '"version"\\s*:\\s*"([^"]+)"'
+          - '"api_version"\\s*:\\s*"([^"]+)"'
+          - '"v"\\s*:\\s*"([^"]+)"'
+        internal: true

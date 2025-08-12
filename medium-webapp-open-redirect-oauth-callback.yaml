@@ -1,0 +1,305 @@
+id: medium-webapp-open-redirect-oauth-callback
+
+info:
+  name: Open Redirect in OAuth Callback - Elite Detection
+  author: nuclei-community
+  severity: medium
+  description: |
+    Detects open redirect vulnerabilities in OAuth callback mechanisms and redirect parameters.
+    Tests advanced techniques including URL encoding, protocol manipulation, domain confusion,
+    and bypass methods to exploit redirect_uri validation flaws in OAuth implementations.
+  reference:
+    - https://owasp.org/www-community/attacks/Unvalidated_Redirects_and_Forwards
+    - https://portswigger.net/web-security/oauth/grant-types
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:L/I:L/A:N
+    cvss-score: 6.1
+    cwe-id: CWE-601
+  metadata:
+    verified: true
+    max-request: 25
+  tags: open-redirect,oauth,callback,redirect-uri,elite
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/{{path}}?redirect_uri=https://evil.com"
+      - "{{BaseURL}}/{{path}}?redirect_uri=http://evil.com"
+      - "{{BaseURL}}/{{path}}?redirect_uri=//evil.com"
+      - "{{BaseURL}}/{{path}}?redirect_uri=https://evil.com/callback"
+      - "{{BaseURL}}/{{path}}?redirect_uri=http://evil.com/callback"
+      - "{{BaseURL}}/{{path}}?redirect_uri=//evil.com/callback"
+      - "{{BaseURL}}/{{path}}?redirect_uri=https%3A%2F%2Fevil.com"
+      - "{{BaseURL}}/{{path}}?redirect_uri=http%3A%2F%2Fevil.com"
+      - "{{BaseURL}}/{{path}}?redirect_uri=%2F%2Fevil.com"
+      - "{{BaseURL}}/{{path}}?redirect_uri=https://{{Hostname}}.evil.com"
+      - "{{BaseURL}}/{{path}}?redirect_uri=https://evil.com.{{Hostname}}"
+      - "{{BaseURL}}/{{path}}?redirect_uri=https://{{Hostname}}@evil.com"
+
+    payloads:
+      path:
+        - "oauth/authorize"
+        - "oauth/callback"
+        - "auth/oauth"
+        - "auth/callback"
+        - "login/oauth"
+        - "login/callback"
+        - "sso/callback"
+        - "oauth2/authorize"
+        - "oauth2/callback"
+        - "api/oauth/authorize"
+        - "api/oauth/callback"
+        - "connect/oauth"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+
+    matchers-condition: and
+    matchers:
+      - type: regex
+        part: header
+        regex:
+          - "(?i)location:\\s*https?://evil\\.com"
+          - "(?i)location:\\s*//evil\\.com"
+          - "(?i)location:\\s*https?://[^/]*evil\\.com"
+          - "(?i)location:\\s*https?://evil\\.com\\."
+
+      - type: status
+        status:
+          - 301
+          - 302
+          - 303
+          - 307
+          - 308
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/{{path}}?return_to={{redirect_payload}}"
+      - "{{BaseURL}}/{{path}}?return_url={{redirect_payload}}"
+      - "{{BaseURL}}/{{path}}?redirect={{redirect_payload}}"
+      - "{{BaseURL}}/{{path}}?redirect_to={{redirect_payload}}"
+      - "{{BaseURL}}/{{path}}?next={{redirect_payload}}"
+      - "{{BaseURL}}/{{path}}?url={{redirect_payload}}"
+      - "{{BaseURL}}/{{path}}?goto={{redirect_payload}}"
+      - "{{BaseURL}}/{{path}}?target={{redirect_payload}}"
+      - "{{BaseURL}}/{{path}}?destination={{redirect_payload}}"
+      - "{{BaseURL}}/{{path}}?forward={{redirect_payload}}"
+
+    payloads:
+      path:
+        - "oauth/authorize"
+        - "oauth/callback"
+        - "auth/oauth"
+        - "auth/callback"
+        - "login/oauth"
+        - "login/callback"
+        - "sso/callback"
+        - "oauth2/authorize"
+        - "oauth2/callback"
+      redirect_payload:
+        - "https://evil.com"
+        - "http://evil.com"
+        - "//evil.com"
+        - "https%3A%2F%2Fevil.com"
+        - "http%3A%2F%2Fevil.com"
+        - "%2F%2Fevil.com"
+        - "javascript:alert(document.domain)"
+        - "data:text/html,<script>alert(document.domain)</script>"
+        - "https://evil.com@{{Hostname}}"
+        - "https://{{Hostname}}.evil.com"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+
+    matchers-condition: and
+    matchers:
+      - type: regex
+        part: header
+        regex:
+          - "(?i)location:\\s*https?://evil\\.com"
+          - "(?i)location:\\s*//evil\\.com"
+          - "(?i)location:\\s*javascript:"
+          - "(?i)location:\\s*data:"
+
+      - type: status
+        status:
+          - 301
+          - 302
+          - 303
+          - 307
+          - 308
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/{{path}}"
+
+    payloads:
+      path:
+        - "oauth/authorize"
+        - "oauth/callback"
+        - "auth/oauth"
+        - "auth/callback"
+        - "login/oauth"
+        - "sso/callback"
+        - "oauth2/authorize"
+        - "oauth2/callback"
+
+    headers:
+      Content-Type: "application/x-www-form-urlencoded"
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+
+    body: |
+      client_id=test_client&response_type=code&redirect_uri=https://evil.com/callback&scope=read&state=random123
+
+    matchers-condition: and
+    matchers:
+      - type: regex
+        part: header
+        regex:
+          - "(?i)location:\\s*https?://evil\\.com"
+          - "(?i)location:\\s*//evil\\.com"
+
+      - type: status
+        status:
+          - 301
+          - 302
+          - 303
+          - 307
+          - 308
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/{{path}}?redirect_uri={{encoded_payload}}"
+
+    payloads:
+      path:
+        - "oauth/authorize"
+        - "oauth/callback"
+        - "auth/oauth"
+        - "auth/callback"
+        - "login/oauth"
+        - "sso/callback"
+      encoded_payload:
+        - "https%3A%2F%2Fevil.com%2Fcallback"
+        - "http%3A%2F%2Fevil.com%2Fcallback"
+        - "%2F%2Fevil.com%2Fcallback"
+        - "https%253A%252F%252Fevil.com"
+        - "http%253A%252F%252Fevil.com"
+        - "%252F%252Fevil.com"
+        - "https%3A%2F%2F{{Hostname}}.evil.com"
+        - "https%3A%2F%2Fevil.com.{{Hostname}}"
+        - "https%3A%2F%2F{{Hostname}}%40evil.com"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+
+    matchers-condition: and
+    matchers:
+      - type: regex
+        part: header
+        regex:
+          - "(?i)location:\\s*https?://evil\\.com"
+          - "(?i)location:\\s*//evil\\.com"
+          - "(?i)location:\\s*https?://[^/]*evil\\.com"
+
+      - type: status
+        status:
+          - 301
+          - 302
+          - 303
+          - 307
+          - 308
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/{{path}}?redirect_uri={{bypass_payload}}"
+
+    payloads:
+      path:
+        - "oauth/authorize"
+        - "oauth/callback"
+        - "auth/oauth"
+        - "auth/callback"
+        - "login/oauth"
+        - "sso/callback"
+      bypass_payload:
+        - "https://{{Hostname}}/redirect?url=https://evil.com"
+        - "https://{{Hostname}}/goto?target=https://evil.com"
+        - "https://{{Hostname}}/forward?to=https://evil.com"
+        - "https://{{Hostname}}/proxy?url=https://evil.com"
+        - "https://{{Hostname}}/link?redirect=https://evil.com"
+        - "https://{{Hostname}}/jump?destination=https://evil.com"
+        - "https://{{Hostname}}/navigate?url=https://evil.com"
+        - "https://{{Hostname}}/bounce?target=https://evil.com"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 301
+          - 302
+          - 303
+          - 307
+          - 308
+
+      - type: regex
+        part: header
+        regex:
+          - "(?i)location:"
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/{{path}}?redirect_uri={{protocol_payload}}"
+
+    payloads:
+      path:
+        - "oauth/authorize"
+        - "oauth/callback"
+        - "auth/oauth"
+        - "auth/callback"
+      protocol_payload:
+        - "javascript:alert(document.domain)"
+        - "javascript:alert('XSS')"
+        - "javascript:window.location='https://evil.com'"
+        - "data:text/html,<script>alert(document.domain)</script>"
+        - "data:text/html,<script>window.location='https://evil.com'</script>"
+        - "vbscript:msgbox('XSS')"
+        - "file:///etc/passwd"
+        - "ftp://evil.com"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+
+    matchers-condition: and
+    matchers:
+      - type: regex
+        part: header
+        regex:
+          - "(?i)location:\\s*javascript:"
+          - "(?i)location:\\s*data:"
+          - "(?i)location:\\s*vbscript:"
+          - "(?i)location:\\s*file:"
+          - "(?i)location:\\s*ftp:"
+
+      - type: status
+        status:
+          - 301
+          - 302
+          - 303
+          - 307
+          - 308
+
+    extractors:
+      - type: regex
+        part: header
+        group: 1
+        regex:
+          - '(?i)location:\\s*(https?://[^\\s]+)'
+          - '(?i)location:\\s*(//[^\\s]+)'
+          - '(?i)location:\\s*(javascript:[^\\s]+)'
+          - '(?i)location:\\s*(data:[^\\s]+)'
+        internal: true

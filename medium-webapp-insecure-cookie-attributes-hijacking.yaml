@@ -1,0 +1,298 @@
+id: medium-webapp-insecure-cookie-attributes-hijacking
+
+info:
+  name: Insecure Cookie Attributes Hijacking - Elite Detection
+  author: nuclei-community
+  severity: medium
+  description: |
+    Detects insecure cookie attributes that can lead to session hijacking and cookie theft.
+    Tests for missing Secure, HttpOnly, SameSite flags and other cookie security misconfigurations
+    that allow attackers to steal session cookies through XSS, MITM, and CSRF attacks.
+  reference:
+    - https://owasp.org/www-community/controls/SecureCookieAttribute
+    - https://developer.mozilla.org/en-US/docs/Web/HTTP/Cookies
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:L/I:L/A:N
+    cvss-score: 5.4
+    cwe-id: CWE-614
+  metadata:
+    verified: true
+    max-request: 20
+  tags: cookie,session,hijacking,security-headers,elite
+
+http:
+  - method: POST
+    path:
+      - "{{BaseURL}}/{{path}}"
+
+    payloads:
+      path:
+        - "login.php"
+        - "signin.php"
+        - "auth.php"
+        - "user/login"
+        - "auth/login"
+        - "account/login"
+        - "member/signin"
+        - "admin/login"
+        - "api/login"
+        - "api/auth"
+
+    headers:
+      Content-Type: "application/x-www-form-urlencoded"
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+
+    body: |
+      username=admin&password=admin123
+
+    matchers-condition: and
+    matchers:
+      - type: regex
+        part: header
+        regex:
+          - "(?i)set-cookie:\\s*[^;]*;(?![^;]*secure)(?![^;]*httponly)"
+          - "(?i)set-cookie:\\s*[^;]*;(?![^;]*secure)"
+          - "(?i)set-cookie:\\s*[^;]*;(?![^;]*httponly)"
+          - "(?i)set-cookie:\\s*[^;]*;(?![^;]*samesite)"
+          - "(?i)set-cookie:\\s*sessionid=[^;]*;(?![^;]*secure)"
+          - "(?i)set-cookie:\\s*phpsessid=[^;]*;(?![^;]*secure)"
+          - "(?i)set-cookie:\\s*jsessionid=[^;]*;(?![^;]*secure)"
+          - "(?i)set-cookie:\\s*asp\\.net_sessionid=[^;]*;(?![^;]*secure)"
+
+      - type: status
+        status:
+          - 200
+          - 302
+
+      - type: regex
+        part: header
+        regex:
+          - "(?i)set-cookie:"
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/{{path}}"
+
+    payloads:
+      path:
+        - "index.php"
+        - "home.php"
+        - "dashboard.php"
+        - "profile.php"
+        - "settings.php"
+        - "admin.php"
+        - "user/profile"
+        - "account/dashboard"
+        - "member/home"
+        - "api/user"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Cookie: "sessionid=test123; userid=1; role=admin"
+
+    matchers-condition: and
+    matchers:
+      - type: regex
+        part: header
+        regex:
+          - "(?i)set-cookie:\\s*[^;]*sessionid[^;]*;(?![^;]*secure)"
+          - "(?i)set-cookie:\\s*[^;]*phpsessid[^;]*;(?![^;]*httponly)"
+          - "(?i)set-cookie:\\s*[^;]*jsessionid[^;]*;(?![^;]*secure)"
+          - "(?i)set-cookie:\\s*[^;]*auth[^;]*;(?![^;]*httponly)"
+          - "(?i)set-cookie:\\s*[^;]*token[^;]*;(?![^;]*secure)"
+          - "(?i)set-cookie:\\s*[^;]*login[^;]*;(?![^;]*httponly)"
+
+      - type: status
+        status:
+          - 200
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/{{path}}"
+
+    payloads:
+      path:
+        - "register.php"
+        - "signup.php"
+        - "create_account.php"
+        - "user/register"
+        - "auth/register"
+        - "account/create"
+        - "member/signup"
+        - "api/register"
+
+    headers:
+      Content-Type: "application/x-www-form-urlencoded"
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+
+    body: |
+      username=testuser&email=test@example.com&password=test123
+
+    matchers-condition: and
+    matchers:
+      - type: regex
+        part: header
+        regex:
+          - "(?i)set-cookie:\\s*[^;]*;(?![^;]*secure)(?![^;]*httponly)(?![^;]*samesite)"
+          - "(?i)set-cookie:\\s*[^;]*remember[^;]*;(?![^;]*secure)"
+          - "(?i)set-cookie:\\s*[^;]*persistent[^;]*;(?![^;]*httponly)"
+          - "(?i)set-cookie:\\s*[^;]*autologin[^;]*;(?![^;]*secure)"
+
+      - type: status
+        status:
+          - 200
+          - 302
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/{{path}}"
+
+    payloads:
+      path:
+        - "logout.php"
+        - "signout.php"
+        - "user/logout"
+        - "auth/logout"
+        - "account/logout"
+        - "member/signout"
+        - "admin/logout"
+        - "api/logout"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Cookie: "sessionid=active_session_123; userid=1"
+
+    matchers-condition: and
+    matchers:
+      - type: regex
+        part: header
+        regex:
+          - "(?i)set-cookie:\\s*[^;]*=;\\s*expires="
+          - "(?i)set-cookie:\\s*[^;]*=deleted"
+          - "(?i)set-cookie:\\s*[^;]*=\\s*;\\s*max-age=0"
+
+      - type: regex
+        part: header
+        regex:
+          - "(?i)set-cookie:\\s*[^;]*;(?![^;]*secure)"
+          - "(?i)set-cookie:\\s*[^;]*;(?![^;]*httponly)"
+
+      - type: status
+        status:
+          - 200
+          - 302
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/{{path}}"
+
+    payloads:
+      path:
+        - "remember_me.php"
+        - "keep_logged_in.php"
+        - "persistent_login.php"
+        - "auto_login.php"
+        - "stay_logged_in.php"
+        - "user/remember"
+        - "auth/remember"
+        - "account/persistent"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+
+    matchers-condition: and
+    matchers:
+      - type: regex
+        part: header
+        regex:
+          - "(?i)set-cookie:\\s*[^;]*remember[^;]*;(?![^;]*secure)"
+          - "(?i)set-cookie:\\s*[^;]*persistent[^;]*;(?![^;]*httponly)"
+          - "(?i)set-cookie:\\s*[^;]*autologin[^;]*;(?![^;]*secure)"
+          - "(?i)set-cookie:\\s*[^;]*keeploggedin[^;]*;(?![^;]*httponly)"
+          - "(?i)set-cookie:\\s*[^;]*stayloggedin[^;]*;(?![^;]*secure)"
+
+      - type: status
+        status:
+          - 200
+
+  - method: POST
+    path:
+      - "{{BaseURL}}/{{path}}"
+
+    payloads:
+      path:
+        - "api/auth"
+        - "api/login"
+        - "api/session"
+        - "api/token"
+        - "oauth/token"
+        - "auth/token"
+        - "token/generate"
+        - "session/create"
+
+    headers:
+      Content-Type: "application/json"
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+
+    body: |
+      {"username":"admin","password":"admin123"}
+
+    matchers-condition: and
+    matchers:
+      - type: regex
+        part: header
+        regex:
+          - "(?i)set-cookie:\\s*[^;]*token[^;]*;(?![^;]*secure)"
+          - "(?i)set-cookie:\\s*[^;]*jwt[^;]*;(?![^;]*httponly)"
+          - "(?i)set-cookie:\\s*[^;]*bearer[^;]*;(?![^;]*secure)"
+          - "(?i)set-cookie:\\s*[^;]*access[^;]*;(?![^;]*httponly)"
+          - "(?i)set-cookie:\\s*[^;]*refresh[^;]*;(?![^;]*secure)"
+
+      - type: status
+        status:
+          - 200
+          - 201
+
+  - method: GET
+    path:
+      - "{{BaseURL}}/{{path}}"
+
+    payloads:
+      path:
+        - "admin/panel.php"
+        - "admin/dashboard.php"
+        - "admin/control.php"
+        - "admin/manage.php"
+        - "admin/users.php"
+        - "admin/settings.php"
+        - "management/panel"
+        - "control/panel"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Cookie: "admin_session=admin123; role=administrator; privileges=all"
+
+    matchers-condition: and
+    matchers:
+      - type: regex
+        part: header
+        regex:
+          - "(?i)set-cookie:\\s*[^;]*admin[^;]*;(?![^;]*secure)"
+          - "(?i)set-cookie:\\s*[^;]*role[^;]*;(?![^;]*httponly)"
+          - "(?i)set-cookie:\\s*[^;]*privilege[^;]*;(?![^;]*secure)"
+          - "(?i)set-cookie:\\s*[^;]*permission[^;]*;(?![^;]*httponly)"
+          - "(?i)set-cookie:\\s*[^;]*access_level[^;]*;(?![^;]*secure)"
+
+      - type: status
+        status:
+          - 200
+
+    extractors:
+      - type: regex
+        part: header
+        group: 1
+        regex:
+          - '(?i)set-cookie:\\s*([^;=]+=[^;]+);(?![^;]*secure)'
+          - '(?i)set-cookie:\\s*([^;=]+=[^;]+);(?![^;]*httponly)'
+          - '(?i)set-cookie:\\s*([^;=]+=[^;]+);(?![^;]*samesite)'
+        internal: true
