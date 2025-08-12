@@ -1,0 +1,421 @@
+id: medium-config-database-connection-string-exposure
+
+info:
+  name: Database Connection String Exposure Detection
+  author: elite-red-team
+  severity: medium
+  description: |
+    Detects exposed database connection strings in web applications, configuration files,
+    and source code. This elite template identifies various database connection formats
+    and sensitive database credentials across multiple database systems.
+  reference:
+    - https://owasp.org/www-project-top-ten/2017/A3_2017-Sensitive_Data_Exposure
+    - https://cheatsheetseries.owasp.org/cheatsheets/Database_Security_Cheat_Sheet.html
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H
+    cvss-score: 9.8
+    cwe-id: CWE-200
+  metadata:
+    verified: true
+    max-request: 8
+  tags: config,database,connection-string,credentials,exposure,medium
+
+http:
+  # Test for exposed configuration files
+  - method: GET
+    path:
+      - "{{BaseURL}}/web.config"
+      - "{{BaseURL}}/app.config"
+      - "{{BaseURL}}/appsettings.json"
+      - "{{BaseURL}}/appsettings.development.json"
+      - "{{BaseURL}}/appsettings.production.json"
+      - "{{BaseURL}}/config.json"
+      - "{{BaseURL}}/database.json"
+      - "{{BaseURL}}/db.json"
+      - "{{BaseURL}}/settings.json"
+      - "{{BaseURL}}/configuration.json"
+      - "{{BaseURL}}/.env"
+      - "{{BaseURL}}/.env.local"
+      - "{{BaseURL}}/.env.development"
+      - "{{BaseURL}}/.env.production"
+      - "{{BaseURL}}/.env.example"
+      - "{{BaseURL}}/config.ini"
+      - "{{BaseURL}}/database.ini"
+      - "{{BaseURL}}/db.ini"
+      - "{{BaseURL}}/settings.ini"
+      - "{{BaseURL}}/config.php"
+      - "{{BaseURL}}/database.php"
+      - "{{BaseURL}}/db.php"
+      - "{{BaseURL}}/config.py"
+      - "{{BaseURL}}/settings.py"
+      - "{{BaseURL}}/database.py"
+      - "{{BaseURL}}/config.xml"
+      - "{{BaseURL}}/database.xml"
+      - "{{BaseURL}}/hibernate.cfg.xml"
+      - "{{BaseURL}}/persistence.xml"
+      - "{{BaseURL}}/application.properties"
+      - "{{BaseURL}}/database.properties"
+      - "{{BaseURL}}/db.properties"
+      - "{{BaseURL}}/jdbc.properties"
+      - "{{BaseURL}}/application.yml"
+      - "{{BaseURL}}/application.yaml"
+      - "{{BaseURL}}/database.yml"
+      - "{{BaseURL}}/database.yaml"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Accept: "text/plain,application/json,application/xml,text/xml,*/*"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      # Database connection string patterns
+      - type: regex
+        part: body
+        regex:
+          # SQL Server connection strings
+          - "(?i)(server|data\\s*source|initial\\s*catalog|database)\\s*=\\s*[^;\\s]+[;\\s]*(user\\s*id|uid|username|user)\\s*=\\s*[^;\\s]+[;\\s]*(password|pwd)\\s*=\\s*[^;\\s]+"
+          - "(?i)Server\\s*=\\s*[^;]+;\\s*Database\\s*=\\s*[^;]+;\\s*(User\\s*Id|Uid)\\s*=\\s*[^;]+;\\s*Password\\s*=\\s*[^;]+"
+          - "(?i)Data\\s*Source\\s*=\\s*[^;]+;\\s*Initial\\s*Catalog\\s*=\\s*[^;]+;\\s*(User\\s*ID|Uid)\\s*=\\s*[^;]+;\\s*Password\\s*=\\s*[^;]+"
+          
+          # MySQL connection strings
+          - "(?i)mysql://[^:]+:[^@]+@[^/]+/[^\\s\"'<>]+"
+          - "(?i)(host|server)\\s*=\\s*[^;\\s]+[;\\s]*(database|dbname)\\s*=\\s*[^;\\s]+[;\\s]*(user|username|uid)\\s*=\\s*[^;\\s]+[;\\s]*(password|pwd)\\s*=\\s*[^;\\s]+"
+          - "(?i)jdbc:mysql://[^:]+:[^@]+@[^/]+/[^\\s\"'<>]+"
+          
+          # PostgreSQL connection strings
+          - "(?i)postgresql://[^:]+:[^@]+@[^/]+/[^\\s\"'<>]+"
+          - "(?i)postgres://[^:]+:[^@]+@[^/]+/[^\\s\"'<>]+"
+          - "(?i)jdbc:postgresql://[^:]+:[^@]+@[^/]+/[^\\s\"'<>]+"
+          
+          # Oracle connection strings
+          - "(?i)jdbc:oracle:[^:]+:[^:]+:[^@]+@[^\\s\"'<>]+"
+          - "(?i)(host|server)\\s*=\\s*[^;\\s]+[;\\s]*(port)\\s*=\\s*[^;\\s]+[;\\s]*(service_name|sid)\\s*=\\s*[^;\\s]+[;\\s]*(user|username|uid)\\s*=\\s*[^;\\s]+[;\\s]*(password|pwd)\\s*=\\s*[^;\\s]+"
+          
+          # MongoDB connection strings
+          - "(?i)mongodb://[^:]+:[^@]+@[^/]+/[^\\s\"'<>]+"
+          - "(?i)mongodb\\+srv://[^:]+:[^@]+@[^/]+/[^\\s\"'<>]+"
+          
+          # Redis connection strings
+          - "(?i)redis://[^:]*:[^@]*@[^/]+/[^\\s\"'<>]*"
+          - "(?i)rediss://[^:]*:[^@]*@[^/]+/[^\\s\"'<>]*"
+          
+          # Generic database URLs
+          - "(?i)(database_url|db_url|connection_string|conn_str)\\s*[=:]\\s*[\"']?[^\"'\\s]+://[^:]+:[^@]+@[^\"'\\s<>]+"
+          
+          # Environment variable patterns
+          - "(?i)(DB_HOST|DATABASE_HOST|DB_SERVER|DATABASE_SERVER)\\s*[=:]\\s*[\"']?[^\"'\\s<>]+"
+          - "(?i)(DB_USER|DATABASE_USER|DB_USERNAME|DATABASE_USERNAME)\\s*[=:]\\s*[\"']?[^\"'\\s<>]+"
+          - "(?i)(DB_PASS|DATABASE_PASS|DB_PASSWORD|DATABASE_PASSWORD)\\s*[=:]\\s*[\"']?[^\"'\\s<>]+"
+          - "(?i)(DB_NAME|DATABASE_NAME|DB_DATABASE|DATABASE_DATABASE)\\s*[=:]\\s*[\"']?[^\"'\\s<>]+"
+          
+        condition: or
+
+    extractors:
+      - type: regex
+        part: body
+        group: 1
+        regex:
+          - "(?i)(server|data\\s*source|host)\\s*=\\s*([^;\\s\"'<>]+)"
+          - "(?i)(database|initial\\s*catalog|dbname)\\s*=\\s*([^;\\s\"'<>]+)"
+          - "(?i)(user\\s*id|uid|username|user)\\s*=\\s*([^;\\s\"'<>]+)"
+          - "(?i)(password|pwd)\\s*=\\s*([^;\\s\"'<>]+)"
+
+      - type: regex
+        part: body
+        group: 1
+        regex:
+          - "(?i)(mysql|postgresql|postgres|oracle|mongodb|redis)://([^\\s\"'<>]+)"
+
+  # Test for exposed source code files
+  - method: GET
+    path:
+      - "{{BaseURL}}/src/config/database.js"
+      - "{{BaseURL}}/src/config/db.js"
+      - "{{BaseURL}}/config/database.js"
+      - "{{BaseURL}}/config/db.js"
+      - "{{BaseURL}}/models/database.js"
+      - "{{BaseURL}}/models/db.js"
+      - "{{BaseURL}}/lib/database.js"
+      - "{{BaseURL}}/lib/db.js"
+      - "{{BaseURL}}/includes/config.php"
+      - "{{BaseURL}}/includes/database.php"
+      - "{{BaseURL}}/includes/db.php"
+      - "{{BaseURL}}/config/config.php"
+      - "{{BaseURL}}/config/database.php"
+      - "{{BaseURL}}/config/db.php"
+      - "{{BaseURL}}/application/config/database.php"
+      - "{{BaseURL}}/application/config/config.php"
+      - "{{BaseURL}}/wp-config.php"
+      - "{{BaseURL}}/wp-config-sample.php"
+      - "{{BaseURL}}/configuration.php"
+      - "{{BaseURL}}/settings.py"
+      - "{{BaseURL}}/config.py"
+      - "{{BaseURL}}/database.py"
+      - "{{BaseURL}}/db.py"
+      - "{{BaseURL}}/models.py"
+      - "{{BaseURL}}/manage.py"
+      - "{{BaseURL}}/settings/base.py"
+      - "{{BaseURL}}/settings/development.py"
+      - "{{BaseURL}}/settings/production.py"
+      - "{{BaseURL}}/config/database.rb"
+      - "{{BaseURL}}/config/environments/development.rb"
+      - "{{BaseURL}}/config/environments/production.rb"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Accept: "text/plain,application/x-php,text/x-php,*/*"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      # Source code with database credentials
+      - type: regex
+        part: body
+        regex:
+          # PHP database connections
+          - "(?i)\\$[a-zA-Z_][a-zA-Z0-9_]*\\s*=\\s*[\"']?(mysql|mysqli|pdo|postgresql|oracle|mongodb|redis)[\"']?"
+          - "(?i)(mysql_connect|mysqli_connect|pg_connect|oci_connect|new\\s+PDO|new\\s+MongoDB|new\\s+Redis)\\s*\\("
+          - "(?i)(DB_HOST|DB_USER|DB_PASS|DB_NAME|DATABASE_URL)\\s*[\"']?\\s*=>\\s*[\"']?[^\"'\\s<>]+"
+          
+          # JavaScript/Node.js database connections
+          - "(?i)(host|hostname|server|user|username|password|database|port)\\s*:\\s*[\"']?[^\"'\\s<>,}]+"
+          - "(?i)(mysql|pg|mongodb|redis)\\.connect\\s*\\("
+          - "(?i)process\\.env\\.(DB_|DATABASE_)[A-Z_]+"
+          
+          # Python database connections
+          - "(?i)(host|user|password|database|port)\\s*=\\s*[\"']?[^\"'\\s<>]+"
+          - "(?i)(psycopg2|pymongo|redis|mysql|sqlite3)\\.connect\\s*\\("
+          - "(?i)os\\.environ\\.(get\\()?[\"'](DB_|DATABASE_)[A-Z_]+[\"']"
+          
+          # Ruby database connections
+          - "(?i)(host|username|password|database|port):\\s*[\"']?[^\"'\\s<>]+"
+          - "(?i)ENV\\[[\"'](DB_|DATABASE_)[A-Z_]+[\"']\\]"
+          
+          # Java database connections
+          - "(?i)jdbc:[a-zA-Z]+://[^\"'\\s<>]+"
+          - "(?i)DriverManager\\.getConnection\\s*\\("
+          - "(?i)(username|password|url)\\s*=\\s*[\"']?[^\"'\\s<>]+"
+          
+        condition: or
+
+    extractors:
+      - type: regex
+        part: body
+        group: 1
+        regex:
+          - "(?i)(host|hostname|server|user|username|password|database|port)\\s*[=:]\\s*[\"']?([^\"'\\s<>,}]+)[\"']?"
+
+  # Test for backup and dump files
+  - method: GET
+    path:
+      - "{{BaseURL}}/backup.sql"
+      - "{{BaseURL}}/database.sql"
+      - "{{BaseURL}}/db.sql"
+      - "{{BaseURL}}/dump.sql"
+      - "{{BaseURL}}/export.sql"
+      - "{{BaseURL}}/data.sql"
+      - "{{BaseURL}}/backup.txt"
+      - "{{BaseURL}}/database.txt"
+      - "{{BaseURL}}/db.txt"
+      - "{{BaseURL}}/config.txt"
+      - "{{BaseURL}}/settings.txt"
+      - "{{BaseURL}}/credentials.txt"
+      - "{{BaseURL}}/passwords.txt"
+      - "{{BaseURL}}/users.txt"
+      - "{{BaseURL}}/accounts.txt"
+      - "{{BaseURL}}/backup.zip"
+      - "{{BaseURL}}/database.zip"
+      - "{{BaseURL}}/db.zip"
+      - "{{BaseURL}}/config.zip"
+      - "{{BaseURL}}/backup.tar.gz"
+      - "{{BaseURL}}/database.tar.gz"
+      - "{{BaseURL}}/db.tar.gz"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Accept: "text/plain,application/sql,application/octet-stream,*/*"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      # SQL dump or backup file content
+      - type: regex
+        part: body
+        regex:
+          - "(?i)(CREATE\\s+TABLE|INSERT\\s+INTO|DROP\\s+TABLE|ALTER\\s+TABLE)"
+          - "(?i)(mysqldump|pg_dump|sqlcmd|oracle|mongodb)"
+          - "(?i)(-- MySQL dump|-- PostgreSQL database dump|-- Oracle database dump)"
+          - "(?i)(host|server|user|username|password|database)\\s*[=:]\\s*[^\\s<>]+"
+        condition: or
+
+    extractors:
+      - type: regex
+        part: body
+        group: 1
+        regex:
+          - "(?i)(host|server|user|username|password|database)\\s*[=:]\\s*([^\\s<>\"']+)"
+
+  # Test for error pages with database information
+  - method: GET
+    path:
+      - "{{BaseURL}}/test"
+      - "{{BaseURL}}/debug"
+      - "{{BaseURL}}/error"
+      - "{{BaseURL}}/exception"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 500
+          - 400
+          - 404
+          - 200
+
+      # Database error messages with connection info
+      - type: regex
+        part: body
+        regex:
+          - "(?i)(connection\\s+failed|could\\s+not\\s+connect|access\\s+denied|login\\s+failed)"
+          - "(?i)(mysql|postgresql|oracle|mongodb|redis|sqlite).*error"
+          - "(?i)(host|server|user|username|password|database)\\s*[=:]\\s*[^\\s<>\"']+"
+          - "(?i)(jdbc|odbc|oledb):[^\\s<>\"']+"
+        condition: or
+
+    extractors:
+      - type: regex
+        part: body
+        group: 1
+        regex:
+          - "(?i)(host|server|user|username|database)\\s*[=:]\\s*([^\\s<>\"']+)"
+
+  # Test for API endpoints that might expose database info
+  - method: GET
+    path:
+      - "{{BaseURL}}/api/config"
+      - "{{BaseURL}}/api/database"
+      - "{{BaseURL}}/api/db"
+      - "{{BaseURL}}/api/settings"
+      - "{{BaseURL}}/api/info"
+      - "{{BaseURL}}/api/status"
+      - "{{BaseURL}}/api/health"
+      - "{{BaseURL}}/api/debug"
+      - "{{BaseURL}}/config"
+      - "{{BaseURL}}/database"
+      - "{{BaseURL}}/db"
+      - "{{BaseURL}}/settings"
+      - "{{BaseURL}}/info"
+      - "{{BaseURL}}/status"
+      - "{{BaseURL}}/health"
+      - "{{BaseURL}}/debug"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Accept: "application/json,text/plain,*/*"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      # JSON response with database configuration
+      - type: regex
+        part: body
+        regex:
+          - '(?i)"(host|hostname|server|user|username|password|database|port|connection_string|database_url)"\\s*:\\s*"[^"]*"'
+          - '(?i)"(mysql|postgresql|postgres|oracle|mongodb|redis|sqlite)"'
+          - '(?i)"(DB_|DATABASE_)[A-Z_]+"\\s*:\\s*"[^"]*"'
+        condition: or
+
+    extractors:
+      - type: regex
+        part: body
+        group: 2
+        regex:
+          - '(?i)"(host|hostname|server|user|username|password|database|port)"\\s*:\\s*"([^"]*)"'
+
+  # Test for version control files
+  - method: GET
+    path:
+      - "{{BaseURL}}/.git/config"
+      - "{{BaseURL}}/.svn/entries"
+      - "{{BaseURL}}/.hg/hgrc"
+      - "{{BaseURL}}/.bzr/branch/branch.conf"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Accept: "text/plain,*/*"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      # Version control files with database URLs
+      - type: regex
+        part: body
+        regex:
+          - "(?i)(mysql|postgresql|postgres|oracle|mongodb|redis)://[^\\s<>\"']+"
+          - "(?i)(host|server|user|username|password|database)\\s*[=:]\\s*[^\\s<>\"']+"
+        condition: or
+
+    extractors:
+      - type: regex
+        part: body
+        group: 1
+        regex:
+          - "(?i)(mysql|postgresql|postgres|oracle|mongodb|redis)://([^\\s<>\"']+)"
+
+  # Test for Docker and container configuration files
+  - method: GET
+    path:
+      - "{{BaseURL}}/docker-compose.yml"
+      - "{{BaseURL}}/docker-compose.yaml"
+      - "{{BaseURL}}/Dockerfile"
+      - "{{BaseURL}}/.dockerignore"
+      - "{{BaseURL}}/kubernetes.yml"
+      - "{{BaseURL}}/kubernetes.yaml"
+      - "{{BaseURL}}/k8s.yml"
+      - "{{BaseURL}}/k8s.yaml"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Accept: "text/plain,application/x-yaml,*/*"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      # Container configuration with database credentials
+      - type: regex
+        part: body
+        regex:
+          - "(?i)(MYSQL|POSTGRES|MONGODB|REDIS)_(HOST|USER|PASSWORD|DATABASE|ROOT_PASSWORD)"
+          - "(?i)(DB_|DATABASE_)(HOST|USER|PASSWORD|NAME|URL)"
+          - "(?i)(mysql|postgresql|postgres|oracle|mongodb|redis)://[^\\s<>\"']+"
+        condition: or
+
+    extractors:
+      - type: regex
+        part: body
+        group: 2
+        regex:
+          - "(?i)(MYSQL|POSTGRES|MONGODB|REDIS|DB|DATABASE)_([A-Z_]+)\\s*[=:]\\s*([^\\s<>\"']+)"

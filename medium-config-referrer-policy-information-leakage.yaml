@@ -1,0 +1,217 @@
+id: medium-config-referrer-policy-information-leakage
+
+info:
+  name: Referrer Policy Information Leakage Detection
+  author: elite-red-team
+  severity: medium
+  description: |
+    Detects missing or weak Referrer-Policy headers that can lead to sensitive information leakage.
+    This elite template identifies various referrer policy misconfigurations that expose
+    sensitive URLs, parameters, and paths to third-party sites.
+  reference:
+    - https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Referrer-Policy
+    - https://owasp.org/www-project-secure-headers/#referrer-policy
+    - https://w3c.github.io/webappsec-referrer-policy/
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N
+    cvss-score: 5.3
+    cwe-id: CWE-200
+  metadata:
+    verified: true
+    max-request: 4
+  tags: config,referrer-policy,information-disclosure,headers,medium
+
+http:
+  # Test main pages for referrer policy
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+      - "{{BaseURL}}/login"
+      - "{{BaseURL}}/admin"
+      - "{{BaseURL}}/dashboard"
+      - "{{BaseURL}}/api"
+      - "{{BaseURL}}/profile"
+      - "{{BaseURL}}/settings"
+      - "{{BaseURL}}/account"
+      - "{{BaseURL}}/secure"
+      - "{{BaseURL}}/private"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+      Accept-Language: "en-US,en;q=0.5"
+      Connection: "keep-alive"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 201
+          - 202
+
+      - type: word
+        part: header
+        words:
+          - "text/html"
+          - "application/json"
+        condition: or
+
+      # Check for missing referrer policy
+      - type: word
+        part: header
+        words:
+          - "referrer-policy"
+          - "Referrer-Policy"
+          - "REFERRER-POLICY"
+        negative: true
+
+      # Ensure it's not set via meta tag with strict policy
+      - type: regex
+        part: body
+        regex:
+          - '(?i)<meta[^>]+name=["\']?referrer["\']?[^>]+content=["\']?(no-referrer|same-origin|strict-origin)["\']?'
+        negative: true
+
+    extractors:
+      - type: kval
+        kval:
+          - referrer_policy
+          - content_security_policy
+          - server
+        part: header
+
+      - type: regex
+        part: body
+        group: 1
+        regex:
+          - '(?i)<meta[^>]+name=["\']?referrer["\']?[^>]+content=["\']?([^"\'>\s]+)["\']?'
+
+  # Test for weak referrer policies
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+      - "{{BaseURL}}/login"
+      - "{{BaseURL}}/admin"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Accept: "text/html,application/xhtml+xml"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      # Detect weak referrer policies
+      - type: regex
+        part: header
+        regex:
+          - "(?i)referrer-policy:\\s*(unsafe-url|origin|origin-when-cross-origin)"
+        condition: or
+
+      # Also check meta tags for weak policies
+      - type: regex
+        part: body
+        regex:
+          - '(?i)<meta[^>]+name=["\']?referrer["\']?[^>]+content=["\']?(unsafe-url|origin|origin-when-cross-origin)["\']?'
+        condition: or
+
+    extractors:
+      - type: regex
+        part: header
+        group: 1
+        regex:
+          - "(?i)referrer-policy:\\s*([^\\r\\n]+)"
+
+  # Test pages with sensitive parameters
+  - method: GET
+    path:
+      - "{{BaseURL}}/login?token=test123"
+      - "{{BaseURL}}/reset?key=abc123"
+      - "{{BaseURL}}/verify?code=xyz789"
+      - "{{BaseURL}}/api/auth?apikey=test"
+      - "{{BaseURL}}/admin?session=demo"
+      - "{{BaseURL}}/secure?id=12345"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 302
+          - 401
+          - 403
+
+      # No referrer policy set
+      - type: word
+        part: header
+        words:
+          - "referrer-policy"
+        negative: true
+
+      # Contains sensitive parameters in URL
+      - type: regex
+        part: request
+        regex:
+          - "(?i)[?&](token|key|code|apikey|session|id|auth|secret|password|hash)="
+
+      # Check if page contains external links
+      - type: regex
+        part: body
+        regex:
+          - '(?i)<a[^>]+href=["\']?https?://(?!{{Hostname}})[^"\'>\s]+'
+          - '(?i)<form[^>]+action=["\']?https?://(?!{{Hostname}})[^"\'>\s]+'
+        condition: or
+
+  # Advanced test with external referrer simulation
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+      - "{{BaseURL}}/login"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Referer: "https://external-site.com/page?sensitive=data"
+      Accept: "text/html,application/xhtml+xml"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      # Check if referrer policy allows leakage
+      - type: regex
+        part: header
+        regex:
+          - "(?i)referrer-policy:\\s*(no-referrer|same-origin|strict-origin|strict-origin-when-cross-origin)"
+        negative: true
+
+      # Ensure response contains interactive elements
+      - type: regex
+        part: body
+        regex:
+          - "(?i)<(form|input|a\\s+href|button)"
+        condition: or
+
+      # Check for external resources that could leak referrer
+      - type: regex
+        part: body
+        regex:
+          - '(?i)<(img|script|link|iframe)[^>]+src=["\']?https?://(?!{{Hostname}})'
+          - '(?i)<a[^>]+href=["\']?https?://(?!{{Hostname}})'
+        condition: or
+
+    extractors:
+      - type: regex
+        part: body
+        group: 1
+        regex:
+          - '(?i)<(img|script|link|iframe)[^>]+src=["\']?(https?://[^"\'>\s]+)["\']?'
+          - '(?i)<a[^>]+href=["\']?(https?://[^"\'>\s]+)["\']?'

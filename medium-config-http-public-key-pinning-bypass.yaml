@@ -1,0 +1,294 @@
+id: medium-config-http-public-key-pinning-bypass
+
+info:
+  name: HTTP Public Key Pinning (HPKP) Bypass Detection
+  author: elite-red-team
+  severity: medium
+  description: |
+    Detects missing or weak HTTP Public Key Pinning (HPKP) configurations that allow
+    certificate authority compromise attacks. This elite template identifies HPKP bypass
+    techniques and misconfigurations that can be exploited by attackers.
+  reference:
+    - https://owasp.org/www-community/controls/Certificate_and_Public_Key_Pinning
+    - https://developer.mozilla.org/en-US/docs/Web/HTTP/Public_Key_Pinning
+    - https://tools.ietf.org/html/rfc7469
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:N
+    cvss-score: 7.4
+    cwe-id: CWE-295
+  metadata:
+    verified: true
+    max-request: 4
+  tags: config,hpkp,certificate-pinning,ssl,tls,bypass,medium
+
+http:
+  # Test main HTTPS endpoints for HPKP
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+      - "{{BaseURL}}/login"
+      - "{{BaseURL}}/api"
+      - "{{BaseURL}}/admin"
+      - "{{BaseURL}}/secure"
+      - "{{BaseURL}}/dashboard"
+      - "{{BaseURL}}/profile"
+      - "{{BaseURL}}/settings"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+      Accept-Language: "en-US,en;q=0.5"
+      Connection: "keep-alive"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 201
+          - 301
+          - 302
+
+      # Ensure HTTPS is being used
+      - type: word
+        part: request
+        words:
+          - "https://"
+
+      # Check for missing HPKP header
+      - type: word
+        part: header
+        words:
+          - "public-key-pins"
+          - "Public-Key-Pins"
+          - "PUBLIC-KEY-PINS"
+          - "public-key-pins-report-only"
+          - "Public-Key-Pins-Report-Only"
+        negative: true
+
+      # Ensure it's a sensitive application (has authentication/admin features)
+      - type: regex
+        part: body
+        regex:
+          - "(?i)(login|signin|admin|dashboard|secure|auth|password|token)"
+          - "(?i)<(form|input)[^>]*(password|email|username|login)"
+        condition: or
+
+    extractors:
+      - type: kval
+        kval:
+          - public_key_pins
+          - public_key_pins_report_only
+          - strict_transport_security
+          - server
+        part: header
+
+      - type: regex
+        part: body
+        group: 1
+        regex:
+          - '(?i)<title[^>]*>([^<]+)</title>'
+
+  # Test for weak HPKP configurations
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+      - "{{BaseURL}}/api"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Accept: "application/json,text/html"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      # Detect weak HPKP configurations
+      - type: regex
+        part: header
+        regex:
+          - "(?i)public-key-pins:[^\\r\\n]*max-age=([0-9]{1,6})[^0-9]"  # Less than 7 digits (weak)
+          - "(?i)public-key-pins:[^\\r\\n]*max-age=0"  # Disabled
+        condition: or
+
+    extractors:
+      - type: regex
+        part: header
+        group: 1
+        regex:
+          - "(?i)public-key-pins:\\s*([^\\r\\n]+)"
+
+  # Test HPKP bypass via subdomain
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Host: "api.{{Hostname}}"
+      Accept: "text/html,application/json"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 404
+          - 301
+          - 302
+
+      # Check if subdomain lacks HPKP while main domain might have it
+      - type: word
+        part: header
+        words:
+          - "public-key-pins"
+        negative: true
+
+      # Ensure subdomain is accessible
+      - type: word
+        part: header
+        words:
+          - "HTTP/"
+
+    extractors:
+      - type: kval
+        kval:
+          - server
+          - location
+        part: header
+
+  # Test for HPKP report-only mode (not enforced)
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+      - "{{BaseURL}}/login"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Accept: "text/html,application/xhtml+xml"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      # Only report-only header present (not enforced)
+      - type: word
+        part: header
+        words:
+          - "public-key-pins-report-only"
+
+      # But no enforced HPKP
+      - type: word
+        part: header
+        words:
+          - "public-key-pins:"
+        negative: true
+
+      # Sensitive application
+      - type: regex
+        part: body
+        regex:
+          - "(?i)(login|admin|secure|dashboard)"
+        condition: or
+
+    extractors:
+      - type: regex
+        part: header
+        group: 1
+        regex:
+          - "(?i)public-key-pins-report-only:\\s*([^\\r\\n]+)"
+
+  # Advanced test for certificate transparency and HPKP interaction
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; HPKPScanner/1.0)"
+      Accept: "text/html,application/xhtml+xml"
+      Accept-Encoding: "gzip, deflate"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      # Missing HPKP
+      - type: word
+        part: header
+        words:
+          - "public-key-pins"
+        negative: true
+
+      # High-value target indicators
+      - type: regex
+        part: body
+        regex:
+          - "(?i)(bank|payment|financial|secure|crypto|wallet|trading)"
+          - "(?i)(api|oauth|jwt|token|auth|login|admin)"
+        condition: or
+
+      # Check for certificate-related headers
+      - type: word
+        part: header
+        words:
+          - "expect-ct"
+          - "Expect-CT"
+        condition: or
+
+    extractors:
+      - type: regex
+        part: header
+        group: 1
+        regex:
+          - "(?i)expect-ct:\\s*([^\\r\\n]+)"
+          - "(?i)strict-transport-security:\\s*([^\\r\\n]+)"
+
+  # Test for HPKP bypass via HTTP fallback
+  - method: GET
+    path:
+      - "/"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Accept: "text/html,application/xhtml+xml"
+
+    # Force HTTP request
+    redirects: true
+    max-redirects: 3
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 301
+          - 302
+
+      # Check if HTTP version is accessible
+      - type: word
+        part: request
+        words:
+          - "http://"
+
+      # No HSTS or weak HSTS allowing HTTP access
+      - type: regex
+        part: header
+        regex:
+          - "(?i)strict-transport-security:[^\\r\\n]*max-age=([0-9]{1,6})[^0-9]"
+          - "(?i)location:\\s*http://"
+        condition: or
+        negative: true
+
+    extractors:
+      - type: regex
+        part: header
+        group: 1
+        regex:
+          - "(?i)location:\\s*(http[^\\r\\n]+)"
+          - "(?i)strict-transport-security:\\s*([^\\r\\n]+)"

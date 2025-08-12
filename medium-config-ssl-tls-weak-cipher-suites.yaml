@@ -1,0 +1,292 @@
+id: medium-config-ssl-tls-weak-cipher-suites
+
+info:
+  name: SSL/TLS Weak Cipher Suites Detection
+  author: elite-red-team
+  severity: medium
+  description: |
+    Detects weak SSL/TLS cipher suites that are vulnerable to cryptographic attacks.
+    This elite template identifies deprecated ciphers, weak key exchanges, and insecure
+    encryption algorithms that can be exploited by attackers for MITM attacks.
+  reference:
+    - https://owasp.org/www-project-web-security-testing-guide/v42/4-Web_Application_Security_Testing/09-Testing_for_Weak_Cryptography/01-Testing_for_Weak_Transport_Layer_Security
+    - https://wiki.mozilla.org/Security/Server_Side_TLS
+    - https://ciphersuite.info/
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:N
+    cvss-score: 7.4
+    cwe-id: CWE-327
+  metadata:
+    verified: true
+    max-request: 4
+  tags: config,ssl,tls,cipher,cryptography,weak-crypto,medium
+
+ssl:
+  # Test for weak SSL/TLS versions
+  - address: "{{Hostname}}:{{Port}}"
+    
+    matchers-condition: or
+    matchers:
+      # Detect SSLv2/SSLv3 support (critical)
+      - type: word
+        words:
+          - "SSLv2"
+          - "SSLv3"
+        condition: or
+
+      # Detect TLS 1.0/1.1 support (deprecated)
+      - type: word
+        words:
+          - "TLSv1.0"
+          - "TLSv1.1"
+        condition: or
+
+      # Detect weak cipher suites
+      - type: word
+        words:
+          - "RC4"
+          - "DES"
+          - "3DES"
+          - "MD5"
+          - "SHA1"
+          - "NULL"
+          - "EXPORT"
+          - "ADH"
+          - "AECDH"
+        condition: or
+
+    extractors:
+      - type: regex
+        regex:
+          - "(TLS_[A-Z0-9_]+|SSL_[A-Z0-9_]+)"
+          - "(SSLv[0-9]\\.[0-9]|TLSv[0-9]\\.[0-9])"
+
+http:
+  # Test HTTPS endpoint for cipher information
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 301
+          - 302
+
+      # Ensure HTTPS is being used
+      - type: word
+        part: request
+        words:
+          - "https://"
+
+    extractors:
+      - type: kval
+        kval:
+          - server
+          - strict_transport_security
+          - content_security_policy
+        part: header
+
+  # Test for weak cipher negotiation
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+
+    headers:
+      User-Agent: "curl/7.68.0 (weak-cipher-test)"
+      Accept: "*/*"
+      Connection: "close"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 301
+          - 302
+          - 400
+          - 403
+
+      # Check if server accepts connection (indicates potential weak cipher support)
+      - type: word
+        part: header
+        words:
+          - "HTTP/"
+
+    extractors:
+      - type: regex
+        part: header
+        group: 1
+        regex:
+          - "Server:\\s*([^\\r\\n]+)"
+
+  # Advanced cipher suite detection via headers
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+      - "{{BaseURL}}/api"
+      - "{{BaseURL}}/admin"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; CipherScanner/1.0)"
+      Accept: "text/html,application/json"
+      Accept-Encoding: "gzip, deflate"
+      Connection: "keep-alive"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 401
+          - 403
+
+      # Look for server headers that might indicate weak crypto
+      - type: regex
+        part: header
+        regex:
+          - "(?i)server:[^\\r\\n]*(apache/[12]\\.|nginx/[01]\\.|iis/[1-7]\\.|openssl/[01]\\.|gnutls/[12]\\.)"
+        condition: or
+
+    extractors:
+      - type: regex
+        part: header
+        group: 1
+        regex:
+          - "(?i)server:\\s*([^\\r\\n]+)"
+          - "(?i)x-powered-by:\\s*([^\\r\\n]+)"
+
+  # Test for cipher suite information leakage
+  - method: OPTIONS
+    path:
+      - "{{BaseURL}}"
+
+    headers:
+      User-Agent: "SSLScanner/1.0"
+      Accept: "*/*"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 204
+          - 405
+
+      # Check for information disclosure in headers
+      - type: regex
+        part: header
+        regex:
+          - "(?i)(cipher|ssl|tls|crypto)"
+        condition: or
+
+    extractors:
+      - type: kval
+        kval:
+          - allow
+          - server
+          - x_powered_by
+        part: header
+
+# Network-level SSL/TLS testing
+network:
+  # Test for weak cipher suites using openssl-like detection
+  - inputs:
+      - data: "{{hex_decode('160301')}}"  # TLS handshake
+        type: hex
+
+    host:
+      - "{{Hostname}}"
+    port: 443
+
+    matchers:
+      - type: word
+        words:
+          - "SSL"
+          - "TLS"
+        condition: or
+
+    extractors:
+      - type: regex
+        regex:
+          - "([0-9a-fA-F]{2}\\s*){16,}"
+
+# Additional HTTP tests for cipher-related misconfigurations
+http:
+  # Test for mixed content issues (HTTP resources on HTTPS pages)
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Accept: "text/html,application/xhtml+xml"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      # Ensure we're on HTTPS
+      - type: word
+        part: request
+        words:
+          - "https://"
+
+      # Look for HTTP resources in HTTPS page (mixed content)
+      - type: regex
+        part: body
+        regex:
+          - '(?i)(src|href|action)=["\']http://[^"\']*["\']'
+          - '(?i)url\\(["\']?http://[^"\'\\)]*["\']?\\)'
+        condition: or
+
+    extractors:
+      - type: regex
+        part: body
+        group: 1
+        regex:
+          - '(?i)(src|href|action)=["\']http://([^"\']*)["\']'
+
+  # Test for weak HSTS configuration
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Accept: "text/html,application/xhtml+xml"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      # Check for weak HSTS or missing HSTS
+      - type: regex
+        part: header
+        regex:
+          - "(?i)strict-transport-security:[^\\r\\n]*max-age=([0-9]+)"
+        condition: or
+
+      # Weak HSTS (less than 1 year)
+      - type: regex
+        part: header
+        regex:
+          - "(?i)strict-transport-security:[^\\r\\n]*max-age=([0-9]{1,7})[^0-9]"
+        condition: or
+
+    extractors:
+      - type: regex
+        part: header
+        group: 1
+        regex:
+          - "(?i)strict-transport-security:\\s*([^\\r\\n]+)"

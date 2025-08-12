@@ -1,0 +1,192 @@
+id: medium-config-x-frame-options-missing-clickjacking
+
+info:
+  name: X-Frame-Options Missing - Clickjacking Protection
+  author: elite-red-team
+  severity: medium
+  description: |
+    Detects missing X-Frame-Options header that allows clickjacking attacks.
+    This elite template uses advanced detection techniques to identify vulnerable endpoints
+    and reduces false positives through comprehensive validation.
+  reference:
+    - https://owasp.org/www-community/attacks/Clickjacking
+    - https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Frame-Options
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:L/I:L/A:N
+    cvss-score: 6.1
+    cwe-id: CWE-1021
+  metadata:
+    verified: true
+    max-request: 3
+  tags: config,clickjacking,x-frame-options,headers,medium
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+      - "{{BaseURL}}/login"
+      - "{{BaseURL}}/admin"
+      - "{{BaseURL}}/dashboard"
+      - "{{BaseURL}}/profile"
+      - "{{BaseURL}}/settings"
+      - "{{BaseURL}}/account"
+      - "{{BaseURL}}/panel"
+      - "{{BaseURL}}/console"
+      - "{{BaseURL}}/management"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+      Accept-Language: "en-US,en;q=0.5"
+      Accept-Encoding: "gzip, deflate"
+      Connection: "keep-alive"
+      Upgrade-Insecure-Requests: "1"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 201
+          - 202
+          - 301
+          - 302
+          - 307
+          - 308
+
+      - type: word
+        part: header
+        words:
+          - "text/html"
+        condition: or
+
+      - type: word
+        part: header
+        words:
+          - "x-frame-options"
+          - "X-Frame-Options"
+          - "X-FRAME-OPTIONS"
+        negative: true
+
+      # Advanced check to ensure it's not protected by CSP frame-ancestors
+      - type: regex
+        part: header
+        regex:
+          - "(?i)content-security-policy.*frame-ancestors\\s+['\"]?none['\"]?"
+          - "(?i)content-security-policy.*frame-ancestors\\s+['\"]?self['\"]?"
+        negative: true
+
+      # Ensure it's an interactive page that could be clickjacked
+      - type: regex
+        part: body
+        regex:
+          - "(?i)<(form|input|button|a\\s+href)"
+          - "(?i)(login|signin|signup|register|submit|click|buy|purchase|transfer|delete|confirm)"
+        condition: or
+
+      # Exclude non-interactive content
+      - type: word
+        part: body
+        words:
+          - "application/json"
+          - "application/xml"
+          - "text/plain"
+          - "text/css"
+          - "application/javascript"
+        negative: true
+
+    extractors:
+      - type: kval
+        kval:
+          - content_security_policy
+          - x_frame_options
+          - server
+        part: header
+
+      - type: regex
+        part: body
+        group: 1
+        regex:
+          - '(?i)<title[^>]*>([^<]+)</title>'
+
+# Enhanced detection with multiple request types
+  - method: POST
+    path:
+      - "{{BaseURL}}/login"
+      - "{{BaseURL}}/api/login"
+      - "{{BaseURL}}/auth/login"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Content-Type: "application/x-www-form-urlencoded"
+      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+
+    body: "username=test&password=test"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 400
+          - 401
+          - 403
+          - 422
+          - 302
+
+      - type: word
+        part: header
+        words:
+          - "x-frame-options"
+          - "X-Frame-Options"
+        negative: true
+
+      - type: regex
+        part: header
+        regex:
+          - "(?i)content-security-policy.*frame-ancestors"
+        negative: true
+
+      # Check if response contains forms or interactive elements
+      - type: regex
+        part: body
+        regex:
+          - "(?i)<(form|input|button)"
+          - "(?i)(error|invalid|incorrect|failed|success)"
+        condition: or
+
+  # Advanced iframe embedding test
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Referer: "https://attacker-site.com/iframe-test.html"
+      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      - type: word
+        part: header
+        words:
+          - "x-frame-options"
+        negative: true
+
+      - type: word
+        part: body
+        words:
+          - "text/html"
+        condition: or
+
+      # Ensure it's not a redirect or error page
+      - type: word
+        part: body
+        words:
+          - "<!DOCTYPE"
+          - "<html"
+        condition: or

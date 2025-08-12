@@ -1,0 +1,320 @@
+id: medium-config-certificate-transparency-missing
+
+info:
+  name: Certificate Transparency (CT) Missing Detection
+  author: elite-red-team
+  severity: medium
+  description: |
+    Detects missing Certificate Transparency (CT) enforcement that allows rogue certificate
+    attacks. This elite template identifies websites that don't enforce CT monitoring,
+    making them vulnerable to certificate authority compromise and MITM attacks.
+  reference:
+    - https://certificate.transparency.dev/
+    - https://tools.ietf.org/html/rfc6962
+    - https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Expect-CT
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:N
+    cvss-score: 7.4
+    cwe-id: CWE-295
+  metadata:
+    verified: true
+    max-request: 4
+  tags: config,certificate-transparency,ct,expect-ct,ssl,tls,medium
+
+http:
+  # Test main HTTPS endpoints for CT enforcement
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+      - "{{BaseURL}}/login"
+      - "{{BaseURL}}/api"
+      - "{{BaseURL}}/admin"
+      - "{{BaseURL}}/secure"
+      - "{{BaseURL}}/dashboard"
+      - "{{BaseURL}}/profile"
+      - "{{BaseURL}}/banking"
+      - "{{BaseURL}}/payment"
+      - "{{BaseURL}}/oauth"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+      Accept-Language: "en-US,en;q=0.5"
+      Connection: "keep-alive"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 201
+          - 301
+          - 302
+          - 401
+          - 403
+
+      # Ensure HTTPS is being used
+      - type: word
+        part: request
+        words:
+          - "https://"
+
+      # Check for missing Expect-CT header
+      - type: word
+        part: header
+        words:
+          - "expect-ct"
+          - "Expect-CT"
+          - "EXPECT-CT"
+        negative: true
+
+      # Ensure it's a high-value target (financial, auth, admin)
+      - type: regex
+        part: body
+        regex:
+          - "(?i)(login|signin|admin|dashboard|secure|auth|password|token|banking|payment|financial)"
+          - "(?i)<(form|input)[^>]*(password|email|username|login|payment|card)"
+          - "(?i)(api|oauth|jwt|ssl|tls|certificate|crypto)"
+        condition: or
+
+    extractors:
+      - type: kval
+        kval:
+          - expect_ct
+          - strict_transport_security
+          - public_key_pins
+          - server
+        part: header
+
+      - type: regex
+        part: body
+        group: 1
+        regex:
+          - '(?i)<title[^>]*>([^<]+)</title>'
+          - '(?i)(bank|payment|financial|secure|crypto|wallet|trading|oauth|api)'
+
+  # Test for weak CT configurations
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+      - "{{BaseURL}}/api"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Accept: "application/json,text/html"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      # Detect weak CT configurations
+      - type: regex
+        part: header
+        regex:
+          - "(?i)expect-ct:[^\\r\\n]*max-age=([0-9]{1,6})[^0-9]"  # Less than 7 digits (weak)
+          - "(?i)expect-ct:[^\\r\\n]*max-age=0"  # Disabled
+          - "(?i)expect-ct:[^\\r\\n]*report-uri[^\\r\\n]*enforce"  # Report-only without enforce
+        condition: or
+        negative: true
+
+      # Only report-only mode (not enforced)
+      - type: regex
+        part: header
+        regex:
+          - "(?i)expect-ct:[^\\r\\n]*report-uri"
+        condition: and
+
+      - type: word
+        part: header
+        words:
+          - "enforce"
+        negative: true
+
+    extractors:
+      - type: regex
+        part: header
+        group: 1
+        regex:
+          - "(?i)expect-ct:\\s*([^\\r\\n]+)"
+
+  # Test CT bypass via subdomain
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Host: "api.{{Hostname}}"
+      Accept: "text/html,application/json"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 404
+          - 301
+          - 302
+
+      # Check if subdomain lacks CT while main domain might have it
+      - type: word
+        part: header
+        words:
+          - "expect-ct"
+        negative: true
+
+      # Ensure subdomain is accessible and serves content
+      - type: word
+        part: header
+        words:
+          - "HTTP/"
+
+      # Check for API or sensitive endpoints on subdomain
+      - type: regex
+        part: body
+        regex:
+          - "(?i)(api|oauth|auth|admin|secure|login)"
+        condition: or
+
+    extractors:
+      - type: kval
+        kval:
+          - server
+          - location
+          - content_type
+        part: header
+
+  # Advanced CT monitoring test
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+      - "{{BaseURL}}/.well-known/security.txt"
+      - "{{BaseURL}}/security.txt"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; CTScanner/1.0)"
+      Accept: "text/plain,text/html,application/json"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 404
+
+      # Missing CT enforcement
+      - type: word
+        part: header
+        words:
+          - "expect-ct"
+        negative: true
+
+      # High-value indicators
+      - type: regex
+        part: body
+        regex:
+          - "(?i)(certificate|transparency|ct-log|security|contact|disclosure)"
+          - "(?i)(bank|financial|payment|crypto|trading|exchange|wallet)"
+          - "(?i)(api|oauth|auth|admin|secure|ssl|tls)"
+        condition: or
+
+    extractors:
+      - type: regex
+        part: body
+        group: 1
+        regex:
+          - '(?i)contact:\\s*([^\\r\\n]+)'
+          - '(?i)security:\\s*([^\\r\\n]+)'
+          - '(?i)(certificate|transparency|ct-log)'
+
+  # Test for CT log monitoring capabilities
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Accept: "text/html,application/xhtml+xml"
+      Accept-Encoding: "gzip, deflate"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      # No CT enforcement
+      - type: word
+        part: header
+        words:
+          - "expect-ct"
+        negative: true
+
+      # Check for certificate-related security headers
+      - type: word
+        part: header
+        words:
+          - "strict-transport-security"
+          - "public-key-pins"
+        condition: or
+
+      # Financial or high-security application
+      - type: regex
+        part: body
+        regex:
+          - "(?i)(bank|financial|payment|secure|crypto|ssl|certificate|trust|security)"
+          - "(?i)(login|admin|dashboard|oauth|api|auth|token|jwt)"
+        condition: or
+
+    extractors:
+      - type: regex
+        part: header
+        group: 1
+        regex:
+          - "(?i)strict-transport-security:\\s*([^\\r\\n]+)"
+          - "(?i)public-key-pins:\\s*([^\\r\\n]+)"
+          - "(?i)server:\\s*([^\\r\\n]+)"
+
+  # Test CT bypass via mixed content
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Accept: "text/html,application/xhtml+xml"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      # HTTPS page without CT
+      - type: word
+        part: request
+        words:
+          - "https://"
+
+      - type: word
+        part: header
+        words:
+          - "expect-ct"
+        negative: true
+
+      # Contains HTTP resources (mixed content vulnerability)
+      - type: regex
+        part: body
+        regex:
+          - '(?i)(src|href|action)=["\']http://[^"\']*["\']'
+          - '(?i)url\\(["\']?http://[^"\'\\)]*["\']?\\)'
+        condition: or
+
+    extractors:
+      - type: regex
+        part: body
+        group: 1
+        regex:
+          - '(?i)(src|href|action)=["\']http://([^"\']*)["\']'

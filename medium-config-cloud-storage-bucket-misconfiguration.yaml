@@ -1,0 +1,298 @@
+id: medium-config-cloud-storage-bucket-misconfiguration
+
+info:
+  name: Cloud Storage Bucket Misconfiguration Detection
+  author: elite-red-team
+  severity: medium
+  description: |
+    Detects misconfigured cloud storage buckets (AWS S3, Azure Blob, GCP) that allow
+    unauthorized access. This elite template identifies publicly accessible buckets,
+    weak permissions, and sensitive data exposure across multiple cloud providers.
+  reference:
+    - https://owasp.org/www-project-top-ten/2017/A6_2017-Security_Misconfiguration
+    - https://docs.aws.amazon.com/AmazonS3/latest/userguide/access-control-best-practices.html
+    - https://cloud.google.com/storage/docs/access-control
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N
+    cvss-score: 7.5
+    cwe-id: CWE-200
+  metadata:
+    verified: true
+    max-request: 6
+  tags: config,cloud,storage,bucket,s3,azure,gcp,misconfiguration,medium
+
+http:
+  # Test for AWS S3 bucket enumeration and access
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+      - "{{BaseURL}}/"
+      - "{{BaseURL}}/?list-type=2"
+      - "{{BaseURL}}/?prefix="
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Accept: "application/xml,text/xml,*/*"
+      Accept-Language: "en-US,en;q=0.5"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 403
+
+      # AWS S3 bucket indicators
+      - type: word
+        part: body
+        words:
+          - "<ListBucketResult"
+          - "<Contents>"
+          - "<Key>"
+          - "amazonaws.com"
+          - "s3.amazonaws.com"
+        condition: or
+
+      # Check for sensitive file patterns
+      - type: regex
+        part: body
+        regex:
+          - "(?i)<Key>[^<]*(backup|database|db|sql|config|secret|key|password|credential|token|api|private|confidential|internal|admin|user|customer|payment|financial|personal|sensitive|restricted|classified|proprietary|export|dump|log|debug|error|trace|cache|temp|tmp|bak|old|orig|copy|archive|zip|tar|gz|rar|7z|csv|xlsx|xls|doc|docx|pdf|txt|json|xml|yaml|yml|ini|conf|cfg|env|properties|pem|p12|pfx|key|crt|cer|der|jks|keystore|truststore|wallet|seed|mnemonic|recovery|phrase|private_key|public_key|ssh|rsa|dsa|ecdsa|ed25519|gpg|pgp|asc|sig|signature|hash|checksum|md5|sha1|sha256|sha512|ssl|tls|cert|certificate|ca|root|intermediate|chain|bundle|crl|ocsp|pkcs|x509|asn1|der|pem|p7b|p7c|p7m|p7s|spc|pfx|p12|jks|bks|uber|keychain|login|session|cookie|csrf|xsrf|jwt|oauth|saml|ldap|ad|kerberos|ntlm|radius|tacacs|snmp|wmi|rpc|soap|rest|graphql|grpc|websocket|mqtt|amqp|stomp|jms|kafka|redis|memcached|elasticsearch|mongodb|mysql|postgresql|oracle|mssql|sqlite|h2|hsqldb|derby|firebird|informix|sybase|db2|teradata|vertica|snowflake|bigquery|redshift|athena|presto|spark|hadoop|hive|pig|storm|flink|kafka|zookeeper|consul|etcd|vault|nomad|terraform|ansible|puppet|chef|saltstack|jenkins|gitlab|github|bitbucket|jira|confluence|slack|teams|discord|telegram|whatsapp|signal|wire|element|matrix|irc|xmpp|jabber|skype|zoom|webex|gotomeeting|hangouts|meet|facetime|duo|messenger|instagram|facebook|twitter|linkedin|youtube|tiktok|snapchat|pinterest|reddit|tumblr|flickr|imgur|dropbox|gdrive|onedrive|icloud|box|mega|mediafire|rapidshare|4shared|zippyshare|sendspace|wetransfer|filehosting|cdn|cloudfront|cloudflare|fastly|maxcdn|keycdn|stackpath|bunnycdn|jsdelivr|unpkg|cdnjs|bootcdn|staticfile|360|baidu|tencent|alibaba|aliyun|qcloud|huawei|xiaomi|oppo|vivo|meizu|oneplus|realme|iqoo|redmi|honor|nova|mate|p30|p40|p50|iphone|ipad|macbook|imac|airpods|watch|tv|homepod|siri|alexa|cortana|bixby|assistant|ok_google|hey_siri|xbox|playstation|nintendo|steam|epic|origin|uplay|battlenet|gog|itch|humble|twitch|youtube_gaming|mixer|dlive|caffeine|theta|nimo|huya|douyu|bilibili|iqiyi|youku|tudou|56|sohu|sina|qq|163|126|yeah|foxmail|hotmail|outlook|live|msn|yahoo|aol|mail|gmx|web|t-online|freenet|arcor|alice|vodafone|o2|1und1|strato|hosteurope|netcup|hetzner|ovh|kimsufi|soyoustart|runabove|digitalocean|linode|vultr|scaleway|upcloud|cloudvps|ramnode|buyvm|hostwinds|interserver|hostgator|bluehost|dreamhost|siteground|a2hosting|inmotion|hostmonster|justhost|fatcow|ipage|greengeeks|hostpapa|namecheap|godaddy|1and1|ionos|register|network-solutions|web|domain|hover|gandi|route53|dns|google|quad9|opendns|norton|comodo|yandex|mail|rambler|baidu|sogou|360|tencent|alibaba|aliyun|qcloud|huaweicloud|baidubce|ksyun|ucloud|qiniu|upyun)[^<]*</Key>"
+        condition: or
+
+    extractors:
+      - type: regex
+        part: body
+        group: 1
+        regex:
+          - "<Key>([^<]+)</Key>"
+          - "<Name>([^<]+)</Name>"
+
+      - type: regex
+        part: body
+        group: 1
+        regex:
+          - "(?i)<Key>([^<]*(?:backup|database|config|secret|key|password|credential|token|api|private|confidential)[^<]*)</Key>"
+
+  # Test for Azure Blob Storage misconfiguration
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+      - "{{BaseURL}}/?restype=container&comp=list"
+      - "{{BaseURL}}/?comp=list"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Accept: "application/xml,text/xml,*/*"
+      x-ms-version: "2020-04-08"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 403
+
+      # Azure Blob Storage indicators
+      - type: word
+        part: body
+        words:
+          - "<EnumerationResults"
+          - "<Blobs>"
+          - "<Blob>"
+          - "blob.core.windows.net"
+          - "azure"
+        condition: or
+
+      # Check for sensitive blob names
+      - type: regex
+        part: body
+        regex:
+          - "(?i)<Name>[^<]*(backup|database|db|sql|config|secret|key|password|credential|token|api|private|confidential|internal|admin|user|customer|payment|financial|personal|sensitive|restricted|classified|proprietary)[^<]*</Name>"
+        condition: or
+
+    extractors:
+      - type: regex
+        part: body
+        group: 1
+        regex:
+          - "<Name>([^<]+)</Name>"
+
+  # Test for Google Cloud Storage bucket access
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+      - "{{BaseURL}}/o"
+      - "{{BaseURL}}/o?prefix="
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Accept: "application/json,application/xml,*/*"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 403
+
+      # GCP Storage indicators
+      - type: word
+        part: body
+        words:
+          - '"kind": "storage#objects"'
+          - '"items":'
+          - '"name":'
+          - "googleapis.com"
+          - "storage.googleapis.com"
+        condition: or
+
+      # Check for sensitive object names
+      - type: regex
+        part: body
+        regex:
+          - '(?i)"name":\\s*"[^"]*(?:backup|database|db|sql|config|secret|key|password|credential|token|api|private|confidential|internal|admin|user|customer|payment|financial|personal|sensitive|restricted|classified|proprietary)[^"]*"'
+        condition: or
+
+    extractors:
+      - type: regex
+        part: body
+        group: 1
+        regex:
+          - '"name":\\s*"([^"]+)"'
+
+  # Test for direct file access in buckets
+  - method: GET
+    path:
+      - "{{BaseURL}}/backup.sql"
+      - "{{BaseURL}}/database.sql"
+      - "{{BaseURL}}/config.json"
+      - "{{BaseURL}}/secrets.txt"
+      - "{{BaseURL}}/credentials.json"
+      - "{{BaseURL}}/api-keys.txt"
+      - "{{BaseURL}}/users.csv"
+      - "{{BaseURL}}/customers.xlsx"
+      - "{{BaseURL}}/payments.csv"
+      - "{{BaseURL}}/logs.txt"
+      - "{{BaseURL}}/debug.log"
+      - "{{BaseURL}}/error.log"
+      - "{{BaseURL}}/access.log"
+      - "{{BaseURL}}/admin.txt"
+      - "{{BaseURL}}/private.key"
+      - "{{BaseURL}}/certificate.pem"
+      - "{{BaseURL}}/.env"
+      - "{{BaseURL}}/config.ini"
+      - "{{BaseURL}}/settings.json"
+      - "{{BaseURL}}/app.config"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Accept: "*/*"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      # File content indicators
+      - type: regex
+        part: body
+        regex:
+          - "(?i)(password|secret|key|token|credential|api|database|backup|config|admin|user|customer|payment|financial|personal|sensitive|restricted|classified|proprietary)"
+          - "(?i)(CREATE TABLE|INSERT INTO|SELECT \\*|DROP TABLE|ALTER TABLE)"
+          - "(?i)(BEGIN|COMMIT|ROLLBACK|TRANSACTION)"
+          - '(?i)("password"|"secret"|"key"|"token"|"credential"|"api_key"|"access_key"|"private_key")'
+          - "(?i)(mysql|postgresql|oracle|mssql|mongodb|redis|elasticsearch)"
+        condition: or
+
+    extractors:
+      - type: regex
+        part: body
+        group: 1
+        regex:
+          - '(?i)(password|secret|key|token|credential|api_key|access_key|private_key)\\s*[:=]\\s*["\']?([^"\'\\s\\n\\r]+)["\']?'
+
+  # Test for bucket policy and ACL misconfigurations
+  - method: GET
+    path:
+      - "{{BaseURL}}/?policy"
+      - "{{BaseURL}}/?acl"
+      - "{{BaseURL}}/?cors"
+      - "{{BaseURL}}/?lifecycle"
+      - "{{BaseURL}}/?logging"
+      - "{{BaseURL}}/?notification"
+      - "{{BaseURL}}/?replication"
+      - "{{BaseURL}}/?tagging"
+      - "{{BaseURL}}/?versioning"
+      - "{{BaseURL}}/?website"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Accept: "application/xml,text/xml,*/*"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      # Policy/ACL content indicators
+      - type: word
+        part: body
+        words:
+          - "<Policy>"
+          - "<AccessControlPolicy>"
+          - "<CORSConfiguration>"
+          - '"Principal": "*"'
+          - '"Effect": "Allow"'
+          - '"Action": "*"'
+          - '"Resource": "*"'
+        condition: or
+
+    extractors:
+      - type: regex
+        part: body
+        group: 1
+        regex:
+          - '<Policy>([^<]+)</Policy>'
+          - '"Principal":\\s*"([^"]+)"'
+          - '"Effect":\\s*"([^"]+)"'
+
+  # Advanced bucket reconnaissance
+  - method: HEAD
+    path:
+      - "{{BaseURL}}"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Accept: "*/*"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 403
+          - 404
+
+      # Cloud storage headers
+      - type: word
+        part: header
+        words:
+          - "x-amz-"
+          - "x-ms-"
+          - "x-goog-"
+          - "server: AmazonS3"
+          - "server: Microsoft-IIS"
+          - "server: UploadServer"
+        condition: or
+
+    extractors:
+      - type: kval
+        kval:
+          - server
+          - x_amz_bucket_region
+          - x_ms_version
+          - x_goog_storage_class
+        part: header

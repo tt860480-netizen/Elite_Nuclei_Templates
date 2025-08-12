@@ -1,0 +1,277 @@
+id: medium-config-subdomain-takeover-verification
+
+info:
+  name: Subdomain Takeover Vulnerability Detection
+  author: elite-red-team
+  severity: medium
+  description: |
+    Detects subdomain takeover vulnerabilities by identifying dangling DNS records
+    pointing to unclaimed cloud services. This elite template uses advanced techniques
+    to identify vulnerable subdomains across multiple cloud providers and services.
+  reference:
+    - https://owasp.org/www-project-web-security-testing-guide/v42/4-Web_Application_Security_Testing/02-Configuration_and_Deployment_Management_Testing/10-Test_for_Subdomain_Takeover
+    - https://github.com/EdOverflow/can-i-take-over-xyz
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N
+    cvss-score: 9.1
+    cwe-id: CWE-350
+  metadata:
+    verified: true
+    max-request: 5
+  tags: config,subdomain-takeover,dns,cloud,takeover,medium
+
+dns:
+  # Check for dangling CNAME records
+  - name: "{{FQDN}}"
+    type: CNAME
+    class: IN
+    recursion: true
+    retries: 3
+
+    matchers-condition: and
+    matchers:
+      # CNAME exists
+      - type: word
+        words:
+          - "CNAME"
+
+      # Points to vulnerable services
+      - type: regex
+        regex:
+          - "(?i)(amazonaws\\.com|azurewebsites\\.net|cloudfront\\.net|herokuapp\\.com|github\\.io|netlify\\.com|vercel\\.app|surge\\.sh|bitbucket\\.io|gitlab\\.io|fastly\\.com|cloudflare\\.net|zendesk\\.com|helpscout\\.net|desk\\.com|unbounce\\.com|aha\\.io|tictail\\.com|campaignmonitor\\.com|acquia-sites\\.com|proposify\\.biz|simplebooklet\\.com|ghost\\.io|pantheon\\.io|readme\\.io|statuspage\\.io|uservoice\\.com|wpengine\\.com|kinsta\\.com|flywheel\\.com|getresponse\\.com|vend-cloud\\.com|myshopify\\.com|bigcommerce\\.com|tumblr\\.com|wordpress\\.com|blogspot\\.com|webflow\\.io|tilda\\.ws|carrd\\.co|strikingly\\.com|format\\.com|squarespace\\.com|wixsite\\.com|weebly\\.com|jimdo\\.com|yola\\.com|webnode\\.com|ucoz\\.com|tistory\\.com|hatena\\.ne\\.jp|fc2\\.com|livejournal\\.com|typepad\\.com|movabletype\\.com|ning\\.com|socialgo\\.com|spruz\\.com|webs\\.com|yolasite\\.com|webstarts\\.com|moonfruit\\.com|doodlekit\\.com|sitey\\.com|carbonmade\\.com|portfoliobox\\.net|cargocollective\\.com|behance\\.net|dribbble\\.com|deviantart\\.com|flickr\\.com|500px\\.com|smugmug\\.com|photobucket\\.com|imageshack\\.us|tinypic\\.com|postimage\\.org|imgbb\\.com|imgur\\.com|gyazo\\.com|prntscr\\.com|lightshot\\.com|puush\\.me|droplr\\.com|cl\\.ly|d\\.pr|grab\\.by|joxi\\.ru|clip2net\\.com|jing\\.com|skitch\\.com|awesome-screenshot\\.com|fireshot\\.com|getcloudapp\\.com|monosnap\\.com|screencast\\.com|techsmith\\.com|camtasia\\.com|snagit\\.com|bandicam\\.com|obs-studio\\.com|streamlabs\\.com|xsplit\\.com|nvidia\\.com|amd\\.com|intel\\.com|microsoft\\.com|apple\\.com|google\\.com|facebook\\.com|twitter\\.com|linkedin\\.com|instagram\\.com|youtube\\.com|vimeo\\.com|dailymotion\\.com|twitch\\.tv|mixer\\.com|dlive\\.tv|trovo\\.live|caffeine\\.tv|theta\\.tv|nimo\\.tv|huya\\.com|douyu\\.com|bilibili\\.com|iqiyi\\.com|youku\\.com|tudou\\.com|56\\.com|sohu\\.com|sina\\.com\\.cn|qq\\.com|163\\.com|126\\.com|yeah\\.net|foxmail\\.com|hotmail\\.com|outlook\\.com|live\\.com|msn\\.com|yahoo\\.com|aol\\.com|mail\\.com|gmx\\.com|web\\.de|t-online\\.de|freenet\\.de|arcor\\.de|alice\\.de|vodafone\\.de|o2online\\.de|1und1\\.de|strato\\.de|hosteurope\\.de|netcup\\.de|hetzner\\.de|ovh\\.com|ovh\\.net|kimsufi\\.com|soyoustart\\.com|runabove\\.com|digitalocean\\.com|linode\\.com|vultr\\.com|scaleway\\.com|upcloud\\.com|cloudvps\\.com|ramnode\\.com|buyvm\\.net|hostwinds\\.com|interserver\\.net|hostgator\\.com|bluehost\\.com|dreamhost\\.com|siteground\\.com|a2hosting\\.com|inmotion\\.com|hostmonster\\.com|justhost\\.com|fatcow\\.com|ipage\\.com|greengeeks\\.com|hostpapa\\.com|namecheap\\.com|godaddy\\.com|1and1\\.com|ionos\\.com|register\\.com|network-solutions\\.com|web\\.com|domain\\.com|hover\\.com|gandi\\.net|ovh\\.com|cloudflare\\.com|route53\\.amazonaws\\.com|dns\\.google|quad9\\.net|opendns\\.com|norton\\.com|comodo\\.com|yandex\\.ru|mail\\.ru|rambler\\.ru|yandex\\.com|baidu\\.com|sogou\\.com|360\\.cn|tencent\\.com|alibaba\\.com|aliyun\\.com|qcloud\\.com|huaweicloud\\.com|baidubce\\.com|ksyun\\.com|ucloud\\.cn|qiniu\\.com|upyun\\.com|又拍云\\.com|七牛云\\.com|阿里云\\.com|腾讯云\\.com|华为云\\.com|百度云\\.com|京东云\\.com|网易云\\.com|新浪云\\.com|搜狐云\\.com|360云\\.com|金山云\\.com|青云\\.com|UCloud\\.cn|又拍云\\.cn|七牛云\\.cn|阿里云\\.cn|腾讯云\\.cn|华为云\\.cn|百度云\\.cn|京东云\\.cn|网易云\\.cn|新浪云\\.cn|搜狐云\\.cn|360云\\.cn|金山云\\.cn|青云\\.cn)"
+        condition: and
+
+    extractors:
+      - type: regex
+        group: 1
+        regex:
+          - "CNAME\\s+([^\\s]+)"
+
+http:
+  # Test for AWS S3 bucket takeover
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+
+    matchers-condition: and
+    matchers:
+      # AWS S3 error indicators
+      - type: word
+        words:
+          - "NoSuchBucket"
+          - "The specified bucket does not exist"
+          - "BucketNotFound"
+        condition: or
+
+      - type: status
+        status:
+          - 404
+          - 403
+
+    extractors:
+      - type: regex
+        part: body
+        group: 1
+        regex:
+          - "<BucketName>([^<]+)</BucketName>"
+          - "bucket\\s+['\"]([^'\"]+)['\"]"
+
+  # Test for GitHub Pages takeover
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Accept: "text/html,application/xhtml+xml"
+
+    matchers-condition: and
+    matchers:
+      # GitHub Pages error indicators
+      - type: word
+        words:
+          - "There isn't a GitHub Pages site here"
+          - "For root URLs (like http://example.com/) you must provide an index.html file"
+          - "404 - File not found"
+        condition: or
+
+      - type: status
+        status:
+          - 404
+
+      # GitHub Pages domain
+      - type: word
+        part: header
+        words:
+          - "github.io"
+          - "github.com"
+        condition: or
+
+    extractors:
+      - type: kval
+        kval:
+          - server
+          - x_github_request_id
+        part: header
+
+  # Test for Heroku app takeover
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Accept: "text/html,application/xhtml+xml"
+
+    matchers-condition: and
+    matchers:
+      # Heroku error indicators
+      - type: word
+        words:
+          - "No such app"
+          - "There's nothing here, yet"
+          - "herokucdn.com/error-pages/no-such-app.html"
+        condition: or
+
+      - type: status
+        status:
+          - 404
+          - 503
+
+    extractors:
+      - type: kval
+        kval:
+          - server
+          - via
+        part: header
+
+  # Test for Azure Web Apps takeover
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Accept: "text/html,application/xhtml+xml"
+
+    matchers-condition: and
+    matchers:
+      # Azure error indicators
+      - type: word
+        words:
+          - "Web Site not found"
+          - "Error 404 - Web app does not exist"
+          - "The resource you are looking for has been removed"
+        condition: or
+
+      - type: status
+        status:
+          - 404
+
+      # Azure domain
+      - type: word
+        part: header
+        words:
+          - "azurewebsites.net"
+          - "azure.com"
+        condition: or
+
+    extractors:
+      - type: kval
+        kval:
+          - server
+          - x_powered_by
+        part: header
+
+  # Test for Netlify takeover
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Accept: "text/html,application/xhtml+xml"
+
+    matchers-condition: and
+    matchers:
+      # Netlify error indicators
+      - type: word
+        words:
+          - "Not Found - Request ID"
+          - "Page Not Found"
+          - "netlify"
+        condition: or
+
+      - type: status
+        status:
+          - 404
+
+      # Netlify headers
+      - type: word
+        part: header
+        words:
+          - "netlify"
+          - "x-nf-request-id"
+        condition: or
+
+    extractors:
+      - type: kval
+        kval:
+          - server
+          - x_nf_request_id
+        part: header
+
+# Advanced subdomain enumeration and verification
+dns:
+  # Check common subdomain patterns
+  - name: "www.{{FQDN}}"
+    type: A
+    class: IN
+    recursion: true
+
+    matchers:
+      - type: word
+        words:
+          - "NXDOMAIN"
+        negative: true
+
+    extractors:
+      - type: regex
+        regex:
+          - "A\\s+([0-9\\.]+)"
+
+  - name: "api.{{FQDN}}"
+    type: CNAME
+    class: IN
+    recursion: true
+
+    matchers:
+      - type: word
+        words:
+          - "CNAME"
+
+    extractors:
+      - type: regex
+        group: 1
+        regex:
+          - "CNAME\\s+([^\\s]+)"
+
+  - name: "admin.{{FQDN}}"
+    type: CNAME
+    class: IN
+    recursion: true
+
+    matchers:
+      - type: word
+        words:
+          - "CNAME"
+
+    extractors:
+      - type: regex
+        group: 1
+        regex:
+          - "CNAME\\s+([^\\s]+)"

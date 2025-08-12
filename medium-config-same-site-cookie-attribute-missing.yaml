@@ -1,0 +1,520 @@
+id: medium-config-same-site-cookie-attribute-missing
+
+info:
+  name: SameSite Cookie Attribute Missing Detection
+  author: elite-red-team
+  severity: medium
+  description: |
+    Detects cookies without the SameSite attribute that are vulnerable to Cross-Site
+    Request Forgery (CSRF) attacks. This elite template identifies session and
+    authentication cookies that lack proper SameSite protection across web frameworks.
+  reference:
+    - https://owasp.org/www-community/SameSite
+    - https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Set-Cookie/SameSite
+    - https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:L/I:L/A:N
+    cvss-score: 5.4
+    cwe-id: CWE-352
+  metadata:
+    verified: true
+    max-request: 8
+  tags: config,cookie,samesite,csrf,session,authentication,medium
+
+http:
+  # Test main application pages for session cookies
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+      - "{{BaseURL}}/login"
+      - "{{BaseURL}}/dashboard"
+      - "{{BaseURL}}/profile"
+      - "{{BaseURL}}/admin"
+      - "{{BaseURL}}/panel"
+      - "{{BaseURL}}/console"
+      - "{{BaseURL}}/management"
+      - "{{BaseURL}}/account"
+      - "{{BaseURL}}/settings"
+      - "{{BaseURL}}/home"
+      - "{{BaseURL}}/index"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+      Accept-Language: "en-US,en;q=0.5"
+      Connection: "keep-alive"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 301
+          - 302
+
+      # Session cookies without SameSite attribute
+      - type: regex
+        part: header
+        regex:
+          - "(?i)set-cookie:\\s*[^;\\r\\n]*(session|sess|jsession|phpsession|asp\\.net_sessionid|connect\\.sid|laravel_session|django_session|rails_session|express_session|passport|auth|token|login|user|account|remember|persistent)[^;\\r\\n]*(?!.*samesite)[;\\r\\n]"
+          - "(?i)set-cookie:\\s*[^;\\r\\n]*(SESSIONID|JSESSIONID|PHPSESSID|ASP\\.NET_SessionId|connect\\.sid|laravel_session|django_session|rails_session|express_session|passport|auth|token|login|user|account|remember|persistent)[^;\\r\\n]*(?!.*samesite)[;\\r\\n]"
+        condition: or
+
+      # Ensure it's an interactive application with forms (CSRF risk)
+      - type: regex
+        part: body
+        regex:
+          - "(?i)<form[^>]*method\\s*=\\s*[\"']?(post|put|patch|delete)[\"']?"
+          - "(?i)<(input|button)[^>]*type\\s*=\\s*[\"']?submit[\"']?"
+          - "(?i)(login|signin|signup|register|dashboard|profile|admin|account|settings|update|delete|create|edit)"
+        condition: or
+
+    extractors:
+      - type: regex
+        part: header
+        group: 1
+        regex:
+          - "(?i)set-cookie:\\s*([^;\\r\\n]*(?:session|sess|jsession|phpsession|asp\\.net_sessionid|connect\\.sid|laravel_session|django_session|rails_session|express_session|passport|auth|token|login|user|account|remember|persistent)[^;\\r\\n]*)"
+
+      - type: kval
+        kval:
+          - set_cookie
+          - server
+          - x_powered_by
+        part: header
+
+  # Test login endpoints for authentication cookies
+  - method: POST
+    path:
+      - "{{BaseURL}}/login"
+      - "{{BaseURL}}/auth/login"
+      - "{{BaseURL}}/api/login"
+      - "{{BaseURL}}/api/auth/login"
+      - "{{BaseURL}}/signin"
+      - "{{BaseURL}}/authenticate"
+      - "{{BaseURL}}/user/login"
+      - "{{BaseURL}}/admin/login"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Content-Type: "application/x-www-form-urlencoded"
+      Accept: "text/html,application/json,*/*"
+
+    body: "username=test&password=test&email=test@example.com&login=test"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 302
+          - 400
+          - 401
+          - 403
+          - 422
+
+      # Authentication cookies without SameSite attribute
+      - type: regex
+        part: header
+        regex:
+          - "(?i)set-cookie:\\s*[^;\\r\\n]*(session|sess|jsession|phpsession|asp\\.net_sessionid|connect\\.sid|laravel_session|django_session|rails_session|express_session|passport|auth|token|login|user|account|remember|persistent|access_token|refresh_token|jwt|bearer)[^;\\r\\n]*(?!.*samesite)[;\\r\\n]"
+        condition: or
+
+    extractors:
+      - type: regex
+        part: header
+        group: 1
+        regex:
+          - "(?i)set-cookie:\\s*([^;\\r\\n]*(?:session|sess|jsession|phpsession|asp\\.net_sessionid|connect\\.sid|laravel_session|django_session|rails_session|express_session|passport|auth|token|login|user|account|remember|persistent|access_token|refresh_token|jwt|bearer)[^;\\r\\n]*)"
+
+  # Test for framework-specific session cookies
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+      - "{{BaseURL}}/index.php"
+      - "{{BaseURL}}/index.jsp"
+      - "{{BaseURL}}/index.aspx"
+      - "{{BaseURL}}/index.py"
+      - "{{BaseURL}}/index.rb"
+      - "{{BaseURL}}/app.js"
+      - "{{BaseURL}}/main.js"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Accept: "text/html,application/xhtml+xml,*/*"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      # Framework-specific cookies without SameSite attribute
+      - type: regex
+        part: header
+        regex:
+          # PHP
+          - "(?i)set-cookie:\\s*PHPSESSID=[^;\\r\\n]*(?!.*samesite)[;\\r\\n]"
+          - "(?i)set-cookie:\\s*laravel_session=[^;\\r\\n]*(?!.*samesite)[;\\r\\n]"
+          - "(?i)set-cookie:\\s*symfony=[^;\\r\\n]*(?!.*samesite)[;\\r\\n]"
+          - "(?i)set-cookie:\\s*codeigniter=[^;\\r\\n]*(?!.*samesite)[;\\r\\n]"
+          - "(?i)set-cookie:\\s*cakephp=[^;\\r\\n]*(?!.*samesite)[;\\r\\n]"
+          - "(?i)set-cookie:\\s*zend=[^;\\r\\n]*(?!.*samesite)[;\\r\\n]"
+          - "(?i)set-cookie:\\s*yii=[^;\\r\\n]*(?!.*samesite)[;\\r\\n]"
+          
+          # Java
+          - "(?i)set-cookie:\\s*JSESSIONID=[^;\\r\\n]*(?!.*samesite)[;\\r\\n]"
+          - "(?i)set-cookie:\\s*spring_session=[^;\\r\\n]*(?!.*samesite)[;\\r\\n]"
+          - "(?i)set-cookie:\\s*struts=[^;\\r\\n]*(?!.*samesite)[;\\r\\n]"
+          - "(?i)set-cookie:\\s*hibernate=[^;\\r\\n]*(?!.*samesite)[;\\r\\n]"
+          - "(?i)set-cookie:\\s*tomcat=[^;\\r\\n]*(?!.*samesite)[;\\r\\n]"
+          
+          # .NET
+          - "(?i)set-cookie:\\s*ASP\\.NET_SessionId=[^;\\r\\n]*(?!.*samesite)[;\\r\\n]"
+          - "(?i)set-cookie:\\s*\\.ASPXAUTH=[^;\\r\\n]*(?!.*samesite)[;\\r\\n]"
+          - "(?i)set-cookie:\\s*\\.ASPXROLES=[^;\\r\\n]*(?!.*samesite)[;\\r\\n]"
+          - "(?i)set-cookie:\\s*\\.ASPXANONYMOUS=[^;\\r\\n]*(?!.*samesite)[;\\r\\n]"
+          
+          # Node.js
+          - "(?i)set-cookie:\\s*connect\\.sid=[^;\\r\\n]*(?!.*samesite)[;\\r\\n]"
+          - "(?i)set-cookie:\\s*express_session=[^;\\r\\n]*(?!.*samesite)[;\\r\\n]"
+          - "(?i)set-cookie:\\s*koa\\.sess=[^;\\r\\n]*(?!.*samesite)[;\\r\\n]"
+          - "(?i)set-cookie:\\s*next-auth=[^;\\r\\n]*(?!.*samesite)[;\\r\\n]"
+          - "(?i)set-cookie:\\s*nuxt=[^;\\r\\n]*(?!.*samesite)[;\\r\\n]"
+          
+          # Python
+          - "(?i)set-cookie:\\s*django_session=[^;\\r\\n]*(?!.*samesite)[;\\r\\n]"
+          - "(?i)set-cookie:\\s*flask_session=[^;\\r\\n]*(?!.*samesite)[;\\r\\n]"
+          - "(?i)set-cookie:\\s*pyramid_session=[^;\\r\\n]*(?!.*samesite)[;\\r\\n]"
+          - "(?i)set-cookie:\\s*tornado_session=[^;\\r\\n]*(?!.*samesite)[;\\r\\n]"
+          - "(?i)set-cookie:\\s*fastapi=[^;\\r\\n]*(?!.*samesite)[;\\r\\n]"
+          
+          # Ruby
+          - "(?i)set-cookie:\\s*rails_session=[^;\\r\\n]*(?!.*samesite)[;\\r\\n]"
+          - "(?i)set-cookie:\\s*sinatra_session=[^;\\r\\n]*(?!.*samesite)[;\\r\\n]"
+          - "(?i)set-cookie:\\s*rack_session=[^;\\r\\n]*(?!.*samesite)[;\\r\\n]"
+          
+        condition: or
+
+      # Contains forms that could be CSRF targets
+      - type: regex
+        part: body
+        regex:
+          - "(?i)<form[^>]*method\\s*=\\s*[\"']?(post|put|patch|delete)[\"']?"
+        condition: or
+
+    extractors:
+      - type: regex
+        part: header
+        group: 1
+        regex:
+          - "(?i)set-cookie:\\s*((?:PHPSESSID|laravel_session|symfony|codeigniter|cakephp|zend|yii|JSESSIONID|spring_session|struts|hibernate|tomcat|ASP\\.NET_SessionId|\\.ASPXAUTH|\\.ASPXROLES|\\.ASPXANONYMOUS|connect\\.sid|express_session|koa\\.sess|next-auth|nuxt|django_session|flask_session|pyramid_session|tornado_session|fastapi|rails_session|sinatra_session|rack_session)=[^;\\r\\n]*)"
+
+  # Test API endpoints for CSRF-vulnerable cookies
+  - method: GET
+    path:
+      - "{{BaseURL}}/api"
+      - "{{BaseURL}}/api/user"
+      - "{{BaseURL}}/api/profile"
+      - "{{BaseURL}}/api/dashboard"
+      - "{{BaseURL}}/api/admin"
+      - "{{BaseURL}}/api/auth"
+      - "{{BaseURL}}/api/token"
+      - "{{BaseURL}}/api/session"
+      - "{{BaseURL}}/rest/api"
+      - "{{BaseURL}}/graphql"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Accept: "application/json,text/html,*/*"
+      Authorization: "Bearer test-token"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 401
+          - 403
+
+      # API cookies without SameSite attribute (CSRF risk for state-changing operations)
+      - type: regex
+        part: header
+        regex:
+          - "(?i)set-cookie:\\s*[^;\\r\\n]*(api|token|access|refresh|bearer|jwt|oauth|auth|session|csrf|xsrf|api_key|access_token|refresh_token|id_token)[^;\\r\\n]*(?!.*samesite)[;\\r\\n]"
+        condition: or
+
+    extractors:
+      - type: regex
+        part: header
+        group: 1
+        regex:
+          - "(?i)set-cookie:\\s*([^;\\r\\n]*(?:api|token|access|refresh|bearer|jwt|oauth|auth|session|csrf|xsrf|api_key|access_token|refresh_token|id_token)[^;\\r\\n]*)"
+
+  # Test for OAuth and SSO cookies
+  - method: GET
+    path:
+      - "{{BaseURL}}/oauth/authorize"
+      - "{{BaseURL}}/oauth/callback"
+      - "{{BaseURL}}/auth/callback"
+      - "{{BaseURL}}/sso/callback"
+      - "{{BaseURL}}/saml/callback"
+      - "{{BaseURL}}/openid/callback"
+      - "{{BaseURL}}/auth/google"
+      - "{{BaseURL}}/auth/facebook"
+      - "{{BaseURL}}/auth/github"
+      - "{{BaseURL}}/auth/microsoft"
+      - "{{BaseURL}}/auth/twitter"
+      - "{{BaseURL}}/auth/linkedin"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Accept: "text/html,application/xhtml+xml,*/*"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 302
+          - 400
+          - 401
+
+      # OAuth/SSO cookies without SameSite attribute
+      - type: regex
+        part: header
+        regex:
+          - "(?i)set-cookie:\\s*[^;\\r\\n]*(oauth|sso|saml|openid|oidc|jwt|bearer|access_token|refresh_token|id_token|state|nonce|code|pkce|google|facebook|github|microsoft|twitter|linkedin)[^;\\r\\n]*(?!.*samesite)[;\\r\\n]"
+        condition: or
+
+    extractors:
+      - type: regex
+        part: header
+        group: 1
+        regex:
+          - "(?i)set-cookie:\\s*([^;\\r\\n]*(?:oauth|sso|saml|openid|oidc|jwt|bearer|access_token|refresh_token|id_token|state|nonce|code|pkce|google|facebook|github|microsoft|twitter|linkedin)[^;\\r\\n]*)"
+
+  # Test for CMS and admin interface cookies
+  - method: GET
+    path:
+      - "{{BaseURL}}/admin"
+      - "{{BaseURL}}/admin/login"
+      - "{{BaseURL}}/administrator"
+      - "{{BaseURL}}/wp-admin"
+      - "{{BaseURL}}/wp-login.php"
+      - "{{BaseURL}}/phpmyadmin"
+      - "{{BaseURL}}/adminer"
+      - "{{BaseURL}}/manager"
+      - "{{BaseURL}}/control"
+      - "{{BaseURL}}/cpanel"
+      - "{{BaseURL}}/drupal"
+      - "{{BaseURL}}/joomla"
+      - "{{BaseURL}}/magento"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Accept: "text/html,application/xhtml+xml,*/*"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 302
+          - 401
+          - 403
+
+      # CMS/Admin interface cookies without SameSite attribute
+      - type: regex
+        part: header
+        regex:
+          - "(?i)set-cookie:\\s*[^;\\r\\n]*(admin|administrator|wp|wordpress|phpmyadmin|adminer|manager|control|cpanel|plesk|webmin|directadmin|drupal|joomla|magento|prestashop|opencart|woocommerce)[^;\\r\\n]*(?!.*samesite)[;\\r\\n]"
+        condition: or
+
+      # Admin interface with forms (high CSRF risk)
+      - type: regex
+        part: body
+        regex:
+          - "(?i)<form[^>]*method\\s*=\\s*[\"']?(post|put|patch|delete)[\"']?"
+          - "(?i)(admin|administrator|management|control|panel|dashboard)"
+        condition: or
+
+    extractors:
+      - type: regex
+        part: header
+        group: 1
+        regex:
+          - "(?i)set-cookie:\\s*([^;\\r\\n]*(?:admin|administrator|wp|wordpress|phpmyadmin|adminer|manager|control|cpanel|plesk|webmin|directadmin|drupal|joomla|magento|prestashop|opencart|woocommerce)[^;\\r\\n]*)"
+
+  # Test for e-commerce and payment cookies (high CSRF risk)
+  - method: GET
+    path:
+      - "{{BaseURL}}/cart"
+      - "{{BaseURL}}/checkout"
+      - "{{BaseURL}}/payment"
+      - "{{BaseURL}}/order"
+      - "{{BaseURL}}/shop"
+      - "{{BaseURL}}/store"
+      - "{{BaseURL}}/buy"
+      - "{{BaseURL}}/purchase"
+      - "{{BaseURL}}/billing"
+      - "{{BaseURL}}/account/orders"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Accept: "text/html,application/xhtml+xml,*/*"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 302
+
+      # E-commerce cookies without SameSite attribute (critical for payment forms)
+      - type: regex
+        part: header
+        regex:
+          - "(?i)set-cookie:\\s*[^;\\r\\n]*(cart|checkout|payment|order|shop|store|buy|purchase|customer|billing|shipping|woocommerce|magento|shopify|prestashop|opencart|bigcommerce)[^;\\r\\n]*(?!.*samesite)[;\\r\\n]"
+        condition: or
+
+      # E-commerce with payment forms (critical CSRF risk)
+      - type: regex
+        part: body
+        regex:
+          - "(?i)<form[^>]*method\\s*=\\s*[\"']?(post|put|patch|delete)[\"']?"
+          - "(?i)(cart|checkout|payment|order|shop|store|buy|purchase|price|\\$|€|£|¥)"
+        condition: or
+
+    extractors:
+      - type: regex
+        part: header
+        group: 1
+        regex:
+          - "(?i)set-cookie:\\s*([^;\\r\\n]*(?:cart|checkout|payment|order|shop|store|buy|purchase|customer|billing|shipping|woocommerce|magento|shopify|prestashop|opencart|bigcommerce)[^;\\r\\n]*)"
+
+  # Test for CSRF token cookies (should have SameSite=Strict)
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+      - "{{BaseURL}}/login"
+      - "{{BaseURL}}/register"
+      - "{{BaseURL}}/profile"
+      - "{{BaseURL}}/settings"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Accept: "text/html,application/xhtml+xml,*/*"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      # CSRF token cookies without proper SameSite attribute
+      - type: regex
+        part: header
+        regex:
+          - "(?i)set-cookie:\\s*[^;\\r\\n]*(csrf|xsrf|_token|authenticity_token|csrftoken|csrf_token|xsrf_token)[^;\\r\\n]*(?!.*samesite=strict)[;\\r\\n]"
+        condition: or
+
+      # Contains CSRF-protected forms
+      - type: regex
+        part: body
+        regex:
+          - "(?i)<input[^>]*name\\s*=\\s*[\"']?(_token|csrf_token|authenticity_token|csrftoken|xsrf_token)[\"']?"
+          - "(?i)<meta[^>]*name\\s*=\\s*[\"']?csrf-token[\"']?"
+        condition: or
+
+    extractors:
+      - type: regex
+        part: header
+        group: 1
+        regex:
+          - "(?i)set-cookie:\\s*([^;\\r\\n]*(?:csrf|xsrf|_token|authenticity_token|csrftoken|csrf_token|xsrf_token)[^;\\r\\n]*)"
+
+  # Test for weak SameSite configurations
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+      - "{{BaseURL}}/login"
+      - "{{BaseURL}}/admin"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Accept: "text/html,application/xhtml+xml,*/*"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      # Cookies with weak SameSite=None (without Secure flag is dangerous)
+      - type: regex
+        part: header
+        regex:
+          - "(?i)set-cookie:\\s*[^;\\r\\n]*(session|auth|token|login|user|account)[^;\\r\\n]*samesite=none(?!.*secure)[;\\r\\n]"
+        condition: or
+
+      # Interactive application
+      - type: regex
+        part: body
+        regex:
+          - "(?i)<form[^>]*method\\s*=\\s*[\"']?(post|put|patch|delete)[\"']?"
+        condition: or
+
+    extractors:
+      - type: regex
+        part: header
+        group: 1
+        regex:
+          - "(?i)set-cookie:\\s*([^;\\r\\n]*(?:session|auth|token|login|user|account)[^;\\r\\n]*samesite=none[^;\\r\\n]*)"
+
+  # Test for banking and financial application cookies (critical)
+  - method: GET
+    path:
+      - "{{BaseURL}}/banking"
+      - "{{BaseURL}}/finance"
+      - "{{BaseURL}}/wallet"
+      - "{{BaseURL}}/transfer"
+      - "{{BaseURL}}/investment"
+      - "{{BaseURL}}/trading"
+      - "{{BaseURL}}/crypto"
+      - "{{BaseURL}}/exchange"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Accept: "text/html,application/xhtml+xml,*/*"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 302
+          - 401
+          - 403
+
+      # Financial application cookies without SameSite attribute (critical risk)
+      - type: regex
+        part: header
+        regex:
+          - "(?i)set-cookie:\\s*[^;\\r\\n]*(banking|finance|wallet|transfer|investment|trading|crypto|exchange|account|balance|transaction)[^;\\r\\n]*(?!.*samesite)[;\\r\\n]"
+        condition: or
+
+      # Financial application indicators
+      - type: regex
+        part: body
+        regex:
+          - "(?i)(banking|finance|wallet|transfer|investment|trading|crypto|exchange|balance|transaction|account)"
+          - "(?i)(\\$|€|£|¥|USD|EUR|GBP|JPY|BTC|ETH)"
+        condition: or
+
+    extractors:
+      - type: regex
+        part: header
+        group: 1
+        regex:
+          - "(?i)set-cookie:\\s*([^;\\r\\n]*(?:banking|finance|wallet|transfer|investment|trading|crypto|exchange|account|balance|transaction)[^;\\r\\n]*)"

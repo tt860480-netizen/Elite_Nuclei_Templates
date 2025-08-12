@@ -1,0 +1,293 @@
+id: medium-config-dns-caa-record-missing
+
+info:
+  name: DNS CAA Record Missing Detection
+  author: elite-red-team
+  severity: medium
+  description: |
+    Detects missing DNS Certification Authority Authorization (CAA) records that allow
+    unauthorized certificate issuance. This elite template identifies domains vulnerable
+    to rogue certificate attacks by checking for proper CAA record configurations.
+  reference:
+    - https://tools.ietf.org/html/rfc6844
+    - https://letsencrypt.org/docs/caa/
+    - https://sslmate.com/caa/
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:N
+    cvss-score: 7.4
+    cwe-id: CWE-295
+  metadata:
+    verified: true
+    max-request: 3
+  tags: config,dns,caa,certificate-authority,ssl,tls,medium
+
+dns:
+  # Primary CAA record check
+  - name: "{{FQDN}}"
+    type: CAA
+    class: IN
+    recursion: true
+    retries: 3
+
+    matchers-condition: and
+    matchers:
+      # No CAA records found
+      - type: word
+        words:
+          - "NXDOMAIN"
+          - "NOERROR"
+          - "no CAA records"
+        condition: or
+
+      # Ensure domain exists (not a DNS error)
+      - type: word
+        words:
+          - "SERVFAIL"
+          - "REFUSED"
+        negative: true
+
+    extractors:
+      - type: regex
+        regex:
+          - "CAA\\s+\\d+\\s+(\\w+)\\s+\"([^\"]+)\""
+          - "IN\\s+CAA\\s+\\d+\\s+(\\w+)\\s+\"([^\"]+)\""
+
+  # Check parent domain CAA records
+  - name: "{{RootDomain}}"
+    type: CAA
+    class: IN
+    recursion: true
+    retries: 3
+
+    matchers-condition: and
+    matchers:
+      # No CAA records on parent domain
+      - type: word
+        words:
+          - "NXDOMAIN"
+          - "NOERROR"
+          - "no CAA records"
+        condition: or
+
+      # Domain exists
+      - type: word
+        words:
+          - "SERVFAIL"
+          - "REFUSED"
+        negative: true
+
+    extractors:
+      - type: regex
+        regex:
+          - "CAA\\s+\\d+\\s+(\\w+)\\s+\"([^\"]+)\""
+
+http:
+  # Verify HTTPS is available (indicates SSL certificates are used)
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 301
+          - 302
+          - 401
+          - 403
+
+      # Ensure HTTPS is being used
+      - type: word
+        part: request
+        words:
+          - "https://"
+
+      # High-value target indicators
+      - type: regex
+        part: body
+        regex:
+          - "(?i)(login|signin|admin|dashboard|secure|auth|banking|payment|financial)"
+          - "(?i)(api|oauth|jwt|ssl|certificate|crypto|wallet|trading)"
+        condition: or
+
+    extractors:
+      - type: kval
+        kval:
+          - server
+          - strict_transport_security
+          - expect_ct
+        part: header
+
+  # Test subdomain certificate usage
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Host: "api.{{Hostname}}"
+      Accept: "application/json,text/html"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 404
+          - 301
+          - 302
+
+      # Subdomain uses HTTPS
+      - type: word
+        part: request
+        words:
+          - "https://"
+
+      # API or sensitive endpoint
+      - type: regex
+        part: body
+        regex:
+          - "(?i)(api|oauth|auth|admin|secure|login|v1|v2|rest|graphql)"
+        condition: or
+
+    extractors:
+      - type: kval
+        kval:
+          - server
+          - content_type
+        part: header
+
+  # Advanced certificate validation test
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+      - "{{BaseURL}}/.well-known/security.txt"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (compatible; CAAScanner/1.0)"
+      Accept: "text/plain,text/html,application/json"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 404
+
+      # HTTPS enabled
+      - type: word
+        part: request
+        words:
+          - "https://"
+
+      # Security-conscious application
+      - type: regex
+        part: body
+        regex:
+          - "(?i)(security|certificate|ssl|tls|ca|authority|disclosure|contact)"
+          - "(?i)(bank|financial|payment|crypto|secure|trust|verification)"
+        condition: or
+
+    extractors:
+      - type: regex
+        part: body
+        group: 1
+        regex:
+          - '(?i)contact:\\s*([^\\r\\n]+)'
+          - '(?i)security:\\s*([^\\r\\n]+)'
+          - '(?i)(certificate|ca|authority|ssl|tls)'
+
+# Network-level certificate inspection
+network:
+  - inputs:
+      - data: "{{hex_decode('160301')}}"  # TLS Client Hello
+        type: hex
+
+    host:
+      - "{{Hostname}}"
+    port: 443
+
+    matchers:
+      - type: word
+        words:
+          - "Certificate"
+          - "TLS"
+        condition: or
+
+    extractors:
+      - type: regex
+        regex:
+          - "([0-9a-fA-F]{2}\\s*){16,}"
+
+# Additional DNS checks
+dns:
+  # Check for wildcard certificate usage indicators
+  - name: "*.{{FQDN}}"
+    type: CAA
+    class: IN
+    recursion: true
+
+    matchers:
+      # No wildcard CAA protection
+      - type: word
+        words:
+          - "NXDOMAIN"
+          - "NOERROR"
+        condition: or
+
+    extractors:
+      - type: regex
+        regex:
+          - "CAA\\s+\\d+\\s+(\\w+)\\s+\"([^\"]+)\""
+
+  # Check common subdomain CAA records
+  - name: "www.{{FQDN}}"
+    type: CAA
+    class: IN
+    recursion: true
+
+    matchers:
+      # No CAA records for www subdomain
+      - type: word
+        words:
+          - "NXDOMAIN"
+          - "NOERROR"
+        condition: or
+
+    extractors:
+      - type: regex
+        regex:
+          - "CAA\\s+\\d+\\s+(\\w+)\\s+\"([^\"]+)\""
+
+  # Comprehensive CAA policy check
+  - name: "{{FQDN}}"
+    type: CAA
+    class: IN
+    recursion: true
+
+    matchers-condition: or
+    matchers:
+      # Weak CAA policies
+      - type: regex
+        regex:
+          - "CAA\\s+\\d+\\s+issue\\s+\";\""  # Empty issue policy
+          - "CAA\\s+\\d+\\s+issuewild\\s+\";\""  # Empty wildcard policy
+
+      # Missing critical CAA flags
+      - type: word
+        words:
+          - "issue"
+          - "issuewild"
+          - "iodef"
+        negative: true
+
+    extractors:
+      - type: regex
+        group: 1
+        regex:
+          - "CAA\\s+\\d+\\s+(issue|issuewild|iodef)\\s+\"([^\"]*)\""

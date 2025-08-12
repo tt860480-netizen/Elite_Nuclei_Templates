@@ -1,0 +1,396 @@
+id: medium-config-session-cookie-secure-flag-missing
+
+info:
+  name: Session Cookie Secure Flag Missing Detection
+  author: elite-red-team
+  severity: medium
+  description: |
+    Detects session cookies without the Secure flag that can be transmitted over
+    unencrypted HTTP connections. This elite template identifies various cookie
+    configurations that expose session tokens to man-in-the-middle attacks.
+  reference:
+    - https://owasp.org/www-community/controls/SecureCookieAttribute
+    - https://developer.mozilla.org/en-US/docs/Web/HTTP/Cookies#restrict_access_to_cookies
+    - https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:H/PR:N/UI:R/S:U/C:L/I:L/A:N
+    cvss-score: 4.8
+    cwe-id: CWE-614
+  metadata:
+    verified: true
+    max-request: 6
+  tags: config,cookie,secure-flag,session,authentication,medium
+
+http:
+  # Test main application pages for session cookies
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+      - "{{BaseURL}}/login"
+      - "{{BaseURL}}/dashboard"
+      - "{{BaseURL}}/profile"
+      - "{{BaseURL}}/admin"
+      - "{{BaseURL}}/panel"
+      - "{{BaseURL}}/console"
+      - "{{BaseURL}}/management"
+      - "{{BaseURL}}/account"
+      - "{{BaseURL}}/settings"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+      Accept-Language: "en-US,en;q=0.5"
+      Connection: "keep-alive"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 301
+          - 302
+
+      # Ensure HTTPS is being used
+      - type: word
+        part: request
+        words:
+          - "https://"
+
+      # Session cookies without Secure flag
+      - type: regex
+        part: header
+        regex:
+          - "(?i)set-cookie:\\s*[^;\\r\\n]*(session|sess|jsession|phpsession|asp\\.net_sessionid|connect\\.sid|laravel_session|django_session|rails_session|express_session|passport|auth|token|login|user|account|remember|persistent)[^;\\r\\n]*(?!.*secure)[;\\r\\n]"
+          - "(?i)set-cookie:\\s*[^;\\r\\n]*(SESSIONID|JSESSIONID|PHPSESSID|ASP\\.NET_SessionId|connect\\.sid|laravel_session|django_session|rails_session|express_session|passport|auth|token|login|user|account|remember|persistent)[^;\\r\\n]*(?!.*secure)[;\\r\\n]"
+        condition: or
+
+      # Ensure it's an interactive application
+      - type: regex
+        part: body
+        regex:
+          - "(?i)<(form|input|button)"
+          - "(?i)(login|signin|signup|register|dashboard|profile|admin|account|settings)"
+        condition: or
+
+    extractors:
+      - type: regex
+        part: header
+        group: 1
+        regex:
+          - "(?i)set-cookie:\\s*([^;\\r\\n]*(?:session|sess|jsession|phpsession|asp\\.net_sessionid|connect\\.sid|laravel_session|django_session|rails_session|express_session|passport|auth|token|login|user|account|remember|persistent)[^;\\r\\n]*)"
+
+      - type: kval
+        kval:
+          - set_cookie
+          - server
+          - x_powered_by
+        part: header
+
+  # Test login endpoints for authentication cookies
+  - method: POST
+    path:
+      - "{{BaseURL}}/login"
+      - "{{BaseURL}}/auth/login"
+      - "{{BaseURL}}/api/login"
+      - "{{BaseURL}}/api/auth/login"
+      - "{{BaseURL}}/signin"
+      - "{{BaseURL}}/authenticate"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Content-Type: "application/x-www-form-urlencoded"
+      Accept: "text/html,application/json,*/*"
+
+    body: "username=test&password=test&email=test@example.com&login=test"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 302
+          - 400
+          - 401
+          - 403
+          - 422
+
+      # HTTPS request
+      - type: word
+        part: request
+        words:
+          - "https://"
+
+      # Authentication cookies without Secure flag
+      - type: regex
+        part: header
+        regex:
+          - "(?i)set-cookie:\\s*[^;\\r\\n]*(session|sess|jsession|phpsession|asp\\.net_sessionid|connect\\.sid|laravel_session|django_session|rails_session|express_session|passport|auth|token|login|user|account|remember|persistent|access_token|refresh_token|jwt|bearer)[^;\\r\\n]*(?!.*secure)[;\\r\\n]"
+        condition: or
+
+    extractors:
+      - type: regex
+        part: header
+        group: 1
+        regex:
+          - "(?i)set-cookie:\\s*([^;\\r\\n]*(?:session|sess|jsession|phpsession|asp\\.net_sessionid|connect\\.sid|laravel_session|django_session|rails_session|express_session|passport|auth|token|login|user|account|remember|persistent|access_token|refresh_token|jwt|bearer)[^;\\r\\n]*)"
+
+  # Test API endpoints for token cookies
+  - method: GET
+    path:
+      - "{{BaseURL}}/api"
+      - "{{BaseURL}}/api/user"
+      - "{{BaseURL}}/api/profile"
+      - "{{BaseURL}}/api/dashboard"
+      - "{{BaseURL}}/api/admin"
+      - "{{BaseURL}}/api/auth"
+      - "{{BaseURL}}/api/token"
+      - "{{BaseURL}}/api/session"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Accept: "application/json,text/html,*/*"
+      Authorization: "Bearer test-token"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 401
+          - 403
+
+      # HTTPS request
+      - type: word
+        part: request
+        words:
+          - "https://"
+
+      # API cookies without Secure flag
+      - type: regex
+        part: header
+        regex:
+          - "(?i)set-cookie:\\s*[^;\\r\\n]*(api|token|access|refresh|bearer|jwt|oauth|auth|session|csrf|xsrf)[^;\\r\\n]*(?!.*secure)[;\\r\\n]"
+        condition: or
+
+    extractors:
+      - type: regex
+        part: header
+        group: 1
+        regex:
+          - "(?i)set-cookie:\\s*([^;\\r\\n]*(?:api|token|access|refresh|bearer|jwt|oauth|auth|session|csrf|xsrf)[^;\\r\\n]*)"
+
+  # Test for framework-specific session cookies
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+      - "{{BaseURL}}/index.php"
+      - "{{BaseURL}}/index.jsp"
+      - "{{BaseURL}}/index.aspx"
+      - "{{BaseURL}}/index.py"
+      - "{{BaseURL}}/index.rb"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Accept: "text/html,application/xhtml+xml,*/*"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      # HTTPS request
+      - type: word
+        part: request
+        words:
+          - "https://"
+
+      # Framework-specific cookies without Secure flag
+      - type: regex
+        part: header
+        regex:
+          # PHP
+          - "(?i)set-cookie:\\s*PHPSESSID=[^;\\r\\n]*(?!.*secure)[;\\r\\n]"
+          - "(?i)set-cookie:\\s*laravel_session=[^;\\r\\n]*(?!.*secure)[;\\r\\n]"
+          - "(?i)set-cookie:\\s*symfony=[^;\\r\\n]*(?!.*secure)[;\\r\\n]"
+          - "(?i)set-cookie:\\s*codeigniter=[^;\\r\\n]*(?!.*secure)[;\\r\\n]"
+          
+          # Java
+          - "(?i)set-cookie:\\s*JSESSIONID=[^;\\r\\n]*(?!.*secure)[;\\r\\n]"
+          - "(?i)set-cookie:\\s*spring_session=[^;\\r\\n]*(?!.*secure)[;\\r\\n]"
+          - "(?i)set-cookie:\\s*struts=[^;\\r\\n]*(?!.*secure)[;\\r\\n]"
+          
+          # .NET
+          - "(?i)set-cookie:\\s*ASP\\.NET_SessionId=[^;\\r\\n]*(?!.*secure)[;\\r\\n]"
+          - "(?i)set-cookie:\\s*\\.ASPXAUTH=[^;\\r\\n]*(?!.*secure)[;\\r\\n]"
+          
+          # Node.js
+          - "(?i)set-cookie:\\s*connect\\.sid=[^;\\r\\n]*(?!.*secure)[;\\r\\n]"
+          - "(?i)set-cookie:\\s*express_session=[^;\\r\\n]*(?!.*secure)[;\\r\\n]"
+          - "(?i)set-cookie:\\s*koa\\.sess=[^;\\r\\n]*(?!.*secure)[;\\r\\n]"
+          
+          # Python
+          - "(?i)set-cookie:\\s*django_session=[^;\\r\\n]*(?!.*secure)[;\\r\\n]"
+          - "(?i)set-cookie:\\s*flask_session=[^;\\r\\n]*(?!.*secure)[;\\r\\n]"
+          - "(?i)set-cookie:\\s*pyramid_session=[^;\\r\\n]*(?!.*secure)[;\\r\\n]"
+          
+          # Ruby
+          - "(?i)set-cookie:\\s*rails_session=[^;\\r\\n]*(?!.*secure)[;\\r\\n]"
+          - "(?i)set-cookie:\\s*sinatra_session=[^;\\r\\n]*(?!.*secure)[;\\r\\n]"
+          
+        condition: or
+
+    extractors:
+      - type: regex
+        part: header
+        group: 1
+        regex:
+          - "(?i)set-cookie:\\s*((?:PHPSESSID|laravel_session|symfony|codeigniter|JSESSIONID|spring_session|struts|ASP\\.NET_SessionId|\\.ASPXAUTH|connect\\.sid|express_session|koa\\.sess|django_session|flask_session|pyramid_session|rails_session|sinatra_session)=[^;\\r\\n]*)"
+
+  # Test for authentication flow cookies
+  - method: GET
+    path:
+      - "{{BaseURL}}/oauth/authorize"
+      - "{{BaseURL}}/oauth/callback"
+      - "{{BaseURL}}/auth/callback"
+      - "{{BaseURL}}/sso/callback"
+      - "{{BaseURL}}/saml/callback"
+      - "{{BaseURL}}/openid/callback"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Accept: "text/html,application/xhtml+xml,*/*"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 302
+          - 400
+          - 401
+
+      # HTTPS request
+      - type: word
+        part: request
+        words:
+          - "https://"
+
+      # OAuth/SSO cookies without Secure flag
+      - type: regex
+        part: header
+        regex:
+          - "(?i)set-cookie:\\s*[^;\\r\\n]*(oauth|sso|saml|openid|oidc|jwt|bearer|access_token|refresh_token|id_token|state|nonce|code|pkce)[^;\\r\\n]*(?!.*secure)[;\\r\\n]"
+        condition: or
+
+    extractors:
+      - type: regex
+        part: header
+        group: 1
+        regex:
+          - "(?i)set-cookie:\\s*([^;\\r\\n]*(?:oauth|sso|saml|openid|oidc|jwt|bearer|access_token|refresh_token|id_token|state|nonce|code|pkce)[^;\\r\\n]*)"
+
+  # Test for admin/management interface cookies
+  - method: GET
+    path:
+      - "{{BaseURL}}/admin"
+      - "{{BaseURL}}/admin/login"
+      - "{{BaseURL}}/administrator"
+      - "{{BaseURL}}/wp-admin"
+      - "{{BaseURL}}/wp-login.php"
+      - "{{BaseURL}}/phpmyadmin"
+      - "{{BaseURL}}/adminer"
+      - "{{BaseURL}}/manager"
+      - "{{BaseURL}}/control"
+      - "{{BaseURL}}/cpanel"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Accept: "text/html,application/xhtml+xml,*/*"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 302
+          - 401
+          - 403
+
+      # HTTPS request
+      - type: word
+        part: request
+        words:
+          - "https://"
+
+      # Admin interface cookies without Secure flag
+      - type: regex
+        part: header
+        regex:
+          - "(?i)set-cookie:\\s*[^;\\r\\n]*(admin|administrator|wp|wordpress|phpmyadmin|adminer|manager|control|cpanel|plesk|webmin|directadmin)[^;\\r\\n]*(?!.*secure)[;\\r\\n]"
+        condition: or
+
+      # Admin interface indicators
+      - type: regex
+        part: body
+        regex:
+          - "(?i)(admin|administrator|management|control|panel|dashboard)"
+          - "(?i)(login|signin|authenticate|password)"
+        condition: or
+
+    extractors:
+      - type: regex
+        part: header
+        group: 1
+        regex:
+          - "(?i)set-cookie:\\s*([^;\\r\\n]*(?:admin|administrator|wp|wordpress|phpmyadmin|adminer|manager|control|cpanel|plesk|webmin|directadmin)[^;\\r\\n]*)"
+
+  # Test for e-commerce and payment cookies
+  - method: GET
+    path:
+      - "{{BaseURL}}/cart"
+      - "{{BaseURL}}/checkout"
+      - "{{BaseURL}}/payment"
+      - "{{BaseURL}}/order"
+      - "{{BaseURL}}/shop"
+      - "{{BaseURL}}/store"
+      - "{{BaseURL}}/buy"
+      - "{{BaseURL}}/purchase"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Accept: "text/html,application/xhtml+xml,*/*"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+          - 302
+
+      # HTTPS request
+      - type: word
+        part: request
+        words:
+          - "https://"
+
+      # E-commerce cookies without Secure flag
+      - type: regex
+        part: header
+        regex:
+          - "(?i)set-cookie:\\s*[^;\\r\\n]*(cart|checkout|payment|order|shop|store|buy|purchase|customer|billing|shipping|woocommerce|magento|shopify|prestashop)[^;\\r\\n]*(?!.*secure)[;\\r\\n]"
+        condition: or
+
+      # E-commerce indicators
+      - type: regex
+        part: body
+        regex:
+          - "(?i)(cart|checkout|payment|order|shop|store|buy|purchase|price|\\$|€|£|¥)"
+        condition: or
+
+    extractors:
+      - type: regex
+        part: header
+        group: 1
+        regex:
+          - "(?i)set-cookie:\\s*([^;\\r\\n]*(?:cart|checkout|payment|order|shop|store|buy|purchase|customer|billing|shipping|woocommerce|magento|shopify|prestashop)[^;\\r\\n]*)"

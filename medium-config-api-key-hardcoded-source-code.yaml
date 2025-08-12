@@ -1,0 +1,462 @@
+id: medium-config-api-key-hardcoded-source-code
+
+info:
+  name: Hardcoded API Keys in Source Code Detection
+  author: elite-red-team
+  severity: medium
+  description: |
+    Detects hardcoded API keys, tokens, and secrets exposed in source code, configuration
+    files, and web applications. This elite template identifies various API key formats
+    from popular services and cloud providers with advanced pattern matching.
+  reference:
+    - https://owasp.org/www-project-top-ten/2017/A3_2017-Sensitive_Data_Exposure
+    - https://github.com/dxa4481/truffleHog
+    - https://docs.github.com/en/code-security/secret-scanning/about-secret-scanning
+  classification:
+    cvss-metrics: CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H
+    cvss-score: 9.8
+    cwe-id: CWE-798
+  metadata:
+    verified: true
+    max-request: 10
+  tags: config,api-key,hardcoded,secrets,credentials,source-code,medium
+
+http:
+  # Test for exposed JavaScript files with API keys
+  - method: GET
+    path:
+      - "{{BaseURL}}/js/app.js"
+      - "{{BaseURL}}/js/main.js"
+      - "{{BaseURL}}/js/config.js"
+      - "{{BaseURL}}/js/api.js"
+      - "{{BaseURL}}/js/keys.js"
+      - "{{BaseURL}}/js/secrets.js"
+      - "{{BaseURL}}/js/constants.js"
+      - "{{BaseURL}}/js/settings.js"
+      - "{{BaseURL}}/assets/js/app.js"
+      - "{{BaseURL}}/assets/js/main.js"
+      - "{{BaseURL}}/assets/js/config.js"
+      - "{{BaseURL}}/static/js/app.js"
+      - "{{BaseURL}}/static/js/main.js"
+      - "{{BaseURL}}/static/js/config.js"
+      - "{{BaseURL}}/public/js/app.js"
+      - "{{BaseURL}}/public/js/main.js"
+      - "{{BaseURL}}/public/js/config.js"
+      - "{{BaseURL}}/dist/js/app.js"
+      - "{{BaseURL}}/dist/js/main.js"
+      - "{{BaseURL}}/build/js/app.js"
+      - "{{BaseURL}}/build/js/main.js"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Accept: "application/javascript,text/javascript,*/*"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      # API key patterns in JavaScript
+      - type: regex
+        part: body
+        regex:
+          # AWS Keys
+          - "(?i)(aws_access_key_id|aws_secret_access_key|aws_session_token)\\s*[=:]\\s*[\"']?[A-Z0-9+/]{20,}[\"']?"
+          - "(?i)AKIA[0-9A-Z]{16}"
+          - "(?i)[A-Za-z0-9+/]{40}"
+          
+          # Google API Keys
+          - "(?i)(google_api_key|google_client_id|google_client_secret)\\s*[=:]\\s*[\"']?[A-Za-z0-9_-]{20,}[\"']?"
+          - "(?i)AIza[0-9A-Za-z_-]{35}"
+          - "(?i)[0-9]+-[0-9A-Za-z_]{32}\\.apps\\.googleusercontent\\.com"
+          
+          # GitHub Tokens
+          - "(?i)(github_token|gh_token|github_pat)\\s*[=:]\\s*[\"']?[A-Za-z0-9_]{36,}[\"']?"
+          - "(?i)ghp_[A-Za-z0-9]{36}"
+          - "(?i)gho_[A-Za-z0-9]{36}"
+          - "(?i)ghu_[A-Za-z0-9]{36}"
+          - "(?i)ghs_[A-Za-z0-9]{36}"
+          - "(?i)ghr_[A-Za-z0-9]{36}"
+          
+          # Slack Tokens
+          - "(?i)(slack_token|slack_webhook|slack_api_token)\\s*[=:]\\s*[\"']?[A-Za-z0-9_-]{20,}[\"']?"
+          - "(?i)xox[baprs]-[A-Za-z0-9-]+"
+          - "(?i)https://hooks\\.slack\\.com/services/[A-Z0-9]+/[A-Z0-9]+/[A-Za-z0-9]+"
+          
+          # Stripe Keys
+          - "(?i)(stripe_key|stripe_secret|stripe_publishable)\\s*[=:]\\s*[\"']?[A-Za-z0-9_]{20,}[\"']?"
+          - "(?i)sk_live_[A-Za-z0-9]{24}"
+          - "(?i)pk_live_[A-Za-z0-9]{24}"
+          - "(?i)sk_test_[A-Za-z0-9]{24}"
+          - "(?i)pk_test_[A-Za-z0-9]{24}"
+          
+          # PayPal Keys
+          - "(?i)(paypal_client_id|paypal_client_secret)\\s*[=:]\\s*[\"']?[A-Za-z0-9_-]{20,}[\"']?"
+          - "(?i)A[A-Za-z0-9_-]{80}"
+          - "(?i)E[A-Za-z0-9_-]{80}"
+          
+          # Twitter API Keys
+          - "(?i)(twitter_api_key|twitter_api_secret|twitter_access_token|twitter_bearer_token)\\s*[=:]\\s*[\"']?[A-Za-z0-9]{20,}[\"']?"
+          - "(?i)AAAAAAAAAAAAAAAAAAAAAA[A-Za-z0-9%]{80,}"
+          
+          # Facebook API Keys
+          - "(?i)(facebook_app_id|facebook_app_secret|facebook_access_token)\\s*[=:]\\s*[\"']?[A-Za-z0-9]{15,}[\"']?"
+          - "(?i)[0-9]{15,17}"
+          - "(?i)EAA[A-Za-z0-9]{100,}"
+          
+          # Firebase Keys
+          - "(?i)(firebase_api_key|firebase_auth_domain|firebase_project_id)\\s*[=:]\\s*[\"']?[A-Za-z0-9_-]{20,}[\"']?"
+          - "(?i)AIza[0-9A-Za-z_-]{35}"
+          
+          # SendGrid Keys
+          - "(?i)(sendgrid_api_key|sendgrid_key)\\s*[=:]\\s*[\"']?[A-Za-z0-9._-]{69}[\"']?"
+          - "(?i)SG\\.[A-Za-z0-9_-]{22}\\.[A-Za-z0-9_-]{43}"
+          
+          # Mailgun Keys
+          - "(?i)(mailgun_api_key|mailgun_key)\\s*[=:]\\s*[\"']?[A-Za-z0-9]{32}[\"']?"
+          - "(?i)key-[A-Za-z0-9]{32}"
+          
+          # Twilio Keys
+          - "(?i)(twilio_account_sid|twilio_auth_token|twilio_api_key)\\s*[=:]\\s*[\"']?[A-Za-z0-9]{32,}[\"']?"
+          - "(?i)AC[A-Za-z0-9]{32}"
+          - "(?i)SK[A-Za-z0-9]{32}"
+          
+          # Generic API Key Patterns
+          - "(?i)(api_key|apikey|api_secret|apisecret|access_key|access_token|auth_token|secret_key|private_key)\\s*[=:]\\s*[\"']?[A-Za-z0-9+/=_-]{20,}[\"']?"
+          - "(?i)(bearer|token)\\s*[=:]\\s*[\"']?[A-Za-z0-9+/=_-]{20,}[\"']?"
+          
+        condition: or
+
+    extractors:
+      - type: regex
+        part: body
+        group: 2
+        regex:
+          - "(?i)(api_key|apikey|api_secret|apisecret|access_key|access_token|auth_token|secret_key|private_key|bearer|token)\\s*[=:]\\s*[\"']?([A-Za-z0-9+/=_-]{20,})[\"']?"
+
+  # Test for configuration files with API keys
+  - method: GET
+    path:
+      - "{{BaseURL}}/.env"
+      - "{{BaseURL}}/.env.local"
+      - "{{BaseURL}}/.env.development"
+      - "{{BaseURL}}/.env.production"
+      - "{{BaseURL}}/.env.example"
+      - "{{BaseURL}}/.env.sample"
+      - "{{BaseURL}}/config.json"
+      - "{{BaseURL}}/config.js"
+      - "{{BaseURL}}/config.php"
+      - "{{BaseURL}}/config.py"
+      - "{{BaseURL}}/settings.json"
+      - "{{BaseURL}}/settings.js"
+      - "{{BaseURL}}/settings.php"
+      - "{{BaseURL}}/settings.py"
+      - "{{BaseURL}}/constants.js"
+      - "{{BaseURL}}/constants.php"
+      - "{{BaseURL}}/constants.py"
+      - "{{BaseURL}}/keys.json"
+      - "{{BaseURL}}/keys.js"
+      - "{{BaseURL}}/secrets.json"
+      - "{{BaseURL}}/secrets.js"
+      - "{{BaseURL}}/api.json"
+      - "{{BaseURL}}/api.js"
+      - "{{BaseURL}}/credentials.json"
+      - "{{BaseURL}}/credentials.js"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Accept: "application/json,text/plain,application/javascript,*/*"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      # Environment variables and config with API keys
+      - type: regex
+        part: body
+        regex:
+          # Environment variable patterns
+          - "(?i)(AWS_ACCESS_KEY_ID|AWS_SECRET_ACCESS_KEY|AWS_SESSION_TOKEN)\\s*[=:]\\s*[\"']?[A-Za-z0-9+/]{20,}[\"']?"
+          - "(?i)(GOOGLE_API_KEY|GOOGLE_CLIENT_ID|GOOGLE_CLIENT_SECRET)\\s*[=:]\\s*[\"']?[A-Za-z0-9_-]{20,}[\"']?"
+          - "(?i)(GITHUB_TOKEN|GH_TOKEN|GITHUB_PAT)\\s*[=:]\\s*[\"']?[A-Za-z0-9_]{36,}[\"']?"
+          - "(?i)(SLACK_TOKEN|SLACK_WEBHOOK|SLACK_API_TOKEN)\\s*[=:]\\s*[\"']?[A-Za-z0-9_-]{20,}[\"']?"
+          - "(?i)(STRIPE_KEY|STRIPE_SECRET|STRIPE_PUBLISHABLE_KEY|STRIPE_SECRET_KEY)\\s*[=:]\\s*[\"']?[A-Za-z0-9_]{20,}[\"']?"
+          - "(?i)(PAYPAL_CLIENT_ID|PAYPAL_CLIENT_SECRET)\\s*[=:]\\s*[\"']?[A-Za-z0-9_-]{20,}[\"']?"
+          - "(?i)(TWITTER_API_KEY|TWITTER_API_SECRET|TWITTER_ACCESS_TOKEN|TWITTER_BEARER_TOKEN)\\s*[=:]\\s*[\"']?[A-Za-z0-9]{20,}[\"']?"
+          - "(?i)(FACEBOOK_APP_ID|FACEBOOK_APP_SECRET|FACEBOOK_ACCESS_TOKEN)\\s*[=:]\\s*[\"']?[A-Za-z0-9]{15,}[\"']?"
+          - "(?i)(FIREBASE_API_KEY|FIREBASE_AUTH_DOMAIN|FIREBASE_PROJECT_ID)\\s*[=:]\\s*[\"']?[A-Za-z0-9_-]{20,}[\"']?"
+          - "(?i)(SENDGRID_API_KEY|SENDGRID_KEY)\\s*[=:]\\s*[\"']?[A-Za-z0-9._-]{69}[\"']?"
+          - "(?i)(MAILGUN_API_KEY|MAILGUN_KEY)\\s*[=:]\\s*[\"']?[A-Za-z0-9]{32}[\"']?"
+          - "(?i)(TWILIO_ACCOUNT_SID|TWILIO_AUTH_TOKEN|TWILIO_API_KEY)\\s*[=:]\\s*[\"']?[A-Za-z0-9]{32,}[\"']?"
+          
+          # Generic patterns
+          - "(?i)(API_KEY|APIKEY|API_SECRET|APISECRET|ACCESS_KEY|ACCESS_TOKEN|AUTH_TOKEN|SECRET_KEY|PRIVATE_KEY|BEARER_TOKEN)\\s*[=:]\\s*[\"']?[A-Za-z0-9+/=_-]{20,}[\"']?"
+          
+        condition: or
+
+    extractors:
+      - type: regex
+        part: body
+        group: 2
+        regex:
+          - "(?i)(API_KEY|APIKEY|API_SECRET|APISECRET|ACCESS_KEY|ACCESS_TOKEN|AUTH_TOKEN|SECRET_KEY|PRIVATE_KEY|BEARER_TOKEN)\\s*[=:]\\s*[\"']?([A-Za-z0-9+/=_-]{20,})[\"']?"
+
+  # Test for source code files with hardcoded keys
+  - method: GET
+    path:
+      - "{{BaseURL}}/src/config.js"
+      - "{{BaseURL}}/src/api.js"
+      - "{{BaseURL}}/src/keys.js"
+      - "{{BaseURL}}/src/constants.js"
+      - "{{BaseURL}}/src/settings.js"
+      - "{{BaseURL}}/includes/config.php"
+      - "{{BaseURL}}/includes/api.php"
+      - "{{BaseURL}}/includes/keys.php"
+      - "{{BaseURL}}/includes/constants.php"
+      - "{{BaseURL}}/lib/config.py"
+      - "{{BaseURL}}/lib/api.py"
+      - "{{BaseURL}}/lib/keys.py"
+      - "{{BaseURL}}/lib/constants.py"
+      - "{{BaseURL}}/lib/settings.py"
+      - "{{BaseURL}}/config/config.rb"
+      - "{{BaseURL}}/config/secrets.rb"
+      - "{{BaseURL}}/config/keys.rb"
+      - "{{BaseURL}}/app/config.js"
+      - "{{BaseURL}}/app/api.js"
+      - "{{BaseURL}}/app/keys.js"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Accept: "text/plain,application/javascript,application/x-php,text/x-python,*/*"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      # Source code with hardcoded API keys
+      - type: regex
+        part: body
+        regex:
+          # JavaScript/Node.js patterns
+          - "(?i)(const|let|var)\\s+[a-zA-Z_][a-zA-Z0-9_]*\\s*=\\s*[\"'][A-Za-z0-9+/=_-]{20,}[\"']"
+          - "(?i)(apiKey|api_key|secretKey|secret_key|accessToken|access_token)\\s*[=:]\\s*[\"'][A-Za-z0-9+/=_-]{20,}[\"']"
+          
+          # PHP patterns
+          - "(?i)\\$[a-zA-Z_][a-zA-Z0-9_]*\\s*=\\s*[\"'][A-Za-z0-9+/=_-]{20,}[\"']"
+          - "(?i)define\\s*\\(\\s*[\"'][A-Z_]+[\"']\\s*,\\s*[\"'][A-Za-z0-9+/=_-]{20,}[\"']\\s*\\)"
+          
+          # Python patterns
+          - "(?i)[A-Z_]+\\s*=\\s*[\"'][A-Za-z0-9+/=_-]{20,}[\"']"
+          - "(?i)(api_key|secret_key|access_token)\\s*=\\s*[\"'][A-Za-z0-9+/=_-]{20,}[\"']"
+          
+          # Ruby patterns
+          - "(?i)[A-Z_]+\\s*=\\s*[\"'][A-Za-z0-9+/=_-]{20,}[\"']"
+          - "(?i)(api_key|secret_key|access_token)\\s*=\\s*[\"'][A-Za-z0-9+/=_-]{20,}[\"']"
+          
+          # Java patterns
+          - "(?i)(public|private|protected)?\\s*(static)?\\s*(final)?\\s*String\\s+[A-Z_]+\\s*=\\s*[\"'][A-Za-z0-9+/=_-]{20,}[\"']"
+          
+        condition: or
+
+    extractors:
+      - type: regex
+        part: body
+        group: 1
+        regex:
+          - "(?i)(const|let|var|\\$[a-zA-Z_][a-zA-Z0-9_]*|[A-Z_]+)\\s*[=:]\\s*[\"']([A-Za-z0-9+/=_-]{20,})[\"']"
+
+  # Test for mobile app configuration files
+  - method: GET
+    path:
+      - "{{BaseURL}}/android/app/src/main/res/values/strings.xml"
+      - "{{BaseURL}}/ios/Runner/Info.plist"
+      - "{{BaseURL}}/flutter/lib/config.dart"
+      - "{{BaseURL}}/react-native/android/app/src/main/res/values/strings.xml"
+      - "{{BaseURL}}/cordova/config.xml"
+      - "{{BaseURL}}/ionic/src/app/config.ts"
+      - "{{BaseURL}}/xamarin/App.config"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Accept: "application/xml,text/xml,text/plain,*/*"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      # Mobile app configuration with API keys
+      - type: regex
+        part: body
+        regex:
+          # Android strings.xml
+          - "(?i)<string\\s+name\\s*=\\s*[\"'][^\"']*(?:api|key|secret|token)[^\"']*[\"']\\s*>[A-Za-z0-9+/=_-]{20,}</string>"
+          
+          # iOS Info.plist
+          - "(?i)<key>[^<]*(?:API|Key|Secret|Token)[^<]*</key>\\s*<string>[A-Za-z0-9+/=_-]{20,}</string>"
+          
+          # Dart/Flutter
+          - "(?i)(const|final)\\s+String\\s+[a-zA-Z_][a-zA-Z0-9_]*\\s*=\\s*[\"'][A-Za-z0-9+/=_-]{20,}[\"']"
+          
+          # TypeScript/JavaScript
+          - "(?i)(export\\s+)?(const|let)\\s+[a-zA-Z_][a-zA-Z0-9_]*\\s*[=:]\\s*[\"'][A-Za-z0-9+/=_-]{20,}[\"']"
+          
+        condition: or
+
+    extractors:
+      - type: regex
+        part: body
+        group: 1
+        regex:
+          - "(?i)<string\\s+name\\s*=\\s*[\"']([^\"']*(?:api|key|secret|token)[^\"']*)[\"']\\s*>([A-Za-z0-9+/=_-]{20,})</string>"
+
+  # Test for backup and temporary files
+  - method: GET
+    path:
+      - "{{BaseURL}}/config.bak"
+      - "{{BaseURL}}/config.backup"
+      - "{{BaseURL}}/config.old"
+      - "{{BaseURL}}/config.orig"
+      - "{{BaseURL}}/config.tmp"
+      - "{{BaseURL}}/keys.bak"
+      - "{{BaseURL}}/keys.backup"
+      - "{{BaseURL}}/keys.old"
+      - "{{BaseURL}}/secrets.bak"
+      - "{{BaseURL}}/secrets.backup"
+      - "{{BaseURL}}/secrets.old"
+      - "{{BaseURL}}/api.bak"
+      - "{{BaseURL}}/api.backup"
+      - "{{BaseURL}}/api.old"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Accept: "text/plain,*/*"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      # Backup files with API keys
+      - type: regex
+        part: body
+        regex:
+          - "(?i)(api_key|apikey|api_secret|apisecret|access_key|access_token|auth_token|secret_key|private_key|bearer_token)\\s*[=:]\\s*[\"']?[A-Za-z0-9+/=_-]{20,}[\"']?"
+        condition: or
+
+    extractors:
+      - type: regex
+        part: body
+        group: 2
+        regex:
+          - "(?i)(api_key|apikey|api_secret|apisecret|access_key|access_token|auth_token|secret_key|private_key|bearer_token)\\s*[=:]\\s*[\"']?([A-Za-z0-9+/=_-]{20,})[\"']?"
+
+  # Test for version control files
+  - method: GET
+    path:
+      - "{{BaseURL}}/.git/config"
+      - "{{BaseURL}}/.git/logs/HEAD"
+      - "{{BaseURL}}/.svn/entries"
+      - "{{BaseURL}}/.hg/hgrc"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Accept: "text/plain,*/*"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      # Version control files with API keys or tokens
+      - type: regex
+        part: body
+        regex:
+          - "(?i)(token|key|secret|password)\\s*[=:]\\s*[A-Za-z0-9+/=_-]{20,}"
+          - "(?i)https://[A-Za-z0-9+/=_-]{20,}@[a-zA-Z0-9.-]+/"
+        condition: or
+
+    extractors:
+      - type: regex
+        part: body
+        group: 2
+        regex:
+          - "(?i)(token|key|secret|password)\\s*[=:]\\s*([A-Za-z0-9+/=_-]{20,})"
+
+  # Test for Docker and container files
+  - method: GET
+    path:
+      - "{{BaseURL}}/Dockerfile"
+      - "{{BaseURL}}/docker-compose.yml"
+      - "{{BaseURL}}/docker-compose.yaml"
+      - "{{BaseURL}}/.dockerignore"
+      - "{{BaseURL}}/kubernetes.yml"
+      - "{{BaseURL}}/kubernetes.yaml"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Accept: "text/plain,application/x-yaml,*/*"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      # Container files with environment variables containing API keys
+      - type: regex
+        part: body
+        regex:
+          - "(?i)ENV\\s+[A-Z_]*(?:API|KEY|SECRET|TOKEN)[A-Z_]*\\s+[A-Za-z0-9+/=_-]{20,}"
+          - "(?i)[A-Z_]*(?:API|KEY|SECRET|TOKEN)[A-Z_]*\\s*[=:]\\s*[A-Za-z0-9+/=_-]{20,}"
+        condition: or
+
+    extractors:
+      - type: regex
+        part: body
+        group: 2
+        regex:
+          - "(?i)(ENV\\s+[A-Z_]*(?:API|KEY|SECRET|TOKEN)[A-Z_]*|[A-Z_]*(?:API|KEY|SECRET|TOKEN)[A-Z_]*)\\s*[=:]?\\s*([A-Za-z0-9+/=_-]{20,})"
+
+  # Test for package manager files
+  - method: GET
+    path:
+      - "{{BaseURL}}/package.json"
+      - "{{BaseURL}}/composer.json"
+      - "{{BaseURL}}/requirements.txt"
+      - "{{BaseURL}}/Gemfile"
+      - "{{BaseURL}}/pom.xml"
+      - "{{BaseURL}}/build.gradle"
+
+    headers:
+      User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+      Accept: "application/json,text/plain,application/xml,*/*"
+
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+
+      # Package files with API keys in scripts or config
+      - type: regex
+        part: body
+        regex:
+          - '(?i)"[^"]*(?:api|key|secret|token)[^"]*"\\s*:\\s*"[A-Za-z0-9+/=_-]{20,}"'
+          - "(?i)(api_key|secret_key|access_token)\\s*[=:]\\s*[\"'][A-Za-z0-9+/=_-]{20,}[\"']"
+        condition: or
+
+    extractors:
+      - type: regex
+        part: body
+        group: 2
+        regex:
+          - '(?i)"([^"]*(?:api|key|secret|token)[^"]*)"\\s*:\\s*"([A-Za-z0-9+/=_-]{20,})"'
